@@ -1,0 +1,664 @@
+\documentclass{article}    % Specifies the document style.
+\usepackage{epsf}
+
+\addtolength{\oddsidemargin}{-1.0in}
+\addtolength{\evensidemargin}{-1.0in}
+% Then to reduce the ``right-hand margin'' by the same amount, you would increase text width: 
+\addtolength{\textwidth}{2in}
+\addtolength{\topmargin}{-1.0in}
+\addtolength{\textheight}{2.0in}
+
+\title{Documentation of C Neural Network Library}
+
+\author{Paul O'Brien (paul.obrien@aero.org)}         % Declares the author's name.
+
+\newcommand{\dblunderline}[1]{\underline{\underline{#1}}}
+\newcommand{\ul}[1]{\underline{#1}}
+\newcommand{\ol}[1]{\overline{#1}}
+\newcommand{\dbul}[1]{\underline{\underline{#1}}}
+\newcommand{\SIGCOV}{\dblunderline{\Sigma}}
+\newcommand{\PIXCOV}{\dblunderline{C}}
+\newcommand{\cov}{\mathop{{\rm cov}}}
+\newcommand{\var}{\mathop{{\rm var}}}
+\newcommand{\erf}{\mathop{{\rm erf}}}
+\newcommand{\NullSp}{\mathcal{N}}
+\newcommand{\RowSp}{\mathcal{V}}
+\newcommand{\ColSp}{\mathcal{U}}
+\newcommand{\hypergeom}[2]{\,_{#1}\mathcal{F}_{#2}}
+
+\setcounter{secnumdepth}{4}
+\setcounter{tocdepth}{4}
+
+
+\begin{document}           % End of preamble and beginning of text.
+
+\maketitle                 % Produces the title.
+
+\tableofcontents
+
+\section{Introduction}
+
+This document provides the equations for fitting and evaluating a
+feed-forward perceptron neural network.
+
+\section{Changes}
+
+\begin{itemize}
+\item{10/31/2008} Support for OpenMP added (\verb|make nntrain.ompx|).
+\item{10/29/2008} MPI features abstracted and tested on two different clusters.
+\item{10/23/2008} Modified for use with MPI (\verb|make nntrain.mpix|).
+\item{10/16/2008} Fixed error (X for Z) in nntrain.c (no effect on nnlib.dll)
+\item{10/2/2008} Added verification information.
+\item{9/29/2008} Created manual
+\item{9/24/2008} Added ``epsabs'' parameter to function calls
+\item{9/23/2008} Corrected position of $\bar{y}_k$ in definition of
+  $h_k$, ``unit mean'' to ``zero mean'', and missing $\bar{x}_{j}$ in
+  gradients and Hessians.
+\item{9/22/2008} Rewritten with regularization penalty, and for multivariate case only.
+\end{itemize}
+
+\section{What is a Neural Network?}
+
+A feed-forward neural network deterministically maps a vector space
+with $N_x$ dimensions to one with $N_y$ dimensions $\vec{y} \approx
+\vec{h}(\vec{x})$.
+\begin{eqnarray}
+h_k(\vec{x}_t) &=& \bar{y}_k + s^{(y)}_k\left(v_{0k} + \sum_{i=1}^{N_h} v_{ik} g(u_i(\vec{x}_t;\vec\theta))\right), \\
+g(u) &=& \frac{1}{1+e^{-u}}, \\
+u_i(\vec{x}_t) &=& w_{0i} + \sum_{j=1}^{N_x} w_{ji} \frac{x_{tj}-\bar{x}_{j}}{s^{(x)}_j}, \\
+\vec\theta &=& (\dbul{w}, \dbul{v},\vec{w}_0,\vec{v}_0). \label{eq_theta}
+\end{eqnarray}
+The subscript $t$ denotes the sample number (up to $N_t$), for example
+in a time series, and $N_h$ denotes the number of ``hidden nodes'',
+which controls the complexity of the network. The sample means
+$\bar{x}_j$ and $\bar{y}_k$, and standard deviations, $s^{(y)}_k$ and
+$s^{(x)}_j$ are taken from the training data. They are used to ensure
+that the neural network weights operate on variables with zero mean
+and unit variance; this helps with regularization.
+
+The sizes of the various vectors and matrices is:
+\begin{eqnarray}
+\dbul{x} &\sim& N_t \times N_x, \\
+\dbul{y} &\sim& N_t \times N_y, \\
+\vec{\bar{x}} &\sim& 1 \times N_x, \\
+\vec{\bar{y}} &\sim& 1 \times N_y, \\
+\vec{s}^{(x)} &\sim& 1 \times N_x, \\
+\vec{s}^{(y)} &\sim& 1 \times N_y, \\
+\vec{v}_0 &\sim& 1 \times N_y, \\
+\dbul{v} &\sim& N_h \times N_y, \\
+\vec{w}_0 &\sim& 1 \times N_h, \\
+\dbul{w} &\sim& N_x \times N_h, \\
+\vec\theta &\sim& 1 \times  N_\theta = (N_x +N_y+1)N_h + N_y.
+\end{eqnarray}
+
+\subsection{Measurement Error Covariance and the Penalty Function}
+
+In order to compute $\vec\theta$, we must define an optimality
+criterion. We assume the measurement errors on $\vec{y}_t$ have
+nonzero covariance given by a (possibly) sample-dependent
+$\dbul{\Sigma}_t$. The penalty function consists of one term due to
+the misfit between the neural network and the observations and
+another term due to the size of the weights. This latter term is a
+regularization term that (1) limits the over-fitting impact of extra
+hidden nodes by forcing unused or insignificant weights to zero, and
+(2) ensures that the Hessian of the penalty function with respect to
+the weights is not singular, which, in turn, ensures a finite error
+covariance matrix for the weights and for any output vector produced
+by the network.
+\begin{eqnarray}
+\ell &=& \frac{1}{2}\sum_{t=1}^{N_t}\sum_{k=1}^{N_y}\sum_{m=1}^{N_y}s^{-1}_{tkm}e_{tk}e_{tm} + \frac{1}{2}\sum_n \theta^2_n,  \\
+s^{-1}_{tkm} &=& \left(\dbul{\Sigma}^{-1}_t\right)_{km}, \\
+e_{tk} &=& h_{k}(\vec{x}_t;\vec\theta)-y_{tk}.
+\end{eqnarray}
+
+In this formulation as $N_t\rightarrow\infty$, the penalty for having
+non-zero weights vanishes in comparison to the penalty for not exactly
+matching the training data.
+
+The optimization (``training'') algorithm requires an initial estimate
+for $\vec\theta$, which is chosen to consist of random numbers between
+$[-0.5,0.5]$.  It is a good idea to try the optimization from multiple
+initial guesses to account for the possibility of a non-global
+solution.
+
+\subsection{Gradients and Derivatives}
+In order to assist the optimization, it is helpful to have the
+gradient and some derivatives.
+
+\begin{eqnarray}
+\frac{\partial\ell}{\partial \theta_{n'}} 
+&=& \sum_{t=1}^{N_t}\sum_{k=1}^{N_y}\sum_{m=1}^{N_y} s^{-1}_{tkm}e_{tk}\frac{\partial e_{tm}}{\partial\theta_{n'}} + \theta_{n'}
+= \sum_{t=1}^{N_t}\sum_{k=1}^{N_y} \sum_{m=1}^{N_y} s^{-1}_{tkm}e_{tk}\frac{\partial h_{tm}}{\partial\theta_{n'}} + \theta_{n'}, \\
+\frac{\partial e_{tk}}{\partial\theta_{n'}} &=& \frac{\partial h_{tk}}{\partial\theta_{n'}}, \\
+\frac{\partial h_{tk}}{\partial v_{0k'}} &=& s^{(y)}_k \delta_{kk'}, \\
+\frac{\partial h_{tk}}{\partial v_{i'k'}} &=& s^{(y)}_k g(u_{ti'})\delta_{kk'},\\
+\frac{\partial h_{tk}}{\partial w_{0i'}} &=& s^{(y)}_k v_{i'k} g'(u_{ti'}),\\
+\frac{\partial h_{tk}}{\partial w_{j'i'}} &=& s^{(y)}_k v_{i'k} g'(u_{ti'}) \frac{x_{tj'}-\bar{x}_{j'}}{s^{(x)}_{j'}} = \frac{\partial h_{tk}}{\partial w_{0i'}}\frac{x_{tj'}-\bar{x}_{j'}}{s^{(x)}_{j'}}, \\
+g'(u) &=& \frac{dg}{du} = \frac{e^{-u}}{\left(1+e^{-u}\right)^2} = g^2(u) e^{-u}.
+\end{eqnarray}
+
+\subsection{Hessian and Error Estimates}
+
+It can also be useful to know the Hessian, especially when computing the error estimates on $\vec{\theta}$ or $\vec{y}$:
+\begin{eqnarray}
+\frac{\partial^2\ell}{\partial \theta_{n'}\partial \theta_{n''}} &=& 
+\sum_{t=1}^{N_t}\sum_{k=1}^{N_y} \sum_{m=1}^{N_y}
+ s^{-1}_{tkm}\left(e_{tk}\frac{\partial^2 e_{tm}}{\partial\theta_{n'}\partial\theta_{n''}} 
++
+ \frac{\partial e_{tk}}{\partial\theta_{n'}}\frac{\partial e_{tm}}{\partial\theta_{n''}}\right) + \delta_{n'n''}\\
+&=&
+\sum_{t=1}^{N_t}\sum_{k=1}^{N_y}\sum_{m=1}^{N_y} 
+s^{-1}_{tkm} \left( 
+e_{tk}\frac{\partial^2 h_{tm}}{\partial\theta_{n'}\partial\theta_{n''}}
++
+\frac{\partial h_{tk}}{\partial\theta_{n'}}\frac{\partial h_{tm}}{\partial\theta_{n''}} 
+\right) + \delta_{n'n''}
+,\\
+\frac{\partial^2 e_{tk}}{\partial\theta_{n'}\partial\theta_{n''}} &=& \frac{\partial^2 h_{tk}}{\partial\theta_{n'}\partial\theta_{n''}}, \\
+\frac{\partial^2 h_{tk}}{\partial v_{0k'}\partial \theta_{n''}} &=& 0 \\
+\frac{\partial^2 h_{tk}}{\partial v_{i'k'}\partial v_{i''k''}} &=& 0, \\
+\frac{\partial^2 h_{tk}}{\partial v_{i'k'}\partial w_{0i''}} &=& s^{(y)}_k g'(u_{ti'}) \delta_{i'i''}\delta_{kk'}, \\
+\frac{\partial^2 h_{tk}}{\partial v_{i'k'}\partial w_{j''i''}} &=& s^{(y)}_k g'(u_{ti'})\delta_{i'i''}\delta_{kk'}\frac{x_{tj''}-\bar{x}_{j''}}{s^{(x)}_{j''}}
+ = \frac{\partial^2 h_{tk}}{\partial v_{i'k'}\partial w_{0i''}}\frac{x_{tj''}-\bar{x}_{j''}}{s^{(x)}_{j''}} , \\
+\frac{\partial^2 h_{tk}}{\partial w_{0i'}\partial w_{0i''}} &=& s^{(y)}_k v_{i'k} g''(u_{ti'}) \delta_{i'i''}, \\
+\frac{\partial^2 h_{tk}}{\partial w_{0i'}\partial w_{j''i''}} &=& s^{(y)}_k v_{i'k} g''(u_{ti'})\delta_{i'i''}\frac{x_{tj''}-\bar{x}_{j''}}{s^{(x)}_{j''}}
+ = \frac{\partial^2 h_{tk}}{\partial w_{0i'}\partial w_{0i''}}\frac{x_{tj''}-\bar{x}_{j''}}{s^{(x)}_{j''}}, \\
+\frac{\partial^2 h_{tk}}{\partial w_{j'i'}\partial w_{j''i''}} &=& s^{(y)}_k v_{i'k} g''(u_{ti'}) \frac{x_{tj'}-\bar{x}_{j'}}{s^{(x)}_{j'}} \delta_{i'i''} \frac{x_{tj''}-\bar{x}_{j''}}{s^{(x)}_{j''}}
+ = \frac{\partial^2 h_{tk}}{\partial w_{0i'}\partial w_{j''i''}}\frac{x_{tj''}-\bar{x}_{j''}}{s^{(x)}_{j''}}, \\
+g''(u) &=& \frac{d^2g}{du^2} = e^{-u}(e^{-u}-1)g^3(u) = (e^{-u}-1)g(u)g'(u).
+\end{eqnarray}
+
+The error covariance matrix for $\vec{\theta}$ is given by:
+\begin{equation}
+\cov\vec\theta = \left( \frac{\partial^2\ell}{\partial \theta_{n'}\partial \theta_{n''}}  \right)^{-1}.
+\end{equation}
+Note that this covariance matrix depends on $\ell$ evaluated for the
+best-fit solution $\vec\theta$ over the training data set. Once the
+network is trained, $\theta$ and $\cov\vec\theta$ are fixed.
+
+The error covariance matrix for $\vec{y}$ estimated at point $\vec{x}$
+by the neural network is:
+\begin{equation}
+\cov{\vec{y}} = \left(\frac{\partial\vec{h}}{\partial \vec{\theta}}\right)_{\vec{x}}^{T}\left(\cov{\vec\theta}\right)\left(\frac{\partial\vec{h}}{\partial \vec{\theta}}\right)_{\vec{x}}
+\end{equation}
+As usual, the square root of the diagonal elements of $\cov{\vec{y}}$
+give the standard error ($1-\sigma$) of the outputs. Note that
+$\cov{\vec{y}}$ depends on the input point $\vec{x}$ and requires the
+weights $\vec\theta$ and their covariance $\cov\vec\theta$.
+
+\section{The Library and its Functions}
+
+The neural network library is available in several C files with a
+Makefile. It depends on the GNU Scientific Library (GSL). The library
+is provided as a dynamic link library (DLL) \verb|.so| or \verb|.dll|.
+The function prototypes are specified in \verb|nnlib.h|. This manual
+is meant to supersede any comments given therein as to the structure
+of data or meaning of flags.
+
+The \verb|nnlib| C routines follow the GSL storage convention for
+matrices, and extends it to tensors. Matrices are ordered as such: for
+an $N_t \times N_x$ matrix $\dbul{X}$, $X_{ti} =
+\verb|X[(t-1)*Nx+i-1]|$. That is, rows are bunched together. For an
+$N_t \times N_x \times N_y$ matrix $\dbul{A}$, $A_{tij} =
+\verb|A[(t-1)*Nx*Ny + (i-1)*Ny + j-1]|$. That is, the matrices are
+bunched together. Macros to manipulate these indices are provided
+\verb|subscripts.h|.
+
+Note: Matlab and GSL store matrices with the opposite majority. For
+example, an $N\times M$ matrix in GSL is an $M\times N$ matrix in
+Matlab.  Similarly, Matlab and \verb|nnlib| store tensors with the
+opposite majority. For example, an $N\times M \times L$ tensor in
+\verb|nnlib| is an $L \times M\times N$ tensor in Matlab.  The Matlab
+\verb|nnlib.m| wrapper handles these index permutations.
+
+\subsection{Representation of a Neural Network}
+The neural network is represented in the computer as a set of scalars, vectors, and matrices:
+
+\begin{itemize}
+\item \verb|cov_flag| scalar, bitmap of flags describing network
+  \subitem \verb|cov_flag & 3| $=0$ no covariance or Hessian of $\vec\theta$
+  \subitem \verb|cov_flag & 3| $=1$ covariance of $\vec\theta$ stored in \verb|theta_cov|
+  \subitem \verb|cov_flag & 3| $=2$ Hessian of $\ell$ stored in \verb|theta_cov|
+\item \verb|Nx| scalar, $N_x$, dimension of $\vec{x}$.
+\item \verb|Nh| scalar, $N_h$, number of hidden nodes.
+\item \verb|Ny| scalar, $N_y$, dimension of $\vec{y}$.
+\item \verb|theta| vector ($N_{\theta}$), network weights, as in (\ref{eq_theta}).
+\item \verb|xbar| vector ($N_x$), $\vec{\bar{x}}$, estimated mean of $\vec{x}$.
+\item \verb|ybar| vector ($N_y$), $\vec{\bar{y}}$, estimated mean of $\vec{y}$.
+\item \verb|sx| vector ($N_x$), $\vec{s}^{(x)}$, estimated standard deviation of $\vec{x}$.
+\item \verb|sy| vector ($N_y$) $\vec{s}^{(y)}$, estimated standard deviation of $\vec{y}$.
+\item \verb|theta_cov| matrix ($N_{\theta} \times N_{\theta}$), error covariance of network weights, or Hessian of $\ell$.
+\end{itemize}
+
+\subsection{Representation of a Training Data Set}
+A training data set is represented in the computer as a set of
+scalars, matrices, and tensors:
+
+\begin{itemize}
+\item \verb|Nt| scalar, $N_t$, number of training samples.
+\item \verb|Nx| scalar, $N_x$, dimension of $\vec{x}$.
+\item \verb|Ny| scalar, $N_y$, dimension of $\vec{y}$.
+\item \verb|X| matrix ($N_t \times N_x$), $\vec{\bar{x}}$ at each training sample.
+\item \verb|Y| matrix ($N_t \times N_y$), $\vec{\bar{y}}$ at each training sample.
+\item \verb|s| error estimate $\dbul{\Sigma}_t$ on training samples $\vec{y}$. Meaning depends on $\verb|sflag|$.
+\item \verb|sflag| scalar, bitmap of flags describing error covariance of $\vec{y}$ training data.
+  \subitem \verb|sflag & 3| $=0$ \verb|s| is scalar, same error variance for all $y$ and all samples
+  \subitem \verb|sflag & 3| $=1$ \verb|s| is vector $N_y$, same error variance for all samples
+  \subitem \verb|sflag & 3| $=2$ \verb|s| is matrix $N_t \times N_y$, sample-dependent error variance
+  \subitem \verb|sflag & 3| $=3$ \verb|s| is tensor $N_t \times N_y
+  \times N_y$, sample-dependent error covariance. For each sample,
+  there is a different $N_y \times N_y$ error covariance matrix for
+  $\vec{y}$, i.e., a full sample-dependent $\dbul{\Sigma}_t$.
+\end{itemize}
+
+\subsection{Network and Data Set File IO Functions}
+
+\subsubsection{nnlib\_save\_net}
+
+The function \verb|nnlib_save_net| saves a neural network to a binary
+file. It has only inputs.
+
+\begin{verbatim}
+void nnlib_save_net(const char *filename, const unsigned long int Nx, 
+                    const unsigned long int Nh, const unsigned long int Ny, const double *theta, 
+                    const double *xbar,const double *ybar, const double *sx, const double *sy,
+                    const unsigned long int cov_flag, const double *theta_cov);
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|filename| null-terminated C string giving the NN file name.
+\item \verb|Nx| scalar, $N_x$, dimension of $\vec{x}$.
+\item \verb|Nh| scalar, $N_h$, number of hidden nodes.
+\item \verb|Ny| scalar, $N_y$, dimension of $\vec{y}$.
+\item \verb|theta| vector ($N_{\theta}$), network weights, as in (\ref{eq_theta}).
+\item \verb|xbar| vector ($N_x$), $\vec{\bar{x}}$, estimated mean of $\vec{x}$.
+\item \verb|ybar| vector ($N_y$), $\vec{\bar{y}}$, estimated mean of $\vec{y}$.
+\item \verb|sx| vector ($N_x$), $\vec{s}^{(x)}$, estimated standard deviation of $\vec{x}$.
+\item \verb|sy| vector ($N_y$) $\vec{s}^{(y)}$, estimated standard deviation of $\vec{y}$.
+\item \verb|cov_flag| scalar, bitmap of flags describing network
+  \subitem \verb|cov_flag & 3| $=0$ don't save \verb|theta_cov|.
+  \subitem otherwise, save \verb|theta_cov|.
+\item \verb|theta_cov| matrix ($N_{\theta} \times N_{\theta}$), error
+  covariance of network weights, or Hessian of $\ell$. If \verb|NULL|,
+  nothing is written to the file for \verb|theta_cov|, and
+  \verb|cov_flag| is set to zero in the file.
+\end{itemize}
+
+\subsubsection{nnlib\_load\_net}
+
+The function \verb|nnlib_load_net| loads a neural network from a
+binary file. Because the size of the arrays needed by the network
+aren't known until one starts to read the file, one can call
+\verb|nnlib_load_net| with $\verb|cov_flag|=99999$ to have it only
+set the scalar size variables (\verb|Nx|, \verb|Nh|, and \verb|Ny|).
+Using those values, one can allocate the necessary arrays and call the
+function again to actually load the network.
+
+\begin{verbatim}
+void nnlib_load_net(const char *filename, unsigned long int *Nx, 
+                    unsigned long int *Nh, unsigned long int *Ny, 
+                    double *theta,
+                    double *xbar,double *ybar, double *sx, double *sy,
+                    unsigned long int *cov_flag, double *theta_cov);
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|filename| (input) null-terminated C string giving the NN file name.
+\item \verb|Nx| (output) scalar, $N_x$, dimension of $\vec{x}$.
+\item \verb|Nh| (output) scalar, $N_h$, number of hidden nodes.
+\item \verb|Ny| (output) scalar, $N_y$, dimension of $\vec{y}$.
+\item \verb|theta| (output) vector ($N_{\theta}$), network weights, as in (\ref{eq_theta}).
+\item \verb|xbar| (output) vector ($N_x$), $\vec{\bar{x}}$, estimated mean of $\vec{x}$.
+\item \verb|ybar| (output) vector ($N_y$), $\vec{\bar{y}}$, estimated mean of $\vec{y}$.
+\item \verb|sx| (output) vector ($N_x$), $\vec{s}^{(x)}$, estimated standard deviation of $\vec{x}$.
+\item \verb|sy| (output) vector ($N_y$) $\vec{s}^{(y)}$, estimated standard deviation of $\vec{y}$.
+\item \verb|cov_flag| (input/output) scalar, bitmap of flags describing network
+  \subitem \verb|cov_flag| $=99999$ don't load anything, just set \verb|Nx|, \verb|Nh|, \verb|Ny|. 
+  \subitem \verb|cov_flag & 3| $=0$ no covariance or Hessian of $\vec\theta$ available
+  \subitem \verb|cov_flag & 3| $=1$ covariance of $\vec\theta$ stored in \verb|theta_cov|
+  \subitem \verb|cov_flag & 3| $=2$ Hessian of $\ell$ stored in \verb|theta_cov|
+\item \verb|theta_cov| (output) matrix ($N_{\theta} \times N_{\theta}$), error
+  covariance of network weights, or Hessian of $\ell$. 
+\end{itemize}
+Note: All arrays must be allocated before a call with $\verb|cov_flag|
+\ne 99999$. Otherwise a memory fault will occur. The routine will print an error to \verb|stderr|
+and return when an unexpected \verb|NULL| is encountered.
+
+\subsubsection{nnlib\_save\_training\_set}
+
+The function \verb|nnlib_save_training_set| saves a training data set to a binary
+file. It has only inputs.
+
+
+\begin{verbatim}
+void nnlib_save_training_set(const char *filename, const unsigned long int Nt, 
+                             const unsigned long int Nx, const double *X, 
+                             const unsigned long int Ny, const double *Y, 
+                             const double *s, const unsigned long int sflag); 
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|filename| (input) null-terminated C string giving the data set file name.
+\item \verb|Nt| scalar, $N_t$, number of training samples.
+\item \verb|Nx| scalar, $N_x$, dimension of $\vec{x}$.
+\item \verb|Ny| scalar, $N_y$, dimension of $\vec{y}$.
+\item \verb|X| matrix ($N_t \times N_x$), $\vec{\bar{x}}$ at each training sample.
+\item \verb|Y| matrix ($N_t \times N_y$), $\vec{\bar{y}}$ at each training sample.
+\item \verb|s| error estimate $\dbul{\Sigma}_t$ on training samples $\vec{y}$. Meaning depends on $\verb|sflag|$.
+\item \verb|sflag| scalar, bitmap of flags describing error covariance of $\vec{y}$ training data.
+  \subitem \verb|sflag & 3| $=0$ \verb|s| is scalar, same error variance for all $y$ and all samples
+  \subitem \verb|sflag & 3| $=1$ \verb|s| is vector $N_y$, same error variance for all samples
+  \subitem \verb|sflag & 3| $=2$ \verb|s| is matrix $N_t \times N_y$, sample-dependent error variance
+  \subitem \verb|sflag & 3| $=3$ \verb|s| is tensor $N_t \times N_y
+  \times N_y$, sample-dependent error covariance. For each sample,
+  there is a different $N_y \times N_y$ error covariance matrix for
+  $\vec{y}$, i.e., a full sample-dependent $\dbul{\Sigma}_t$.
+\end{itemize}
+
+\subsubsection{nnlib\_load\_training\_set}
+
+The function \verb|nnlib_load_training_set| loads a training data set
+from a binary file. Because the size of the arrays needed by the data
+set aren't known until one starts to read the file, one can call
+\verb|nnlib_load_training_set| with $\verb|sflag|=99999$ to have it
+only set the scalar size variables (\verb|Nt|, \verb|Nx|, and
+\verb|Ny|).  Using those values, one can allocate the necessary arrays
+and call the function again to actually load the data set.
+
+\begin{verbatim}
+void nnlib_load_training_set(const char *filename, unsigned long int *Nt, 
+                             unsigned long int *Nx, double *X, 
+                             unsigned long int *Ny, double *Y, 
+                             double *s, unsigned long int *sflag); 
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|filename| (input) null-terminated C string giving the data set file name.
+\item \verb|Nt| (output) scalar, $N_t$, number of training samples.
+\item \verb|Nx| (output) scalar, $N_x$, dimension of $\vec{x}$.
+\item \verb|Ny| (output) scalar, $N_y$, dimension of $\vec{y}$.
+\item \verb|X| (output) matrix ($N_t \times N_x$), $\vec{\bar{x}}$ at each training sample.
+\item \verb|Y| (output) matrix ($N_t \times N_y$), $\vec{\bar{y}}$ at each training sample.
+\item \verb|s| (output) error estimate $\dbul{\Sigma}_t$ on training samples $\vec{y}$. Meaning depends on $\verb|sflag|$.
+\item \verb|sflag| (output) scalar, bitmap of flags describing error covariance of $\vec{y}$ training data.
+  \subitem \verb|sflag & 3| $=0$ \verb|s| is scalar, same error variance for all $y$ and all samples
+  \subitem \verb|sflag & 3| $=1$ \verb|s| is vector $N_y$, same error variance for all samples
+  \subitem \verb|sflag & 3| $=2$ \verb|s| is matrix $N_t \times N_y$, sample-dependent error variance
+  \subitem \verb|sflag & 3| $=3$ \verb|s| is tensor $N_t \times N_y
+  \times N_y$, sample-dependent error covariance. For each sample,
+  there is a different $N_y \times N_y$ error covariance matrix for
+  $\vec{y}$, i.e., a full sample-dependent $\dbul{\Sigma}_t$.
+\end{itemize}
+Note: All arrays must be allocated before a call with $\verb|sflag|
+\ne 99999$. Otherwise a memory fault will occur. The routine will print an error to \verb|stderr|
+and return when an unexpected \verb|NULL| is encountered.
+
+\subsection{Network Training and Evaluation}
+
+\subsubsection{nnlib\_fit}
+
+The function $\verb|nnlib_fit|$ will fit a neural network, i.e.,
+determine $\vec{\theta}$ that best reproduces $\dbul{Y}$. Upon
+request, it will also compute $\cov\vec\theta$. The function returns
+$\ell$ at the end of the optimization. In a sense, the function takes
+a training data set and returns a neural network.
+
+\begin{verbatim}
+double nnlib_fit(const unsigned long int Nt, 
+                 const unsigned long int Nx, const double *X, 
+                 const unsigned long int Nh, 
+                 const unsigned long int Ny, const double *Y, 
+                 const double *s, const unsigned long int flag, 
+                 const unsigned long int MaxIter, 
+                 double epsabs,
+                 double *theta, 
+                 double *xbar, double *ybar, double *sx, double *sy,
+                 double *theta_cov);
+\end{verbatim}
+
+
+\begin{itemize}
+\item \verb|Nt| (input) scalar, $N_t$, number of training samples.
+\item \verb|Nx| (input) scalar, $N_x$, dimension of $\vec{x}$.
+\item \verb|Nh| (input) scalar, $N_h$, number of hidden nodes.
+\item \verb|Ny| (input) scalar, $N_y$, dimension of $\vec{y}$.
+\item \verb|X| (input) matrix ($N_t \times N_x$), $\vec{\bar{x}}$ at each training sample.
+\item \verb|Y| (input) matrix ($N_t \times N_y$), $\vec{\bar{y}}$ at each training sample.
+\item \verb|s| (input) error estimate $\dbul{\Sigma}_t$ on training samples $\vec{y}$. Meaning depends on $\verb|flag|$.
+\item \verb|flag| (input) scalar, bitmap of various flags
+  \subitem \verb|flag & 3| $=0$ \verb|s| is scalar, same error variance for all $y$ and all samples
+  \subitem \verb|flag & 3| $=1$ \verb|s| is vector $N_y$, same error variance for all samples
+  \subitem \verb|flag & 3| $=2$ \verb|s| is matrix $N_t \times N_y$, sample-dependent error variance
+  \subitem \verb|flag & 3| $=3$ \verb|s| is tensor $N_t \times N_y
+  \times N_y$, sample-dependent error covariance. For each sample,
+  there is a different $N_y \times N_y$ error covariance matrix for
+  $\vec{y}$, i.e., a full sample-dependent $\dbul{\Sigma}_t$.
+  \subitem \verb|flag & 8| $=0$ quiet, no output \verb|stdout|.
+  \subitem \verb|flag & 8| $=8$ verbose, report progress to \verb|stdout|.
+  \subitem \verb|flag & 16| $=0$ initialize $\vec\theta$ to random values.
+  \subitem \verb|flag & 16| $=16$ start at $\vec\theta$ supplied in \verb|theta|.
+  \subitem \verb|flag & 96| $=0$ optimize with Broyden-Fletcher-Goldfarb-Shanno, BFGS (recommended).
+  \subitem \verb|flag & 96| $=32$ optimize with Conjugate Fletcher-Reeves, Conjugate FR.
+  \subitem \verb|flag & 96| $=64$ optimize with Conjugate Polak-Ribiere, Conjugate PR.
+  \subitem \verb|flag & 96| $=96$ optimize with Nelder-Mead Simplex.
+  \subitem \verb|flag & 132| $=0$ don't populate \verb|theta_cov|.
+  \subitem \verb|flag & 132| $=4$ populate \verb|theta_cov| with $\cov\vec\theta$.
+  \subitem \verb|flag & 132| $=128$ populate \verb|theta_cov| with the Hessian of $\ell$.
+  \subitem \verb|flag & 256| $=256$ use input values of \verb|xbar|, \verb|ybar|, \verb|sx|, \verb|sy|.
+\item \verb|MaxIter| (input) maximum number of iterations for optimizer.
+\item \verb|epsabs| (input) stopping criterion for optimizer:
+\subitem Nelder-Mead stops when simplex size is less than \verb|epsabs|.
+\subitem All other optimizers stop when gradient length is less than \verb|epsabs|.
+\item \verb|theta| (input/output) vector ($N_{\theta}$), network weights, as in (\ref{eq_theta}).
+\item \verb|xbar| (output) vector ($N_x$), $\vec{\bar{x}}$, estimated mean of $\vec{x}$.
+\item \verb|ybar| (output) vector ($N_y$), $\vec{\bar{y}}$, estimated mean of $\vec{y}$.
+\item \verb|sx| (output) vector ($N_x$), $\vec{s}^{(x)}$, estimated standard deviation of $\vec{x}$.
+\item \verb|sy| (output) vector ($N_y$) $\vec{s}^{(y)}$, estimated standard deviation of $\vec{y}$.
+\item \verb|theta_cov| (output) matrix ($N_{\theta} \times N_{\theta}$), error
+  covariance of network weights, or Hessian of $\ell$, depends on \verb|flag|. 
+\end{itemize}
+
+\subsubsection{nnlib\_eval}
+
+The function \verb|nnlib_eval| evaluates a trained neural network and,
+if requested, returns error estimates for the estimate $\vec{y}$. Note
+that the function is built to evaluate the network at multiple points
+($N_t \ge 1$).
+
+\begin{verbatim}
+void nnlib_eval(const unsigned long int Nt,
+                const unsigned long int Nx, const double *X, 
+                const unsigned long int Nh, const double *theta, 
+                const double *xbar, const double *ybar,
+                const double *sx, const double *sy,
+                const unsigned long int Ny, double *Y, 
+                const unsigned long int dY_flag, const double *theta_cov, double *dY);
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|Nt| (input) scalar, $N_t$, number of training samples.
+\item \verb|Nx| (input) scalar, $N_x$, dimension of $\vec{x}$.
+\item \verb|Nh| (input) scalar, $N_h$, number of hidden nodes.
+\item \verb|Ny| (input) scalar, $N_y$, dimension of $\vec{y}$.
+\item \verb|X| (input) matrix ($N_t \times N_x$), $\vec{\bar{x}}$ at each training sample.
+\item \verb|dY_flag| (input) scalar, bitmap of various flags
+  \subitem \verb|dY_flag & 3| $=0$ don't compute errors on $\vec{y}$.
+  \subitem \verb|dY_flag & 3| $=1$ return ``standard errors'' for $\vec{y}$, \verb|dY| is $N_t \times N_y$.
+  \subitem \verb|dY_flag & 3| $=2$ return covariance matrix for $\vec{y}$, \verb|dY| is $N_t \times N_y \times N_y$.
+\item \verb|theta| (input) vector ($N_{\theta}$), network weights, as in (\ref{eq_theta}).
+\item \verb|xbar| (input) vector ($N_x$), $\vec{\bar{x}}$, estimated mean of $\vec{x}$.
+\item \verb|ybar| (input) vector ($N_y$), $\vec{\bar{y}}$, estimated mean of $\vec{y}$.
+\item \verb|sx| (input) vector ($N_x$), $\vec{s}^{(x)}$, estimated standard deviation of $\vec{x}$.
+\item \verb|sy| (input) vector ($N_y$) $\vec{s}^{(y)}$, estimated standard deviation of $\vec{y}$.
+\item \verb|theta_cov| (input) matrix ($N_{\theta} \times N_{\theta}$), $\cov\vec\theta$.
+\item \verb|Y| (output) matrix ($N_t \times N_y$), $\vec{\bar{y}}$ at each training sample.
+\item \verb|dY| (output) error estimate for $\vec{y}$, format depends on \verb|dY_flag|.
+  covariance of network weights, or Hessian of $\ell$, depends on \verb|flag|. 
+\end{itemize}
+
+\section{Matlab Wrappers}
+A Matlab wrapper \verb|nnlib.m| is provided which can interface all of
+the functions in \verb|nnlib.h|. In Matlab, the matrix and tensor variables
+have their appropriate linear-algebraic shape, but their indices are
+transposed/permuted as needed by the wrapper for calls to the DLL.
+
+\section{Sample Program}
+The library comes with a sample program \verb|nntrain.c| which will
+train a neural network on a training set. The Makefile can compile
+this sample program with \verb|make nntrain.exe| or \verb|make nntrain.x|
+on Unix systems.
+
+\section{Parallelization}
+The library now supports parallel processing. This has no effect on
+the shared library (dll or so). The remainder of this section is for
+users of \verb|nntrain.c| and C programmers using the library code.
+
+\subsection{Parallelization with OpenMP}
+The library now supports parallel processing with OpenMP:
+\verb|make nntrain.ompx| will create the OpenMP-enable executable. All
+that is needed is gcc version 4.2 or higher (note: many systems still
+use gcc 3 by default. Higher level versions are often available as
+gcc4 gcc42 etc.). This functionality is enabled when the compiler
+``macro'' \verb|USEOMP| is set, e.g., with \verb|-DUSEOMP| on the
+compiler command line. The resulting executable \verb|nntrain.ompx|
+can be run on the command line like any other unix command. I have not
+yet attempted to create a dos executable with OpenMP enabled. This
+will require an upgrade to experimental MinGW gcc 4.
+
+The code is parallelized by having each thread work on part of the
+training set. Only the function \verb|nn_fit_eval| had to be modified.
+
+The OpenMP implementation should work well on multi-core systems
+(e.g., a fancy modern desktop). It has been tested on a 16-core
+Solaris system.
+
+\subsection{Parallelization with MPI}
+The library now supports parallel processing with MPI:
+\verb|make nntrain.mpix| will create the MPI-enable executable, if an
+MPI wrapper mpicc (which wraps around gcc) is available. This
+functionality is enabled when the compiler ``macro'' \verb|USEMPI| is
+set, e.g., with \verb|-DUSEMPI| on the compiler command line.  The
+resulting executable \verb|nntrain.mpix| can be run on the command
+line with \verb| mpirun nntrain.mpix ...|
+
+The code is parallelized by breaking up the training set into pieces,
+and distributing these pieces to the ``slave'' processes. Each
+evaluation of the neural network on the training set is accomplished
+by sending the network coefficients to each slave and retrieving the
+penalty function ($\ell$), its gradient and hessian (as needed).
+Because $\ell$ is a linear sum over the training data (index variable
+$t$ above), the results from the training subsets can simply be added
+up. (The regularization term is evaluated only in the master process).
+
+A handful of routines \verb|nn_mpi...| have been created, and
+\verb|nn_fit_eval| has been modified to break up the evaluation of the
+network (and calculation of gradient and hessian) over the training
+data into independent chunks. The example routine \verb|nntrain.c| now
+includes the calls necessary to make all of this work. Aside from
+breaking up the calculation, it was necessary to slightly modify how
+the network is initialized; namely, the calculation of \verb|xbar|,
+\verb|ybar|, \verb|sx|, and \verb|sy| had to be performed on the whole
+training set before it was broken into pieces. This introduced a new
+flag (256) to indicate that \verb|xbar|-\verb|sy| were computed before
+the call to \verb|nnlib_fit|.
+
+The new MPI routines are briefly described below:
+\begin{itemize}
+\item \verb|int nn_mpi_init(int *argc,char **argv[])| called as
+  \verb|mpi_rank = nn_mpi_init(&argc,&argv)|, initializes MPI, forks
+  slave processes, removes MPI-specific args from \verb|argv|, and
+  returns the process's rank (id number) after the fork. Process 0 is
+  the master, all others are slaves. This function should be the first
+  entry in \verb|main|.
+\item \verb|void nn_mpi_slave()| runs a slave process (this is the
+  only function a slave process should call after \verb|nn_mpi_init|
+  before it exits).
+\item \verb|set_type nn_mpi_dispatch(set_type set, net_type net)|
+  called as \verb|subset = nn_mpi_dispatch(set,net)|, sets the net's
+  \verb|xbar|, \verb|ybar|, \verb|sx|, and \verb|sy|, breaks up set
+  into subsets and distributes the initial network parameters (size,
+  \verb|xbar|, etc.) to the slaves. Returns the subset that the master
+  is to work on. This is the subset that should be passed to
+  \verb|nnlib_fit|, but the original set will still need to be freed
+  with \verb|free_set|. Subsequent calls to \verb|nn_mpi_dispatch|
+  will prepare the slaves to work on the new subsets and net.
+\item \verb|void nn_mpi_cleanup()| signals the slaves to clean up and terminate.
+  Calls MPI's finalize routine for the master.
+\end{itemize}
+
+When \verb|USEMPI| is not defined, these routines do little or
+nothing.
+
+\section{Neural Network Tribal Knowledge}
+
+The neural networks described herein are ``feed-forward perceptron
+networks.'' ``Feed-forward'' means that there is no memory between
+separate evaluations of the network, and ``perceptron'' just means
+that the network is made up of mathematical functions that resemble
+the step-like response of a biological neuron to multiple inputs. This
+kind of network is in many ways the simplest, and it exhibits
+essentially no ``intelligent'' behavior. It is a simple, parametric
+mathematical fit to some training data.
+
+Over-fitting is a common concern with neural networks. As one increases
+the number of inputs ($N_x$) or hidden nodes ($N_h$), one will tend to
+increase the apparent fit to the training data. However, as with a
+high-order polynomial fit, this can lead to unintended features
+between the training points. The regularization term
+($\vec\theta^T\vec\theta/2$) helps a bit with this problem, but
+ultimately it is better to reserve some portion of the training data,
+say 10-20\%, for out-of-sample validation.
+
+A robust strategy for training a neural network is to (1) partition
+the data into 5 distinct, randomly selected partitions. For each
+partition in turn, hold the partition as a validation set and train on
+the other 4 partitions. Perform this training 5 times, each time from
+a distinct random starting point, to ensure improve the odds of finding
+a global minimum. Thus, one trains the network 25 times. Perform this
+25-fold training process for various values of $N_h$, i.e. for various
+numbers of free parameters in the network. Select the $N_h$ for which
+the worst performance on any validation partition is minimum. Retrain
+the network on the whole data set, with the selected value of $N_h$ 5
+times, and pick the network with the best in-sample performance.
+
+The optimization schemes all have their various strengths and
+weaknesses. Experience shows that the Nelder-Mead simplex tends to
+find the best global minimum but is comparatively slow to get there.
+Thus, a good approach is to cycle between NM-Simplex and BFGS, the
+fastest minimizer. The \verb|nntrain.exe| example does this when the
+\verb|-nm0| switch is provided on the command line.
+
+At present, I am still working on the problem of a Hessian for
+$\vec\theta$ that has some negative eigenvalues. It should not.
+Negative eigenvalues imply a local maximum in $\ell$ along some
+direction. Either the minimization routine needs to keep working
+(likely) or the negative eigenvalues result from round-off errors. If
+it's simply round-off errors, then I'll zero-out the negative
+eigenvectors in the calculation of $\cov\vec\theta$. For now, I'm
+seeing how far I can push the minimizer to get a numerically
+non-singular Hessian. I can definitely get rid of the singularity by
+reducing the number of hidden nodes.
+
+If there are known analytical approximations between the inputs and
+outputs, it is a good idea to apply these as a
+preprocessing/postprocessing step. While neural networks are capable
+of describing more-or-less arbitrary nonlinear structures, they can do
+this much more economically if the outputs are approximately linear
+functions of the inputs, and if each output is well-approximated by
+one of the inputs. For example, it is helpful to use dipole $L$ as an
+input for a neural network that is fitting $L^*$.
+
+When using periodic functions (like local time, latitude, or
+longitude) as inputs or outputs, it is often helpful to decompose one
+or more of these into sine and cosine, thereby eliminating the
+roll-over discontinuity. For outputs, of course, one must post-process
+the results to address sine or cosine greater than 1.
+
+A note on verification: I have verified the C implementation of the
+calculation of $\ell$ and its gradient and Hessian with respect to
+$\vec\theta$ by performing the same calculations with the Matlab
+symbolic math toolbox. The answers agree to within numerical precision
+($\sim 10^{-15}$).
+
+\end{document}             % End of document.
+
