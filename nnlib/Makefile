@@ -6,6 +6,7 @@ NULL=true
 #. make help - display this help
 #. make nnlib.so - make unix/cygwin shared object
 #. make nnlib.dll - make windows shared object (from MSYS/MINGW only)
+#. make libnnlib.a - make static library file
 #. make nntrain.exe - make executable nntrain.exe (from MSYS/MINGW only)
 #. make nntrain.x - make executable nntrain.x (unix/cygwin)
 #. make nntrain.mpix - make MPI executable nntrain.mpix (unix)
@@ -76,7 +77,10 @@ nnlib.dll: $(NNLIBFILES)
 	$(CC) $(CFLAGS) -o nnlib.dll $(NNLIBFILES) -Wl,--add-stdcall-alias -fno-second-underscore -w -shared $(LIBS) -static
 
 nnlib.so: $(NNLIBFILES)
-	$(CC) $(CFLAGS) -o nnlib.so $(NNLIBFILES) -Wl,--add-stdcall-alias -fno-second-underscore -shared $(LIBS) -static
+	$(CC) $(CFLAGS) -o nnlib.so $(NNLIBFILES) -Wl,--add-stdcall-alias -fno-second-underscore -w -shared $(LIBS) -static
+
+libnnlib.a: $(NNLIBFILES)
+	ar rcs libnnlib.a $(NNLIBFILES)
 
 dist:
 	\cp -f $(CPFILES) . ; \
