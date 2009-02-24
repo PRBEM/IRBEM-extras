@@ -1,0 +1,27 @@
+IRBEM Extras
+
+By default, all files in this folder and its sub folders are covered
+by the Lesser GNU Public License. See license.txt for details.
+
+The "extras" folder contains developer-contributed packages that have
+not yet been (and may never be) integrated into the main irbem/trunk.
+
+These packages will tend not to have the same level of documentation,
+Makefile, and installation that is provided in the main irbem library.
+
+As of 24 February, the "extras" contains 3 packages:
+
+var2cdf - IDL and Matlab routines to support sharing of structured
+data and save sets between Matlab and IDL via NASA's CDF format. These
+are still a bit of a work in progress, especially the IDL code. POC:
+Paul O'Brien.
+
+nnlib - a neural network library in C, with Matlab wrapper. Requires
+Gnu Scientific Library (GSL, http://www.gnu.org/software/gsl/). POC:
+Paul O'Brien.
+
+invlib - an inversion library in C for spectral inversion and
+pitch-angle inversion of space particle data. Some Matlab and IDL
+examples/wrappers are provided. Requires GSL and nnlib. POC: Paul
+O'Brien.
+
