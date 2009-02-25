@@ -2,7 +2,7 @@ SHELL=/bin/sh
 NULL=true
 
 # Lines starting with #. will be printed as helps
-#. make neural network library (nnlib.so or nn.dll)
+#. make neural network library (nnlib.so or nnlib.dll)
 #. make help - display this help
 #. make nnlib.so - make unix/cygwin shared object
 #. make nnlib.dll - make windows shared object (from MSYS/MINGW only)
