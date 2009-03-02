@@ -1,13 +1,28 @@
 IRBEM Extras
 
-By default, all files in this folder and its sub folders are covered
-by the Lesser GNU Public License. See license.txt for details.
+By default, all files in this folder and its sub folders are part of
+IRBEM-LIB and are covered by the Lesser GNU Public License. See
+license.txt for details.
+
+IRBEM-LIB is free software: you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+IRBEM-LIB is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public License
+along with IRBEM-LIB.  If not, see <http://www.gnu.org/licenses/>.
 
 The "extras" folder contains developer-contributed packages that have
 not yet been (and may never be) integrated into the main irbem/trunk.
 
 These packages will tend not to have the same level of documentation,
-Makefile, and installation that is provided in the main irbem library.
+inter-version compatibility, Makefile, and installation that is
+provided in the main irbem library.
 
 As of 24 February, the "extras" contains 3 packages:
 

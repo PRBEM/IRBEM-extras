@@ -403,8 +403,8 @@ double asi_ell_combine(const gsl_vector *q, void *params_void, gsl_vector *grad,
 }
 
 int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const double *H, const double *b,
-		  const long int *int_params, const double *real_params,
-		 char *outFile, double *Eout, double *flux, double *dlogflux) {
+		 const long int *int_params, const double *real_params,
+		 char *outFile, double *Eout, double *flux, double *dlogflux, double *support_data) {
 /****
      see header file for details of inputs/outputs
 ****/
@@ -737,6 +737,13 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
       hess = gsl_matrix_alloc(q->size,q->size);
       covq = gsl_matrix_alloc(q->size,q->size); /* q error covariance = inv(hess) */
       ells[i] = asi_ell_combine(q,(void*)&asi_ell_params,grad,hess); /* get ell, grad, and hess */
+      if (support_data) {
+	/* store fit parameters in support data */
+	support_data[ASI_SD_START(i)] = ells[i];
+	for (j=1; j <= q->size; j++) {	
+	  support_data[ASI_SD_START(i)+j] = gsl_vector_get(q,i-1);
+	}
+      }
       min_ell = gsl_min(ells[i],min_ell); /* update min_ell */
       inv_matrix_once(hess,covq,1);
 
@@ -844,7 +851,7 @@ int ana_spec_inv_multi(const long int Ntimes,
 		       const double *dt, const double *b,
 		       const long int *int_params, const double *real_params,
 		       char *outFile, double *Eout, 
-		       double *flux, double *dlogflux, int *result_codes) {
+		       double *flux, double *dlogflux, double *support_data, int *result_codes) {
   long int i,j,t,NE,NY;
   double *H;
   int result_code = INVLIB_SUCCESS;
@@ -870,7 +877,7 @@ int ana_spec_inv_multi(const long int Ntimes,
       }
     }
     result_codes[t] = ana_spec_inv(y+NY*t,dy,Egrid,H,b+NY*t,int_params,real_params,
-				   outFile,Eout,flux+NE*t,dlogflux+NE*t);
+				   outFile,Eout,flux+NE*t,dlogflux+NE*t,support_data+(ASI_MAX_NQ+1)*(ASI_MAX_POW2+1)*t);
     if (result_codes[t] != INVLIB_SUCCESS) {
       result_code = result_codes[t]; /* store first error code, to be returned later */
     }

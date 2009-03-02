@@ -6,7 +6,7 @@
 
 int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const double *H, const double *b,
 		  const long int *int_params, const double *real_params,
-		  char *outFile, double *Eout, double *flux, double *dlogflux);
+		 char *outFile, double *Eout, double *flux, double *dlogflux, double *support_data);
 
 int ana_spec_inv_multi(const long int Ntimes,
 		       const double *y, const double *dy, 
@@ -14,7 +14,7 @@ int ana_spec_inv_multi(const long int Ntimes,
 		       const double *dt, const double *b,
 		       const long int *int_params, const double *real_params,
 		       char *outFile, double *Eout, 
-		       double *flux, double *dlogflux, int *result_codes);
+		       double *flux, double *dlogflux, double *support_data, int *result_codes);
 
 int omni2uni(const double *omniflux, const double *dlogomniflux,
              const long int *int_params, 

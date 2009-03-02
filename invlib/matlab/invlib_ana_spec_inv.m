@@ -45,11 +45,12 @@ if ~libisloaded('invlib'),
     loadlibrary('invlib','invlib.h','alias','invlib'); % load the library
 end
 
-nullPtr = libpointer('voidPtr'); % empty pointer to void
-fluxPtr = libpointer('doublePtr',flux); % pointer to one double
-dlogfluxPtr = libpointer('doublePtr',dlogflux); % pointer to one double
+nullPtr = libpointer('charPtr'); % empty pointer to void
+fluxPtr = libpointer('doublePtr',flux); % pointer to double
+dlogfluxPtr = libpointer('doublePtr',dlogflux); % pointer to double
+supportPtr = libpointer('doublePtr'); % NULL pointer to double
 
-result = calllib('invlib','ana_spec_inv',c,dc,Egrid,H,b,int_params,real_params,nullPtr,Eout,fluxPtr,dlogfluxPtr);
+result = calllib('invlib','ana_spec_inv',c,dc,Egrid,H,b,int_params,real_params,nullPtr,Eout,fluxPtr,dlogfluxPtr,supportPtr);
 disp(sprintf('%s: ana_spec_inv result= %i',mfilename,result));
 
 flux = fluxPtr.value;

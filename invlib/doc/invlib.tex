@@ -47,6 +47,7 @@ best-fit energy spectrum from a multi-channel measurement.
 \label{secChanges}
 
 \begin{itemize}
+\item{3/2/2009} added \verb|support_data| to \verb|ana_spec_inv| and \verb|ana_spec_inv_multi|.
 \item{3/2/2009} fixed bug in specinv that caused PLE to only do PL.
 \item{2/17/2009} Created \verb|ana_spec_inv_multi|
 \item{2/13/2009} Changed \verb|void *outFilePtr| to \verb|char *outFile|, 
@@ -70,7 +71,7 @@ int ana_spec_inv(const double *y, const double *dy,
                  const double *Egrid, const double *H, const double *b,
                  const long int *int_params, const double *real_params,
                  char *outFile, double *Eout, 
-                 double *flux, double *dlogflux);
+                 double *flux, double *dlogflux, double *support_data);
 \end{verbatim}
                   
 This function takes a set of counts \verb|y|, estimated relative error
@@ -432,12 +433,15 @@ When the function returns, $\verb|flux[j]| = \hat{f}(E_j)$, and $\verb|dlogflux[
 \item \verb|outFile| (input) provides filename or \verb|FILE *| for verbose output (see verbose setting above). Null terminated string.
 \item \verb|flux| (output) \verb|flux[NE*t+j]| $=$ inverted flux at \verb|j|$^{\rm th}$ energy grid point (e.g., in \#/keV/cm$^2$/sr/s), case \verb|t|.
 \item \verb|dlogflux| (output) \verb|dlogflux[NE*t+j]| $=$ standard error of natural log of \verb|flux[NE*t+j]| (dimensionless).
+\item \verb|support_data| (output) support data (ignored if \verb|NULL|)
+\subitem \verb|(support_data[ASI_MAX_NQ+1)*k]| $\ell$ for the spectral function with bit mask $2^{k-1}$ (dimensionless).
+\subitem \verb|(support_data[ASI_MAX_NQ+1)*k+m]| fit parameter $q^{(k)}_m$ for the spectral function with bit mask $2^{k-1}$. (usually dimensionless, see function)
 \end{itemize}
 
-Notes: 
+Notes:
 \begin{enumerate}
 \item Array and matrix indices above are zero-based, following C convention rather than one-based linear algebra convention.
-\item \verb|ana_spec_inv| operates on {\it counts} not {\it count rate}.
+\item \verb|ana_spec_inv| operates on {\it counts} not {\it count rate}b|
 \item Missing counts can be replaced with NaN, and the channel will be ignored.
 \item If \verb|dy| is unknown, use $\ln(2)/2$ for factor of 2 95\% confidence bounds, or 0 for Poisson error only.
 \item Energy units must be consistent throughout: e.g., fluxes in \verb|/keV|, energy grid points in \verb|keV|, and rest energy in \verb|keV|.
@@ -456,6 +460,9 @@ Notes:
   spectrum.
 \item \verb|outFile| is ignored for verbose settings 0, 1, and 2.
 \item The 95\% confidence interval on \verb|flux[j]| is given by $\verb|flux[j]|\times\exp(\pm 1.9600\times\verb|dlogflux[j]|)$.
+\item  Entries in \verb|support_data| for fit functions not used (i.e., are not set in the spectral function bit mask) are returned without modification.
+\item  \verb|ASI_MAX_NQ| is 10 at the moment, providing for up to 10 free parameters in some future fit function. It may change, but that's unlikely.
+	\verb|ASI_MAX_NQ| is also defined in \verb|specinv.h| for C users.
 \end{enumerate}
 
 \subsection{Return Codes}
@@ -465,7 +472,8 @@ Notes:
 \item[-101] NULL passed where pointer expected.
 \item[-102] One or fewer valid data points; e.g., (\verb|NY|$ \le 1$), or \verb|NE|$\le 1$ or \verb|NEout|$<1$.
 \item[-103] one or more invalid (NaN or infinite) in input arrays, or 
-  some \verb|y[i]|$<0$, \verb|dy[i]|$<0$, \verb|Egrid[j]|$\le 0$, or \verb|Egrid[j]|$\le 0$.
+  some \verb|y[i]|$<0$, \verb|dy[i]|$<0$, \verb|Egrid[j]|$\le 0$, or
+  \verb|Egrid[j]|$\le 0$.
 \item[-104] no counts in any channel.
 \item[-201] No functions selected in function bit map.
 \item[-202] Invalid function selected in function bit map.
@@ -518,14 +526,19 @@ int ana_spec_inv_multi(const long int Ntimes,
 		       const double *dt, const double *b,
 		       const long int *int_params, const double *real_params,
 		       char *outFile, double *Eout, 
-		       double *flux, double *dlogflux, int *result_codes);
+		       double *flux, double *dlogflux, double *support_data, 
+		       int *result_codes);
 \end{verbatim}
 This function calls \verb|ana_spec_inv| \verb|Ntimes|, in each case
 advancing the \verb|y| and \verb|b| pointers by \verb|NY| (i.e.,
 moving one row forward, if \verb|y| and \verb|b| are interpreted as
 \verb|Ntimes|$\times$\verb|NY| row-major matrices), and, similarly,
 advancing \verb|flux| and \verb|dlogflux| by
-\verb|NE|. \verb|result_codes| provides the functional return values.
+\verb|NE|. \verb|support_data| is advanced by $(\verb|ASI_MAX_NQ|+1)\times(\verb|ASI_MAX_POW2|+1)$,
+where \verb|ASI_MAX_POW2| is presently 4 since $2^4$ is the largest
+function bitmap value, and is defined in ``specinv.h'' for C users.
+
+\verb|result_codes| provides the functional return values.
 The primary difference between \verb|ana_spec_inv| and
 \verb|ana_spec_inv_multi| is that the latter requires
 the aggregation time (\verb|dt|) be passed in separately from the
