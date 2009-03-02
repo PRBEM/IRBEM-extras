@@ -20,7 +20,7 @@ if ~libisloaded('invlib'),
     loadlibrary('invlib','invlib.h','alias','invlib'); % load the library
 end
 
-nullPtr = libpointer('voidPtr'); % empty pointer to void
+nullPtr = libpointer('cstring'); % empty pointer to char *
 unifluxPtr = libpointer('doublePtr',0); % pointer to one double
 dlogunifluxPtr = libpointer('doublePtr',0); % pointer to one double
 

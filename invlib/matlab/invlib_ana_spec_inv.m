@@ -45,7 +45,7 @@ if ~libisloaded('invlib'),
     loadlibrary('invlib','invlib.h','alias','invlib'); % load the library
 end
 
-nullPtr = libpointer('charPtr'); % empty pointer to void
+nullPtr = libpointer('cstring'); % empty pointer to char *
 fluxPtr = libpointer('doublePtr',flux); % pointer to double
 dlogfluxPtr = libpointer('doublePtr',dlogflux); % pointer to double
 supportPtr = libpointer('doublePtr'); % NULL pointer to double
