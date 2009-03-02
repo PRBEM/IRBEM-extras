@@ -706,7 +706,7 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
 	/* initialize with default params */
 	gsl_vector_set(q,0,1);
 	gsl_vector_set(q,1,3);
-	asi_ell_params.flux_func = flux_pl; /* power law flux spectrum */
+	asi_ell_params.flux_func = flux_ple; /* power law flux spectrum w/ exp tail */
 	dbl_params[0] = E_break;
 	dbl_params[1] = E0;
 	asi_ell_params.flux_func_params = (void *)dbl_params; /* two constant params */
