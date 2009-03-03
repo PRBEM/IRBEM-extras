@@ -307,6 +307,18 @@ void flux_multi(fluxFuncTy flux_func,
   }
 }
 
+void make_lambda(const gsl_vector *q,const asi_ell_paramsTy *asi_ell_params,gsl_vector *lambda) {
+  /* sets lambda based on q and info in asi_ell_params: H, b, flux_func, etc */
+  gsl_vector *flux = gsl_vector_alloc(asi_ell_params->NE);
+  flux_multi(asi_ell_params->flux_func,q,asi_ell_params->Egrid,asi_ell_params->flux_func_params,flux,NULL);
+  /* copy background into lambda: lambda = b */
+  gsl_vector_memcpy(lambda,asi_ell_params->b);  
+  /* lambda = 1.0*H*flux+1.0*b (since lambda=b) */
+  gsl_blas_dgemv(CblasNoTrans,1.0,asi_ell_params->H,flux,1.0,lambda);
+  gsl_vector_free(flux);
+}
+
+
 /****************************
   asi_ell_combine - the master negative-log-likelihood function
   inputs:
@@ -404,7 +416,8 @@ double asi_ell_combine(const gsl_vector *q, void *params_void, gsl_vector *grad,
 
 int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const double *H, const double *b,
 		 const long int *int_params, const double *real_params,
-		 char *outFile, double *Eout, double *flux, double *dlogflux, double *support_data) {
+		 char *outFile, double *Eout, double *flux, double *dlogflux, 
+		 double *lambda, double *support_data) {
 /****
      see header file for details of inputs/outputs
 ****/
@@ -414,7 +427,7 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
   double m0c2=0,E0=0,E_break=0;
   double dbl_params[10]; /* holder for parameters to flux functions */
   int any_y_positive = 0, Ny_valid=0;
-  gsl_vector_view fluxgsl,dlogfluxgsl,grad_matrix_row; 
+  gsl_vector_view fluxgsl,dlogfluxgsl,grad_matrix_row,lambda_view; 
   gsl_vector *fluxhat=0, *sigmahat=0;
   gsl_vector *q=0; /* parameter vector */
   gsl_vector *grad=0;
@@ -422,7 +435,7 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
   pen_funcTy *pen_funcs=0;
   asi_ell_paramsTy asi_ell_params;
   optfunTy optfun; 
-  gsl_vector *qs[ASI_MAX_POW2+1],*fluxes[ASI_MAX_POW2+1],*sigmas[ASI_MAX_POW2+1];
+  gsl_vector *qs[ASI_MAX_POW2+1],*fluxes[ASI_MAX_POW2+1],*sigmas[ASI_MAX_POW2+1],*lambdak[ASI_MAX_POW2+1];
   double ells[ASI_MAX_POW2+1];
   double weights[ASI_MAX_POW2+1],weight_sum,min_ell;
   double sigma_flux_j, flux_j, logflux_j, sigma2_log_flux_j, tmp_dbl;
@@ -438,7 +451,7 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
       fclose(asi_ell_params.outFilePtr);
     }
     return(return_value);
-  }
+  };
 
   asi_ell_params.closeOutFile = 0; /* default: no need to close outFile */
 
@@ -591,6 +604,12 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
     return(clean_return(INVLIB_ERR_INVALIDITER));
   }
 
+  if (lambda || support_data) { /* prepare to compute lambda */
+    for (i=0; i <= ASI_MAX_POW2; i++) {
+      lambdak[i] = gsl_vector_alloc(NY);
+    }
+  }
+  
   /* must declare these here because otherwise compiler treats assignments as violating const-ness */
   gsl_matrix_const_view Hgsl = gsl_matrix_const_view_array(H,NY,NE);
   gsl_vector_const_view Egridgsl = gsl_vector_const_view_array(Egrid,NE);
@@ -738,10 +757,19 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
       covq = gsl_matrix_alloc(q->size,q->size); /* q error covariance = inv(hess) */
       ells[i] = asi_ell_combine(q,(void*)&asi_ell_params,grad,hess); /* get ell, grad, and hess */
       if (support_data) {
-	/* store fit parameters in support data */
-	support_data[ASI_SD_START(i)] = ells[i];
-	for (j=1; j <= q->size; j++) {	
-	  support_data[ASI_SD_START(i)+j] = gsl_vector_get(q,i-1);
+      	/* store fit parameters in support data */
+      	support_data[ASI_SD_START(i,NY)] = ells[i];
+      	for (j=0; j < q->size; j++) {	
+      	  support_data[ASI_SD_START(i,NY)+2+j] = gsl_vector_get(q,j);
+      	}
+      }
+      if (support_data || lambda) {
+	/* populate estimated counts */
+	make_lambda(q,&asi_ell_params,lambdak[i]);
+	if (support_data) {
+	  for (j=0; j < NY; j++) {
+	    support_data[ASI_SD_START(i,NY)+2+ASI_MAX_NQ+j] = gsl_vector_get(lambdak[i],j);
+	  }
 	}
       }
       min_ell = gsl_min(ells[i],min_ell); /* update min_ell */
@@ -793,6 +821,13 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
     }
   }
 
+  if (lambda) {
+    /* create view of lambda and clear it */
+    lambda_view = gsl_vector_view_array(lambda,NY);
+    gsl_vector_set_zero(&(lambda_view.vector));
+  }
+
+
   /* the following code is written to reduce memory alloc/dealloc,
    so array/vector variables get reused */
   /* will acumulate over i "in place" in flux and dlogflux */
@@ -802,6 +837,9 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
   for (i=0; i <= ASI_MAX_POW2; i++) {
     if (weights[i]>0) {
       weights[i] /= weight_sum; /* normalize */
+      if (support_data) {
+      	support_data[ASI_SD_START(i,NY)+1] = weights[i];
+      }
       for (j=1; j <= NEout; j++) {
 	flux_j = gsl_vector_get(fluxes[i],j-1);
 	logflux_j = log(flux_j);
@@ -816,6 +854,9 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
 	gsl_vector_set(fluxhat,j-1,tmp_dbl+weights[i]*logflux_j);
 	tmp_dbl = gsl_vector_get(sigmahat,j-1); /* x2 for now */
 	gsl_vector_set(sigmahat,j-1,tmp_dbl + weights[i]*(gsl_pow_2(logflux_j)+sigma2_log_flux_j));
+      }
+      if (lambda) {
+      	gsl_blas_daxpy(weights[i],lambdak[i],&(lambda_view.vector)); /* lambda += weights(i)*lambdak(i) */
       }
     }
   }
@@ -833,6 +874,9 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
   
   /* free memory */
   for (i=0; i <= ASI_MAX_POW2; i++) {
+    if (lambda || support_data) {
+      gsl_vector_free(lambdak[i]);
+    }
     if (qs[i]) {
       gsl_vector_free(qs[i]);
       gsl_vector_free(fluxes[i]);
@@ -851,7 +895,8 @@ int ana_spec_inv_multi(const long int Ntimes,
 		       const double *dt, const double *b,
 		       const long int *int_params, const double *real_params,
 		       char *outFile, double *Eout, 
-		       double *flux, double *dlogflux, double *support_data, int *result_codes) {
+		       double *flux, double *dlogflux, 
+		       double *lambda, double *support_data, int *result_codes) {
   long int i,j,t,NE,NY;
   double *H;
   int result_code = INVLIB_SUCCESS;
@@ -877,7 +922,8 @@ int ana_spec_inv_multi(const long int Ntimes,
       }
     }
     result_codes[t] = ana_spec_inv(y+NY*t,dy,Egrid,H,b+NY*t,int_params,real_params,
-				   outFile,Eout,flux+NE*t,dlogflux+NE*t,support_data+(ASI_MAX_NQ+1)*(ASI_MAX_POW2+1)*t);
+				   outFile,Eout,flux+NE*t,dlogflux+NE*t,
+				   lambda+NY,support_data+ASI_SD_START(1,NY)*(ASI_MAX_POW2+1)*t);
     if (result_codes[t] != INVLIB_SUCCESS) {
       result_code = result_codes[t]; /* store first error code, to be returned later */
     }

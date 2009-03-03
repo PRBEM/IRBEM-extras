@@ -72,14 +72,15 @@ double optimize(gsl_vector *q, optfunTy *optfun, const long int minimizer_flag, 
     Tfdf = gsl_multimin_fdfminimizer_vector_bfgs2;
     break;
   }
+
   /* set up the multimin function my_f or my_fdf, and set the minimizer */
   if (OPTIM_MIN_ISFDF(minimizer_flag)) {
+    s_fdf = gsl_multimin_fdfminimizer_alloc (Tfdf, q->size);
     my_fdf.n = q->size;
     my_fdf.f = &optim_f;
     my_fdf.df = &optim_df;
     my_fdf.fdf = &optim_fdf;
     my_fdf.params = (void *)optfun;
-    s_fdf = gsl_multimin_fdfminimizer_alloc (Tfdf, q->size);
     gsl_multimin_fdfminimizer_set (s_fdf, &my_fdf, q, 1e-6, 1e-6);
     if (fid) {
       fprintf(fid,"%s invoked with minimizer %s, MaxIter=%li\n",__func__,
@@ -98,7 +99,7 @@ double optimize(gsl_vector *q, optfunTy *optfun, const long int minimizer_flag, 
 	      gsl_multimin_fminimizer_name(s_f),MaxIter);
     }
   }
-      
+
   /* pretty standard minimizer loop from the GSL examples */
       
   do

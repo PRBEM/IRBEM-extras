@@ -6,7 +6,6 @@ NULL=true
 #. make help - display this help
 #. make nnlib.so - make unix/cygwin shared object
 #. make nnlib.dll - make windows shared object (from MSYS/MINGW only)
-#. make libnnlib.a - make static library file
 #. make nntrain.exe - make executable nntrain.exe (from MSYS/MINGW only)
 #. make nntrain.x - make executable nntrain.x (unix/cygwin)
 #. make nntrain.mpix - make MPI executable nntrain.mpix (unix)
@@ -42,11 +41,9 @@ endif
 
 
 
-NNLIBFILES=nn.o nnio.o matrix_inv.o
 NNLIBCFILES=nn.c nnio.c matrix_inv.c
 LIBS=-lgsl -lgslcblas -lm
 
-CPFILES=/c/work/matlab/AeroMatLib/obrien/nnlib.m 
 TARCFILES=nn.c nnio.c matrix_inv.c nntrain.c
 TARHFILES=nn.h nnlib.h subscripts.h matrix_inv.h
 TARMISC=Makefile nnlib.dll nntrain.exe nnlib.m doc/nnlib.pdf
@@ -58,12 +55,12 @@ help:
 .c.o:
 	$(CC) $(CFLAGS) -c $<
 
-nntrain.exe:  nntrain.o $(NNLIBFILES) 
-	$(CC) -s -O3 $(CFLAGS) -o nntrain.exe nntrain.o $(NNLIBFILES) $(LIBS) -static
+nntrain.exe:  nntrain.c $(NNLIBCFILES) 
+	$(CC) -s -O3 $(CFLAGS) -o nntrain.exe nntrain.c $(NNLIBCFILES) -static $(LIBS)
 
 # nntrain.x on unix
-nntrain.x: nntrain.o $(NNLIBFILES) 
-	$(CC) -s -O3 $(CFLAGS) -o nntrain.x nntrain.o $(NNLIBFILES) $(LIBS)
+nntrain.x: nntrain.o $(NNLIBCFILES) 
+	$(CC) -s -O3 $(CFLAGS) -o nntrain.x nntrain.c $(NNLIBCFILES) $(LIBS)
 
 # nntrain.mpix -- enable mpi parallel features
 nntrain.mpix: nntrain.c $(NNLIBCFILES)
@@ -73,20 +70,16 @@ nntrain.mpix: nntrain.c $(NNLIBCFILES)
 nntrain.ompx: nntrain.c $(NNLIBCFILES)
 	$(OMPCC) -s -O3 $(CFLAGS) -fopenmp -DUSEOMP -o nntrain.ompx nntrain.c $(NNLIBCFILES) $(LIBS)
 
-nnlib.dll: $(NNLIBFILES)
-	$(CC) $(CFLAGS) -o nnlib.dll $(NNLIBFILES) -Wl,--add-stdcall-alias -fno-second-underscore -w -shared $(LIBS) -static
+nnlib.dll: $(NNLIBCFILES)
+	$(CC) $(CFLAGS) -shared -o nnlib.dll $(NNLIBCFILES) -Wl,--add-stdcall-alias -fno-second-underscore -w -static $(LIBS)
 
-nnlib.so: $(NNLIBFILES)
-	$(CC) $(CFLAGS) -o nnlib.so $(NNLIBFILES) -Wl,--add-stdcall-alias -fno-second-underscore -w -shared $(LIBS) -static
-
-libnnlib.a: $(NNLIBFILES)
-	ar rcs libnnlib.a $(NNLIBFILES)
+nnlib.so: $(NNLIBCFILES)
+	$(CC) $(CFLAGS) -shared -o nnlib.so $(NNLIBCFILES) -Wl,--add-stdcall-alias -fno-second-underscore -w -static $(LIBS)
 
 dist:
-	\cp -f $(CPFILES) . ; \
 	\rm -f nnlib.tar.gz nnlib.tar ; \
 	\tar cvf nnlib.tar $(TARFILES)   ; \
 	\gzip -f nnlib.tar 
 
 clean:
-	\rm -f *.o *.so *.dll *~ nnlib.tar* nntrain.exe nntrain.x nntrain.mpix nntrain.ompx
+	\rm -f *.o *.so *.dll *~ nnlib.tar* nntrain.exe nntrain.x nntrain.mpix nntrain.ompx *.a

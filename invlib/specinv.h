@@ -16,8 +16,8 @@
 /* maximum number of free parameters for any fit */
 #define ASI_MAX_NQ (10)
 
-/* returns offset for first support_data for i'th fit */
-#define ASI_SD_START(i) ((ASI_MAX_NQ+1)*i)
+/* returns offset for first support_data for i'th fit, i is zero-based */
+#define ASI_SD_START(i,NY) ((2+(ASI_MAX_NQ)+(NY))*(i))
 
 #define SPECINV_H 1
 #endif

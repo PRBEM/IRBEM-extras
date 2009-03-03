@@ -6,6 +6,8 @@ if ~exist(infile,'file'),
     error('Unable to locate "%s". Please copy it into matlab path or edit "%s.m"',infile,mfilename);
 end
 
+outfile = [which(infile),'_matlab_log'];
+
 fid = fopen(infile,'r');
 NC = fscanf(fid,'%li',1);
 NE = fscanf(fid,'%li',1);
@@ -37,7 +39,7 @@ int_params(1+2) = NEout;
 int_params(1+3) = 1+2; % analtyical functions bitmap*/
 int_params(1+4) = 0; % minimizer, 0=BFGS, 3=NM */
 int_params(1+5) = 1000; % maximumn # of iterations */
-int_params(1+6) = 0; % 0 = verbose off, no text output */
+int_params(1+6) = 4; % 0 = verbose off, no text output, 4 = write messages to outfile */
 
 real_params(1+0) = 0.511; % electron rest energy, MeV */
 
@@ -45,16 +47,20 @@ if ~libisloaded('invlib'),
     loadlibrary('invlib','invlib.h','alias','invlib'); % load the library
 end
 
-nullPtr = libpointer('cstring'); % empty pointer to char *
+nullPtr = libpointer('cstring',outfile); % empty pointer to char *
 fluxPtr = libpointer('doublePtr',flux); % pointer to double
+lambdaPtr = libpointer('doublePtr',nan(size(c))); % pointer to double
 dlogfluxPtr = libpointer('doublePtr',dlogflux); % pointer to double
-supportPtr = libpointer('doublePtr'); % NULL pointer to double
+support_data = nan(5,2+10+NC)';
+supportPtr = libpointer('doublePtr',support_data); % pointer to double
 
-result = calllib('invlib','ana_spec_inv',c,dc,Egrid,H,b,int_params,real_params,nullPtr,Eout,fluxPtr,dlogfluxPtr,supportPtr);
+result = calllib('invlib','ana_spec_inv',c,dc,Egrid,H,b,int_params,real_params,nullPtr,Eout,fluxPtr,dlogfluxPtr,lambdaPtr,supportPtr);
 disp(sprintf('%s: ana_spec_inv result= %i',mfilename,result));
 
 flux = fluxPtr.value;
 dlogflux = dlogfluxPtr.value;
+lambda = lambdaPtr.value;
+support_data = supportPtr.value';
 
 figure;
 loglog(Eout,flux,'ro-',Eout,flux.*exp(-dlogflux*2),'ro--',Eout,flux.*exp(+dlogflux*2),'ro--');

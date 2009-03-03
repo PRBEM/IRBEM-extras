@@ -47,6 +47,9 @@ best-fit energy spectrum from a multi-channel measurement.
 \label{secChanges}
 
 \begin{itemize}
+\item{3/3/2009} Made modifications to \verb|ana_spec_inv| and \verb|ana_spec_inv_multi| to support return of estimated counts.
+\subitem Modified definition of \verb|support_data| to hold estimated counts for each analytical function after fit parameters.
+\subitem Added output \verb|lambda| to hold estimated counts for combined fit.
 \item{3/2/2009} added \verb|support_data| to \verb|ana_spec_inv| and \verb|ana_spec_inv_multi|.
 \item{3/2/2009} fixed bug in specinv that caused PLE to only do PL.
 \item{2/17/2009} Created \verb|ana_spec_inv_multi|
@@ -71,7 +74,8 @@ int ana_spec_inv(const double *y, const double *dy,
                  const double *Egrid, const double *H, const double *b,
                  const long int *int_params, const double *real_params,
                  char *outFile, double *Eout, 
-                 double *flux, double *dlogflux, double *support_data);
+                 double *flux, double *dlogflux, 
+		 double *lambda, double *support_data);
 \end{verbatim}
                   
 This function takes a set of counts \verb|y|, estimated relative error
@@ -433,15 +437,20 @@ When the function returns, $\verb|flux[j]| = \hat{f}(E_j)$, and $\verb|dlogflux[
 \item \verb|outFile| (input) provides filename or \verb|FILE *| for verbose output (see verbose setting above). Null terminated string.
 \item \verb|flux| (output) \verb|flux[NE*t+j]| $=$ inverted flux at \verb|j|$^{\rm th}$ energy grid point (e.g., in \#/keV/cm$^2$/sr/s), case \verb|t|.
 \item \verb|dlogflux| (output) \verb|dlogflux[NE*t+j]| $=$ standard error of natural log of \verb|flux[NE*t+j]| (dimensionless).
+\item \verb|lambda| (output) \verb|lambda[NY*t+i]| $=$ estimated counts from combined fit for \verb|y[NY*t+i]| (ignored if \verb|NULL|).
 \item \verb|support_data| (output) support data (ignored if \verb|NULL|)
-\subitem \verb|(support_data[ASI_MAX_NQ+1)*k]| $\ell$ for the spectral function with bit mask $2^{k-1}$ (dimensionless).
-\subitem \verb|(support_data[ASI_MAX_NQ+1)*k+m]| fit parameter $q^{(k)}_m$ for the spectral function with bit mask $2^{k-1}$. (usually dimensionless, see function)
+\subitem stride (\verb|...| below) for each $t$ is \verb|(2+ASI_MAX_NQ+NY)*(ASI_MAX_POW2+1)|. 
+\subitem \verb|support_data[...*t+(2+ASI_MAX_NQ+NY)*k]| $\ell$ for the spectral function with bit mask $2^k$ (dimensionless).
+\subitem \verb|support_data[...*t+(2+ASI_MAX_NQ+NY)*k+1]| $k$^{\rm th} weight  (dimensionless).
+\subitem \verb|support_data[...*t+(2+ASI_MAX_NQ+NY)*k+2+m]| $m$^{\rm th} fit parameter for $k$^{\rm th} function  (dimensionless).
+\subitem \verb|support_data[...*t+(2+ASI_MAX_NQ+NY)*k+2+ASI_MAX_NQ+i]| expected counts for \verb|y[i]|. (usually dimensionless)
 \end{itemize}
 
 Notes:
 \begin{enumerate}
-\item Array and matrix indices above are zero-based, following C convention rather than one-based linear algebra convention.
-\item \verb|ana_spec_inv| operates on {\it counts} not {\it count rate}b|
+\item Except where noted, array and matrix indices above are zero-based, following C convention rather than one-based linear algebra convention.
+\item For \verb|ana_spec_inv|, assume $t=0$ to compute array indices.
+\item \verb|ana_spec_inv| operates on {\it counts} not {\it count rate}|
 \item Missing counts can be replaced with NaN, and the channel will be ignored.
 \item If \verb|dy| is unknown, use $\ln(2)/2$ for factor of 2 95\% confidence bounds, or 0 for Poisson error only.
 \item Energy units must be consistent throughout: e.g., fluxes in \verb|/keV|, energy grid points in \verb|keV|, and rest energy in \verb|keV|.
@@ -462,7 +471,7 @@ Notes:
 \item The 95\% confidence interval on \verb|flux[j]| is given by $\verb|flux[j]|\times\exp(\pm 1.9600\times\verb|dlogflux[j]|)$.
 \item  Entries in \verb|support_data| for fit functions not used (i.e., are not set in the spectral function bit mask) are returned without modification.
 \item  \verb|ASI_MAX_NQ| is 10 at the moment, providing for up to 10 free parameters in some future fit function. It may change, but that's unlikely.
-	\verb|ASI_MAX_NQ| is also defined in \verb|specinv.h| for C users.
+	\verb|specinv.h| defines \verb|ASI_MAX_NQ|, \verb|ASI_MAX_POW2|, and some handy macros for C users.
 \end{enumerate}
 
 \subsection{Return Codes}
@@ -516,7 +525,7 @@ noisy power-law and exponential distributions fit to combinations of
 power-law, exponential and relativistic Maxwellian spectra.
 
 \subsection{Library Function ana\_spec\_inv\_multi}
-The library also provides a mult-case function,
+The library also provides a multi-case function,
 \verb|ana_spec_inv_multi|, with the following C prototype (found in
 ``invlib.h''):
 \begin{verbatim}
@@ -526,7 +535,8 @@ int ana_spec_inv_multi(const long int Ntimes,
 		       const double *dt, const double *b,
 		       const long int *int_params, const double *real_params,
 		       char *outFile, double *Eout, 
-		       double *flux, double *dlogflux, double *support_data, 
+		       double *flux, double *dlogflux, 
+		       double *lambda, double *support_data, 
 		       int *result_codes);
 \end{verbatim}
 This function calls \verb|ana_spec_inv| \verb|Ntimes|, in each case
@@ -534,7 +544,8 @@ advancing the \verb|y| and \verb|b| pointers by \verb|NY| (i.e.,
 moving one row forward, if \verb|y| and \verb|b| are interpreted as
 \verb|Ntimes|$\times$\verb|NY| row-major matrices), and, similarly,
 advancing \verb|flux| and \verb|dlogflux| by
-\verb|NE|. \verb|support_data| is advanced by $(\verb|ASI_MAX_NQ|+1)\times(\verb|ASI_MAX_POW2|+1)$,
+\verb|NE|. \verb|lambda| is advanced by \verb|NY|.
+\verb|support_data| is advanced by $(2+\verb|ASI_MAX_NQ|+\verb|NY|)\times(\verb|ASI_MAX_POW2|+1)$,
 where \verb|ASI_MAX_POW2| is presently 4 since $2^4$ is the largest
 function bitmap value, and is defined in ``specinv.h'' for C users.
 

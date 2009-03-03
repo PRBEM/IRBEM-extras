@@ -7,7 +7,6 @@ NULL=true
 #. make help - display this help
 #. make invlib.so - make unix/cygwin shared object
 #. make invlib.dll - make windows shared object (from MSYS/MINGW only)
-#. make libinvlib.a - make precompiled library
 #. make specinv_test.exe - make unix/cygwin executable specinv_test.exe
 #. make omni2uni_test.exe - make unix/cygwin executable omni2uni_test.exe
 #. make dist - make a tarball for distribution
@@ -22,13 +21,11 @@ MAKE=make
 SO=so
 CC=gcc
 IFLAGS=-I/usr/local/include -I./ -I../nnlib/
-LFLAGS=-L/usr/local/lib -L./ -L../nnlib/
+LFLAGS=-L/usr/local/lib -L./ 
 CFLAGS= -Wall $(IFLAGS) $(LFLAGS)
-NNLIB=../nnlib/libnnlib.a
-INVLIB=libinvlib.a
 
-INVLIBFILES=invutil.o specinv.o omni2uni.o o2u_TEM1.o optim.o 
-LIBS=-lgsl -lgslcblas -lnnlib
+NNLIBCFILES=../nnlib/matrix_inv.c ../nnlib/nn.c ../nnlib/nnio.c
+INVLIBCFILES=invutil.c specinv.c omni2uni.c o2u_TEM1.c optim.c  $(NNLIBCFILES)
 
 help:
 	@grep '^.\.' Makefile
@@ -36,20 +33,17 @@ help:
 .c.o:
 	$(CC) $(CFLAGS) -c $<
 
-libinvlib.a: $(INVLIBFILES)
-	ar rcs libinvlib.so $(INVLIBFILES)
+specinv_test.exe:  specinv_test.o  $(INVLICBFILES)
+	$(CC) $(CFLAGS) -o specinv_test.exe specinv_test.c $(INVLIBCFILES) -static -lgsl -lgslcblas -lm
 
-specinv_test.exe:  specinv_test.o $(INVLIB)
-	$(CC) $(CFLAGS) -o specinv_test.exe specinv_test.o $(LIBS) -linvlib -static
+omni2uni_test.exe:  omni2uni_test.c  $(INVLICBFILES)
+	$(CC) $(CFLAGS) -o omni2uni_test.exe omni2uni_test.c $(INVLIBCFILES) -static -lgsl -lgslcblas -lm
 
-omni2uni_test.exe:  omni2uni_test.o $(INVLIB)
-	$(CC) $(CFLAGS) -o omni2uni_test.exe omni2uni_test.o $(LIBS) -linvlib -static
+invlib.dll: $(INVLIBCFILES)
+	$(CC) $(CFLAGS) -shared -o invlib.dll $(INVLIBCFILES) -Wl,--add-stdcall-alias -fno-second-underscore -w  -static -lgsl -lgslcblas -lm 
 
-invlib.dll: $(INVLIBFILES)
-	$(CC) $(CFLAGS) -o invlib.dll $(INVLIBFILES) -Wl,--add-stdcall-alias -fno-second-underscore -w -shared $(LIBS) -static
-
-invlib.so: $(INVLIBFILES)
-	$(CC) $(CFLAGS) -o invlib.so $(INVLIBFILES) -Wl,--add-stdcall-alias -fno-second-underscore -shared $(LIBS) -static
+invlib.so: $(INVLIBCFILES)
+	$(CC) $(CFLAGS) -shared -o invlib.so $(INVLIBCFILES) -Wl,--add-stdcall-alias -fno-second-underscore -static -lgsl -lgslcblas -lm
 
 clean:
-	\rm -f *.o *.so *.dll *~ invlib.tar* *_test.exe
+	\rm -f *.o *.so *.dll *~ invlib.tar* *_test.exe *.a

@@ -71,7 +71,7 @@ int main (int argc, char *argv[]) {
   real_params[1] = 100; /* E_break for proton PLE, MeV */
   real_params[2] = 345; /* E0 for proton PLE, MeV */
 
-  result = ana_spec_inv(c,dc,Egrid,H,b,int_params,real_params,NULL,Eout,flux,dlogflux);
+  result = ana_spec_inv(c,dc,Egrid,H,b,int_params,real_params,NULL,Eout,flux,dlogflux,NULL,NULL);
   printf("specinv_test: ana_spec_inv result= %i\n",result);
 
   /*
