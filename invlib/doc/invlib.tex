@@ -47,6 +47,7 @@ best-fit energy spectrum from a multi-channel measurement.
 \label{secChanges}
 
 \begin{itemize}
+\item{3/4/2009} Created invlib.m, changed $\delta t$ to $\delta t$ in equations.
 \item{3/3/2009} Made modifications to \verb|ana_spec_inv| and \verb|ana_spec_inv_multi| to support return of estimated counts.
 \subitem Modified definition of \verb|support_data| to hold estimated counts for each analytical function after fit parameters.
 \subitem Added output \verb|lambda| to hold estimated counts for combined fit.
@@ -95,10 +96,10 @@ this section.
 
 In continuous form, the function \verb|ana_spec_inv| solves
 \begin{equation}
-\vec{y} \approx \vec{\lambda} = T\int_0^{\infty} \vec{G}(E)f(E)dE + \vec{b}, \label{eqInt1}
+\vec{y} \approx \vec{\lambda} = \delta t\int_0^{\infty} \vec{G}(E)f(E)dE + \vec{b}, \label{eqInt1}
 \end{equation}
 where $\vec{y}$ is a vector of observed counts, $\vec{\lambda}$ is a
-vector of expected counts, $T$ is the integration time, $\vec{G}$ is a
+vector of expected counts, $\delta t$ is the integration time, $\vec{G}$ is a
 vector of energy-geometric factors (response functions), and $f(E)$ is
 the differential particle flux at energy $E$, and $\vec{b}$ is a
 vector of expected background counts. In this equation, all vectors
@@ -111,7 +112,7 @@ have length $N_y$, the number of energy channels. {\it Throughout this
 The first step toward a numerical solution to (\ref{eqInt1}) is to discretize the integral:
 \begin{eqnarray}
 \vec{y} &\approx& \vec{\lambda} = \dbul{H}\vec{f} + \vec{b}, \\
-H_{ij} &\approx& T G_i(E_j) \Delta E_j, \\
+H_{ij} &\approx& \delta t G_i(E_j) \Delta E_j, \\
 f_j &=& f(E_j).
 \end{eqnarray}
 Where $\vec{f}$ is now defined on a grid in energy, with $N_E$ points,
@@ -441,8 +442,8 @@ When the function returns, $\verb|flux[j]| = \hat{f}(E_j)$, and $\verb|dlogflux[
 \item \verb|support_data| (output) support data (ignored if \verb|NULL|)
 \subitem stride (\verb|...| below) for each $t$ is \verb|(2+ASI_MAX_NQ+NY)*(ASI_MAX_POW2+1)|. 
 \subitem \verb|support_data[...*t+(2+ASI_MAX_NQ+NY)*k]| $\ell$ for the spectral function with bit mask $2^k$ (dimensionless).
-\subitem \verb|support_data[...*t+(2+ASI_MAX_NQ+NY)*k+1]| $k$^{\rm th} weight  (dimensionless).
-\subitem \verb|support_data[...*t+(2+ASI_MAX_NQ+NY)*k+2+m]| $m$^{\rm th} fit parameter for $k$^{\rm th} function  (dimensionless).
+\subitem \verb|support_data[...*t+(2+ASI_MAX_NQ+NY)*k+1]| $k^{\rm th}$ weight  (dimensionless).
+\subitem \verb|support_data[...*t+(2+ASI_MAX_NQ+NY)*k+2+m]| $m^{\rm th}$ fit parameter for $k^{\rm th}$ function  (dimensionless).
 \subitem \verb|support_data[...*t+(2+ASI_MAX_NQ+NY)*k+2+ASI_MAX_NQ+i]| expected counts for \verb|y[i]|. (usually dimensionless)
 \end{itemize}
 
@@ -455,7 +456,7 @@ Notes:
 \item If \verb|dy| is unknown, use $\ln(2)/2$ for factor of 2 95\% confidence bounds, or 0 for Poisson error only.
 \item Energy units must be consistent throughout: e.g., fluxes in \verb|/keV|, energy grid points in \verb|keV|, and rest energy in \verb|keV|.
 \item \verb|H| is stored in row-major format, i.e., a sequence of contiguous rows of $\dbul{H}$.
-\item $H_{ij} \approx T G_i(E_j)\Delta E_j$, where $T$ is the
+\item $H_{ij} \approx \delta t G_i(E_j)\Delta E_j$, where $\delta t$ is the
   integration time, $G_i(E_j)$ is the geometric factor for channel $i$
   at energy $j$, and $\Delta E_j$ is the energy bandwidth of the
   $j^{\rm th}$ grid point. Alternatives are possible:  for example,

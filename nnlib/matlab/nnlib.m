@@ -36,51 +36,45 @@ function varargout = nnlib(what,varargin)
 
 
 if ~libisloaded('nnlib'),
-    libfile = which('nnlib.dll');
+    if ispc,
+        libfile = which('nnlib.dll');
+    else
+        libfile = which('nnlib.so');
+    end
     hfile = which('nnlib.h');
     loadlibrary(libfile,hfile,'alias','nnlib');
 end
 
 switch(lower(what)),
     case {'save_training_set'},
-        varargout = save_training_set(varargin{:});
+        [varargout{:}] = save_training_set(varargin{:});
     case {'load_training_set'},
-        varargout = load_training_set(varargin{:});
+        [varargout{:}] = load_training_set(varargin{:});
     case {'fit'},
-        varargout = fit(varargin{:});        
+        [varargout{:}] = fit(varargin{:});        
     case {'ell_debug'},
-        varargout = ell_debug(varargin{:});        
+        [varargout{:}] = ell_debug(varargin{:});        
     case {'save_net'},
-        varargout = save_net(varargin{:});
+        [varargout{:}] = save_net(varargin{:});
     case {'load_net'},
-        varargout = load_net(varargin{:});
+        [varargout{:}] = load_net(varargin{:});
     case {'eval'},
-        varargout = eval(varargin{:});
+        [varargout{:}] = eval(varargin{:});
     case {'ntheta'},
-        varargout = calc_Ntheta(varargin{:});
+        [varargout{:}] = calc_Ntheta(varargin{:});
     case {'nh'},
-        varargout = calc_Nh(varargin{:});
+        [varargout{:}] = calc_Nh(varargin{:});
     otherwise
         error('%s: Unknown "what": "%s"',mfilename,what);
 end
 
-if length(varargout)>nargout,
-    varargout = varargout(1:nargout);
-end
-
-function out = calc_Ntheta(Nx,Nh,Ny)
+function Ntheta = calc_Ntheta(Nx,Nh,Ny)
 Ntheta = Ny+Ny*Nh+Nh+Nh*Nx;
-out = {Ntheta};
 
-function out = calc_Nh(Nx,Ny,Ntheta)
+function Nh = calc_Nh(Nx,Ny,Ntheta)
 Nh = (Ntheta-Ny)/(Ny+Nx+1);
-out = {Nh};
 
-function out = save_training_set(varargin)
-filename = varargin{1};
-X = varargin{2};
-Y = varargin{3};
-s = varargin{4};
+function save_training_set(filename,X,Y,s)
 
 Nt = size(X,1);
 Nx = size(X,2);
@@ -89,19 +83,20 @@ Ny = size(Y,2);
 if Ny==1,
     if numel(s)==1, % scalar, 1 x 1
         flag = 0;
-    elseif max(size(s))==Nt, % Nt x 1 or Nt x 1 x 1
+    elseif numel(s) == Nt, % Nt x 1 or Nt x 1 x 1
         flag = 2;
-    else % 1 x Ny
+    elseif numel(s) == Ny,
         flag = 1;
+    else
+        error('Unable to deduce meaning of s with %d elements',numel(s));
     end
 else
     flag = sum(size(s)>1);
 end
 s = permute(s,ndims(s):-1:1);
 calllib('nnlib','nnlib_save_training_set',filename,Nt,Nx,X',Ny,Y',s,flag);
-out = {};
 
-function out = load_training_set(varargin)
+function [X,Y,s] = load_training_set(varargin)
 filename = varargin{1};
 if ~exist(filename,'file'),
     error('%s: load_training_set, file not found "%s"',mfilename,filename);
@@ -116,10 +111,10 @@ Yptr = libpointer('doublePtr',nan);
 sptr = libpointer('doublePtr',nan);
 % call first time with flag=99999 to get sizes
 calllib('nnlib','nnlib_load_training_set',filename,Ntptr,Nxptr,Xptr,Nyptr,Yptr,sptr,flagptr);
-Nx = get(Nxptr,'value');
-Ny = get(Nyptr,'value');
-Nt = get(Ntptr,'value');
-flag = get(flagptr,'value');
+Nx = Nxptr.value;
+Ny = Nyptr.value;
+Nt = Ntptr.value;
+flag = flagptr.value;
 Xptr = libpointer('doublePtr',nan(Nx,Nt));
 Yptr = libpointer('doublePtr',nan(Ny,Nt));
 switch(bitand(flag,3)),
@@ -136,30 +131,19 @@ sptr = libpointer('doublePtr',nan(size_s));
 % call again to actually read data
 calllib('nnlib','nnlib_load_training_set',filename,Ntptr,Nxptr,Xptr,Nyptr,Yptr,sptr,flagptr);
 
-X = get(Xptr,'value')';
-Y = get(Yptr,'value')';
-s = reshape(get(sptr,'value'),size_s); % libpointers can only hold matrices, no 3-D stuff
+X = Xptr.value';
+Y = Yptr.value';
+s = reshape(sptr.value,size_s); % libpointers can only hold matrices, no 3-D stuff
 s = permute(s,ndims(s):-1:1);
 
-out = {X,Y,s};
-
-function out = eval(varargin)
-X = varargin{1};
+function [Y,dY] = eval(X,Nh,theta,xbar,ybar,sx,sy,dY_flag,theta_cov)
 Nt = size(X,1);
 Nx = size(X,2);
-Nh = varargin{2};
-theta = varargin{3};
 Ntheta = length(theta);
 Ny = (Ntheta-(Nx+1)*Nh)/(Nh+1);
-xbar = varargin{4};
-ybar = varargin{5};
-sx = varargin{6};
-sy = varargin{7};
 
 Yptr = libpointer('doublePtr',nan(Ny,Nt));
-if length(varargin)>=8,
-    dY_flag = varargin{8};
-    theta_cov = varargin{9};
+if nargin>=8,
     if bitand(dY_flag,3) == 0,
         dYptr = libpointer('doublePtr',nan); % don't need this
     elseif bitand(dY_flag,3) == 1,
@@ -175,34 +159,24 @@ end
 
 calllib('nnlib','nnlib_eval',Nt,Nx,X',Nh,theta,xbar,ybar,sx,sy,Ny,Yptr,dY_flag,theta_cov',dYptr);
 
-Y = get(Yptr,'value')';
-if bitand(dY_flag,3),
-    dY = get(dYptr,'value')';
-    if bitand(dY_flag,3) == 2,
-        dY = reshape(dY,[Nt,Ny,Ny]);
+Y = Yptr.value';
+if nargout>=2,
+    if bitand(dY_flag,3),
+        dY = dYptr.value';
+        if bitand(dY_flag,3) == 2,
+            dY = reshape(dY,[Nt,Ny,Ny]);
+        end
+    else
+        dY = [];
     end
-    out = {Y,dY};
-else
-    out = {Y};
 end
 
-function out = save_net(varargin)
-% nnlib('save_net',filename,Nx,Ny,theta,theta_cov,hess_theta_flag);
-filename = varargin{1};
-Nx = varargin{2};
-Ny = varargin{3};
-theta = varargin{4};
-xbar = varargin{5};
-ybar = varargin{6};
-sx = varargin{7};
-sy = varargin{8};
+function save_net(filename,Nx,Ny,theta,xbar,ybar,sx,sy,theta_cov,hess_theta_flag)
 if nargin >= 9,
-    cov_flag = 1;
-    theta_cov = varargin{9};
-    if nargin >=6,
-        if varargin{10},
-            cov_flag = 2; % hess flag
-        end
+    if nargin >=10,
+        cov_flag = 1+strcmpi(hess_theta_flag,'hess_theta'); % hess flag
+    else
+        cov_flag = 1;
     end
 else
     cov_flag = 0;
@@ -211,23 +185,16 @@ end
 Ntheta = length(theta);
 Nh = (Ntheta-Ny)/(Nx+Ny+1);
 calllib('nnlib','nnlib_save_net',filename,Nx,Nh,Ny,theta,xbar,ybar,sx,sy,cov_flag,theta_cov');
-out = {};
 
+function [Nx,Nh,Ny,theta,xbar,ybar,sx,sy,cov_theta] = load_net(filename,theta_hess_flag)
+do_cov = (nargout > 8);
 
-% [Nx,Nh,Ny,theta,xbar,ybar,sx,sy,theta_cov] = nnlib('load_net',filename); 
-%  (theta_cov returns empty if not in file)
-% [Nx,Nh,Ny,theta,xbar,ybar,sx,sy,theta_hess] = nnlib('load_net',filename,'theta_hess'); 
-%  (theta_hess returns empty if not in file)
-%  NOTE: theta_cov = inv(theta_hess)
-
-function out = load_net(varargin)
-filename = varargin{1};
 if ~exist(filename,'file'),
     error('%s: load_net, file not found "%s"',mfilename,filename);
 end
 
-if length(varargin)>=2,
-    theta_hess_flag = strcmpi('theta_hess',varargin{2});
+if nargin>=2,
+    theta_hess_flag = strcmpi('theta_hess',theta_hess_flag);
 else
     theta_hess_flag = false;
 end
@@ -244,11 +211,16 @@ syptr = libpointer('doublePtr',nan);
 cov_thetaptr = libpointer('doublePtr',nan);
 % call first time with flag=99999 to get sizes
 calllib('nnlib','nnlib_load_net',filename,Nxptr,Nhptr,Nyptr,thetaptr,xbarptr,ybarptr,sxptr,syptr,flagptr,cov_thetaptr);
-Nx = get(Nxptr,'value');
-Nh = get(Nhptr,'value');
-Ny = get(Nyptr,'value');
+Nx = Nxptr.value;
+Nh = Nhptr.value;
+Ny = Nyptr.value;
 Ntheta = Ny+Ny*Nh+Nh+Nh*Nx;
-flag = get(flagptr,'value');
+if do_cov,
+    flag = flagptr.value;
+else % don't load flag
+    flag = 0;
+    flagptr.value = flag;
+end
 thetaptr = libpointer('doublePtr',nan(Ntheta,1));
 xbarptr = libpointer('doublePtr',nan(Nx,1));
 ybarptr = libpointer('doublePtr',nan(Ny,1));
@@ -262,30 +234,24 @@ end
 % call again to actually read data
 calllib('nnlib','nnlib_load_net',filename,Nxptr,Nhptr,Nyptr,thetaptr,xbarptr,ybarptr,sxptr,syptr,flagptr,cov_thetaptr);
 
-theta  = get(thetaptr,'value');
-xbar = get(xbarptr,'value');
-ybar = get(ybarptr,'value');
-sx = get(sxptr,'value');
-sy = get(syptr,'value');
+theta  = thetaptr.value;
+xbar = xbarptr.value;
+ybar = ybarptr.value;
+sx = sxptr.value;
+sy = syptr.value;
 if flag,
-    cov_theta = get(cov_thetaptr,'value')';
+    cov_theta = cov_thetaptr.value';
     if xor(flag == 2,theta_hess_flag), % either cov_theta is cov_theta but want hess_theta, or cov_theta is hess_theta and want cov_theta
         cov_theta = inv(cov_theta);
     end
 else
     cov_theta = [];
 end
-out = {Nx,Nh,Ny,theta,xbar,ybar,sx,sy,cov_theta};
 
-function out = fit(varargin)
 
-X = varargin{1};
-Nh = varargin{2};
-Y = varargin{3};
-s = varargin{4};
-MaxIter = varargin{5};
-epsabs = varargin{6};
-options = varargin(7:end);
+function [theta,xbar,ybar,sx,sy,theta_cov] = fit(X,Nh,Y,s,MaxIter,epsabs,varargin)
+
+options = varargin;
 
 [Nt,Nx] = size(X);
 [Nt,Ny] = size(Y);
@@ -344,15 +310,14 @@ cov_thetaPtr = libpointer('doublePtr',nan(Ntheta,Ntheta));
 s = permute(s,ndims(s):-1:1);
 calllib('nnlib','nnlib_fit',Nt,Nx,X',Nh,Ny,Y',s,flag,MaxIter,epsabs,thetaPtr,xbarptr,ybarptr,sxptr,syptr,cov_thetaPtr);
 
-theta = get(thetaPtr,'value');
-xbar = get(xbarptr,'value');
-ybar = get(ybarptr,'value');
-sx = get(sxptr,'value');
-sy = get(syptr,'value');
-theta_cov = get(cov_thetaPtr,'value')';
-out = {theta,xbar,ybar,sx,sy,theta_cov};
+theta = thetaPtr.value;
+xbar = xbarptr.value;
+ybar = ybarptr.value;
+sx = sxptr.value;
+sy = syptr.value;
+theta_cov = cov_thetaPtr.value';
 
-function out = ell_debug(X,Nh,Y,s,theta,xbar,ybar,sx,sy)
+function [ell,grad,hess] = ell_debug(X,Nh,Y,s,theta,xbar,ybar,sx,sy)
 [Nt,Nx] = size(X);
 Ny = size(Y,2);
 Ntheta = length(theta);
@@ -379,10 +344,16 @@ s = permute(s,ndims(s):-1:1);
 % 			 const double *s, const unsigned long int sflag,
 % 			 const double *theta,
 % 			 double *grad, double *hess);
-gradPtr = libpointer('doublePtr',nan(Ntheta,1));
-hessPtr = libpointer('doublePtr',nan(Ntheta,Ntheta));
+if nargout >=2,
+    gradPtr = libpointer('doublePtr',nan(Ntheta,1));
+else
+    gradPtr = libpointer('doublePtr'); % null pointer, ignore
+end
+if nargout >= 3,
+    hessPtr = libpointer('doublePtr',nan(Ntheta,Ntheta));
+else
+    hessPtr = libpointer('doublePtr'); % null pointer, ignore
+end
 ell = calllib('nnlib','nnlib_ell_debug',Nt,Nx,X',Nh,Ny,Y',xbar,ybar,sx,sy,s,flag,theta,gradPtr,hessPtr);
 grad = get(gradPtr,'value');
 hess = get(hessPtr,'value')';
-
-out = {ell,grad,hess};
