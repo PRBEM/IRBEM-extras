@@ -402,7 +402,7 @@ When the function returns, $\verb|flux[j]| = \hat{f}(E_j)$, and $\verb|dlogflux[
 
 \begin{itemize}
 \item \verb|y| (input) \verb|y[NY*t+i]| $=$ counts in channel \verb|i| in case \verb|t|.
-\item \verb|dy| (input) \verb|dy[i]| $=$ relative error for channel \verb|i| (dimensionless).
+\item \verb|dy| (input) \verb|dy[i]| $=$ relative error for channel \verb|i| (rms error of $\log_e\verb|y[i]|$ from calibration)  (dimensionless).
 \item \verb|Egrid| (input) \verb|Egrid[j]| $=$ nominal energy of \verb|j|$^{\rm th}$ grid point (e.g., in keV).
 \item \verb|H| (input) \verb|H[NY*j+i]| $=$ response of channel \verb|i| to flux at energy \verb|j| (e.g., in keV\,cm$^2$\,sr\,s).
 \item \verb|dt| (input) \verb|dt[t]| $=$ integration time for case \verb|t|.
@@ -436,7 +436,8 @@ When the function returns, $\verb|flux[j]| = \hat{f}(E_j)$, and $\verb|dlogflux[
 \subitem \verb|real_params[1]| = $E_{\rm break}$ used by PLE.
 \subitem \verb|real_params[2]| = $E_0$ used by PLE.
 \item \verb|outFile| (input) provides filename or \verb|FILE *| for verbose output (see verbose setting above). Null terminated string.
-\item \verb|flux| (output) \verb|flux[NE*t+j]| $=$ inverted flux at \verb|j|$^{\rm th}$ energy grid point (e.g., in \#/keV/cm$^2$/sr/s), case \verb|t|.
+\item \verb|Eout| (output) \verb|Eout[j]| $=$ nominal energy of \verb|j|$^{\rm th}$ grid point for output flux (e.g., in keV).
+\item \verb|flux| (output) \verb|flux[NE*t+j]| $=$ inverted flux at \verb|j|$^{\rm th}$ output energy grid point (e.g., in \#/keV/cm$^2$/sr/s), case \verb|t|.
 \item \verb|dlogflux| (output) \verb|dlogflux[NE*t+j]| $=$ standard error of natural log of \verb|flux[NE*t+j]| (dimensionless).
 \item \verb|lambda| (output) \verb|lambda[NY*t+i]| $=$ estimated counts from combined fit for \verb|y[NY*t+i]| (ignored if \verb|NULL|).
 \item \verb|support_data| (output) support data (ignored if \verb|NULL|)
