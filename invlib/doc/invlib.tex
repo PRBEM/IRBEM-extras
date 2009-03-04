@@ -459,10 +459,11 @@ Notes:
 \item \verb|H| is stored in row-major format, i.e., a sequence of contiguous rows of $\dbul{H}$.
 \item $H_{ij} \approx \delta t G_i(E_j)\Delta E_j$, where $\delta t$ is the
   integration time, $G_i(E_j)$ is the geometric factor for channel $i$
-  at energy $j$, and $\Delta E_j$ is the energy bandwidth of the
-  $j^{\rm th}$ grid point. Alternatives are possible:  for example,
-  the first and last columns of $\dbul{H}$ can be divided by 2 to
-  approximate trapezoidal integration if the energy grid is uniform.
+  at energy $j$, and $\Delta E_j$ is the energy bandwidth (weighting
+  in the numerical integral) of the $j^{\rm th}$ grid
+  point. Alternatives are possible: for example, the first and last
+  columns of $\dbul{H}$ can be divided by 2 to approximate trapezoidal
+  integration if the energy grid is uniform.
 \item It is best not to fit both an exponential and a relativistic
   Maxwellian in combination with a power law (or any other spectral
   function we add later) spectrum. Because exponential and
