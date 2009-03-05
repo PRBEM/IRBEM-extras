@@ -66,10 +66,20 @@ int main (int argc, char *argv[]) {
   int_params[4] = 0; /* minimizer, 0=BFGS, 3=NM */
   int_params[5] = 1000; /* maximumn # of iterations */
   int_params[6] = 1; /* 1 = verbose to standard out */
+  int_params[7] = 0; /* 0 - dE already included in H */
+  int_params[8] = 0; /* reserved */
+  int_params[9] = 0; /* reserved */
 
   real_params[0] = 0.511; /* electron rest energy, MeV */
   real_params[1] = 100; /* E_break for proton PLE, MeV */
   real_params[2] = 345; /* E0 for proton PLE, MeV */
+  real_params[3] = 0; /* reserved */
+  real_params[4] = 0; /* reserved */
+  real_params[5] = 0; /* reserved */
+  real_params[6] = 0; /* reserved */
+  real_params[7] = 0; /* reserved */
+  real_params[8] = 0; /* reserved */
+  real_params[9] = 0; /* reserved */
 
   result = ana_spec_inv(c,dc,Egrid,H,b,int_params,real_params,NULL,Eout,flux,dlogflux,NULL,NULL);
   printf("specinv_test: ana_spec_inv result= %i\n",result);

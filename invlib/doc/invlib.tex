@@ -47,6 +47,7 @@ best-fit energy spectrum from a multi-channel measurement.
 \label{secChanges}
 
 \begin{itemize}
+\item{3/5/2009} Added option to let \verb|ana_spec_inv| do compute $\Delta E$ form \verb|Egrid|. Minor fix to Makefile.
 \item{3/4/2009} Created invlib.m, changed $\delta t$ to $\delta t$ in equations.
 \item{3/3/2009} Made modifications to \verb|ana_spec_inv| and \verb|ana_spec_inv_multi| to support return of estimated counts.
 \subitem Modified definition of \verb|support_data| to hold estimated counts for each analytical function after fit parameters.
@@ -83,7 +84,7 @@ This function takes a set of counts \verb|y|, estimated relative error
 on those counts \verb|dy|, and measurement matrix \verb|H| defined on
 energy grid \verb|Egrid|, with estimated background counts \verb|b|,
 and returns \verb|flux| on output energy grid \verb|Eout|. The user
-can select up to 3 different analytical functions that will be
+can select from a variety of analytical functions that will be
 individually fit to the data, and then a ``weighted expected value''
 method will be used to combine multiple analytical fits. The user can
 also control which nonlinear minimization solver is used, and whether
@@ -126,6 +127,16 @@ at least a trapezoidal integral, regardless of the grid:
 \begin{array}{cl}
 E_j = (E_{j+1}-E_j)/2 & j=1 \\
 E_j = (E_{j}-E_{j-1})/2 & j=N_E \\
+E_j = (E_{j+1}-E_{j-1})/2 & {\rm otherwise}
+\end{array}
+\right.
+\end{equation}
+The plateau energy weight (not recommended) would be given by:
+\begin{equation}
+  \Delta E_j = \left\{
+\begin{array}{cl}
+E_j = (E_{j+1}-E_j) & j=1 \\
+E_j = (E_{j}-E_{j-1}) & j=N_E \\
 E_j = (E_{j+1}-E_{j-1})/2 & {\rm otherwise}
 \end{array}
 \right.
@@ -407,7 +418,7 @@ When the function returns, $\verb|flux[j]| = \hat{f}(E_j)$, and $\verb|dlogflux[
 \item \verb|H| (input) \verb|H[NY*j+i]| $=$ response of channel \verb|i| to flux at energy \verb|j| (e.g., in keV\,cm$^2$\,sr\,s).
 \item \verb|dt| (input) \verb|dt[t]| $=$ integration time for case \verb|t|.
 \item \verb|b| (input) \verb|b[NY*t+i]| $=$ expected background counts in channel \verb|i| for case \verb|t|. Best fit when \verb|y[i]|~$\approx$~\verb|b[NY*t+i]|~+~$\sum_j$~\verb|H[NY*j+i]*dt[t]*flux[NE*t+j]|.
-\item \verb|int_params| (input) integer parameters, length $=$ 7 (TBR).
+\item \verb|int_params| (input) integer parameters, length $=$ 10. (TBR)
 \subitem \verb|int_params[0]| Number of energy channels, \verb|NY|.
 \subitem \verb|int_params[1]| Number of energy grid points, \verb|NE|.
 \subitem \verb|int_params[2]| Number of energy output points \verb|NEout|.
@@ -430,11 +441,23 @@ When the function returns, $\verb|flux[j]| = \hat{f}(E_j)$, and $\verb|dlogflux[
 \subsubitem[3] text output to outFile (assumes outFile is actually a \verb|FILE *|).
 \subsubitem[4] text output to outFile, overwrite existing file
 \subsubitem[5] text output to outFile, append to existing file
-\subitem \verb|int_params[7]| $NT$ Number of cases to invert.
-\item \verb|real_params| (input) real parameters, length 3 (TBR).
+\subitem \verb|int_params[7]| Energy integral weighting setting
+\subsubitem[0] $H$ already includes $\Delta E$
+\subsubitem[1] $H$ needs to be multiplied by $\Delta E$. Compute $\Delta E$ using trapezoidal rule.
+\subsubitem[2] $H$ needs to be multiplied by $\Delta E$. Compute $\Delta E$ using plateau rule.
+\subitem \verb|int_params[8]| reserved.
+\subitem \verb|int_params[9]| reserved.
+\item \verb|real_params| (input) real parameters, length 10 (TBR).
 \subitem \verb|real_params[0]| = rest energy of particle species.
 \subitem \verb|real_params[1]| = $E_{\rm break}$ used by PLE.
 \subitem \verb|real_params[2]| = $E_0$ used by PLE.
+\subitem \verb|real_params[3]| reserved.
+\subitem \verb|real_params[4]| reserved.
+\subitem \verb|real_params[5]| reserved.
+\subitem \verb|real_params[6]| reserved.
+\subitem \verb|real_params[7]| reserved.
+\subitem \verb|real_params[8]| reserved.
+\subitem \verb|real_params[9]| reserved.
 \item \verb|outFile| (input) provides filename or \verb|FILE *| for verbose output (see verbose setting above). Null terminated string.
 \item \verb|Eout| (output) \verb|Eout[j]| $=$ nominal energy of \verb|j|$^{\rm th}$ grid point for output flux (e.g., in keV).
 \item \verb|flux| (output) \verb|flux[NE*t+j]| $=$ inverted flux at \verb|j|$^{\rm th}$ output energy grid point (e.g., in \#/keV/cm$^2$/sr/s), case \verb|t|.

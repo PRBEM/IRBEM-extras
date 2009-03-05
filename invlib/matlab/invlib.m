@@ -10,12 +10,14 @@ function varargout = invlib(what,varargin)
 % select minimizer : 'BFGS' (default), 'FR', 'PR', 'NM'
 % select analytical spectrum functions: 'EXP','PL','PLE','RM','RM2' 
 %   (at least one function required)
+% set 'trapz' to use trapezoidal energy integral (default)
+% set 'plateau' to use plateau weights in energy integral
 % set rest_energy for RM and RM2: ...,'rest_energy',rest_energy,...
 % set Ebreak for PLE: ...,'Ebreak',Ebreak,...
 % set E0 for PLE: ...,'E0',E0,...
 % set maximum fit iterations: ...,'MaxIter',MaxIter,...
 % set verbose output text file: ...,'outfile',filename,...
-% set append to output file: ...,'append',...
+% set 'append' to output file: ...,'append',...
 %
 % fit has fields:
 % flux, dlogflux, lambda, result, result_codes as returned by ana_spec_inv_multi
@@ -85,6 +87,7 @@ rest_energy = 0.511; % electron rest energy, MeV
 Ebreak = 100; % power-law to exponential tail transition energy, MeV
 E0 = 345; % power-law to exponential tail transition energy, MeV
 append = false; % append to text file?
+dE_mode = 1; % default - trapz
 
 i = 1;
 while i <= length(varargin),
@@ -124,6 +127,10 @@ while i <= length(varargin),
         case 'e0',
             E0 = varargin{i+1};
             i = i+1;
+        case 'trapz',
+            dE_mode = 1;
+        case 'plateau',
+            dE_mode = 2;
     end
     i = i+1;
 end
@@ -150,8 +157,8 @@ fxns.rm2.flux = @(q,E)E.*(1+E./rest_energy/2).*(exp(q(1)+q(2)*E)+exp(q(3)+q(4)*E
 fxns.ple = struct('bit',ASI_FXN_PLE,'Nq',2);
 fxns.ple.flux = @(q,E,Ebreak,E0)flux_ple;
 
-int_params = int32(zeros(7,1));
-real_params = nan(3,1);
+int_params = int32(zeros(10,1));
+real_params = nan(10,1);
 
 int_params(1+0) = NC;
 int_params(1+1) = NE;
@@ -160,6 +167,7 @@ int_params(1+3) = fxn_bitmap; % analtyical functions bitmap*/
 int_params(1+4) = minimizer; % minimizer, 0=BFGS, 3=NM */
 int_params(1+5) = MaxIter; % maximumn # of iterations */
 int_params(1+6) = verbose; % 0 = verbose off, no text output, 4 = write messages to outfile */
+int_params(1+7) = dE_mode; 
 real_params(1+0) = rest_energy;
 real_params(1+1) = Ebreak;
 real_params(1+2) = E0;
@@ -170,12 +178,6 @@ lambdaPtr = libpointer('doublePtr',nan(NY,NT));
 dlogfluxPtr = libpointer('doublePtr',nan(NEout,NT));
 supportPtr = libpointer('doublePtr',nan((ASI_MAX_POW2+1)*(2+ASI_MAX_NQ+NY)),NT);
 resultsPtr = libpointer('int32Ptr',zeros(NT,1));
-
-% set up weights for trapezoidal energy integral
-dE = [(Egrid(2)-Egrid(1)) ; Egrid(3:end)-Egrid(1:(end-2)) ; Egrid(end)-Egrid(end-1)]/2;
-dE(1) = [dE(1)/2;dE(2:end);dE(end)/2];
-
-H0 = G*spdiag(dE,0,NE,NE);
 
 fit.result = calllib('invlib','ana_spec_inv_multi',y',dy,Egrid,H0',dt,b',int_params,real_params,outFilePtr,Eout,fluxPtr,dlogfluxPtr,lambdaPtr,supportPtr,resultsPtr);
 

@@ -33,10 +33,10 @@ help:
 .c.o:
 	$(CC) $(CFLAGS) -c $<
 
-specinv_test.exe:  specinv_test.o  $(INVLICBFILES)
+specinv_test.exe:  specinv_test.c  $(INVLIBCFILES)
 	$(CC) $(CFLAGS) -o specinv_test.exe specinv_test.c $(INVLIBCFILES) -static -lgsl -lgslcblas -lm
 
-omni2uni_test.exe:  omni2uni_test.c  $(INVLICBFILES)
+omni2uni_test.exe:  omni2uni_test.c  $(INVLIBCFILES)
 	$(CC) $(CFLAGS) -o omni2uni_test.exe omni2uni_test.c $(INVLIBCFILES) -static -lgsl -lgslcblas -lm
 
 invlib.dll: $(INVLIBCFILES)

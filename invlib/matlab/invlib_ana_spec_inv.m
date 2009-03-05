@@ -30,8 +30,8 @@ b(:) = fscanf(fid,'%lf',NC);
 Eout(:) = fscanf(fid,'%lf',NEout);
 fclose(fid);
 
-int_params = int32(zeros(7,1));
-real_params = nan(1,1);
+int_params = int32(zeros(10,1));
+real_params = nan(10,1);
 
 int_params(1+0) = NC;
 int_params(1+1) = NE;

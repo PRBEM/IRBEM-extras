@@ -421,7 +421,7 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
 /****
      see header file for details of inputs/outputs
 ****/
-  long int NY, NE, NEout, fxn_bit_map, minimizer_flag, MaxIter, verbose;
+  long int NY, NE, NEout, fxn_bit_map, minimizer_flag, MaxIter, verbose, dE_mode;
   long int fxn_bit;
   long int i,j; /* loop control vars */
   double m0c2=0,E0=0,E_break=0;
@@ -439,8 +439,9 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
   double ells[ASI_MAX_POW2+1];
   double weights[ASI_MAX_POW2+1],weight_sum,min_ell;
   double sigma_flux_j, flux_j, logflux_j, sigma2_log_flux_j, tmp_dbl;
+  gsl_matrix *Htmp=0; /* holds H*dE if necessary */
   /* the following "const" view variables will be declared inline below
-  gsl_matrix_const_view Hgsl = gsl_matrix_const_view_array(H,NY,NE); gsl view of H
+  gsl_matrix_const_view Hgsl = gsl_matrix_const_view_array(H,NY,NE); gsl view of H 
   gsl_vector_const_view Egridgsl = gsl_vector_const_view_array(Egrid,NE); gsl view of Egrid
   gsl_vector_const_view Eoutgsl = gsl_vector_const_view_array(Eout,NEout); gsl view of Eout
   gsl_vector_const_view bgsl = gsl_vector_const_view_array(b,NY); gsl view of b
@@ -523,6 +524,7 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
   minimizer_flag = int_params[4];
   MaxIter = int_params[5];
   verbose = int_params[6];
+  dE_mode = int_params[7];
 
   /* check verbose setting */
   asi_ell_params.verbose = verbose;
@@ -611,10 +613,31 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
   }
   
   /* must declare these here because otherwise compiler treats assignments as violating const-ness */
-  gsl_matrix_const_view Hgsl = gsl_matrix_const_view_array(H,NY,NE);
+  gsl_matrix_const_view Hgsl = gsl_matrix_const_view_array(H,NY,NE); /* gsl view of H */
   gsl_vector_const_view Egridgsl = gsl_vector_const_view_array(Egrid,NE);
   gsl_vector_const_view Eoutgsl = gsl_vector_const_view_array(Eout,NEout);
   gsl_vector_const_view bgsl = gsl_vector_const_view_array(b,NY);
+
+  if (dE_mode != ASI_DE_INCLUDED) {
+    gsl_vector *dE_tmp = gsl_vector_alloc(NE);
+    for (i=1; i < NE-1; i++) {
+      gsl_vector_set(dE_tmp,i,(gsl_vector_get(&(Egridgsl.vector),i+1)-gsl_vector_get(&(Egridgsl.vector),i-1))/2);
+    }
+    gsl_vector_set(dE_tmp,0,(gsl_vector_get(&(Egridgsl.vector),1)-gsl_vector_get(&(Egridgsl.vector),0)));
+    gsl_vector_set(dE_tmp,NE-1,(gsl_vector_get(&(Egridgsl.vector),NE-1)-gsl_vector_get(&(Egridgsl.vector),NE-2)));
+    if (dE_mode == ASI_DE_TRAPZ) { /* trapz divides the endpoint weights by 2 */
+      gsl_vector_set(dE_tmp,0,gsl_vector_get(dE_tmp,0)/2);
+      gsl_vector_set(dE_tmp,NE-1,gsl_vector_get(dE_tmp,NE-1)/2);
+    }
+    /* now create and scale columns of Htmp by dE */
+    Htmp = gsl_matrix_alloc(NY,NE);
+    gsl_matrix_memcpy(Htmp,&(Hgsl.matrix));
+    for (i=0; i < NE; i++) {
+          gsl_vector_view Hcol = gsl_matrix_column(Htmp,i);
+      gsl_vector_scale(&(Hcol.vector),gsl_vector_get(dE_tmp,i));
+    }
+    gsl_vector_free(dE_tmp);
+  }
   /* initialize other gsl views */
   fluxgsl = gsl_vector_view_array(flux,NEout);
   fluxhat = &(fluxgsl.vector);
@@ -648,7 +671,11 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
   asi_ell_params.NY = NY;
   asi_ell_params.NE = NE;
   asi_ell_params.pen_funcs = pen_funcs;
-  asi_ell_params.H = &(Hgsl.matrix);
+  if (Htmp) {
+    asi_ell_params.H = Htmp;
+  } else {
+    asi_ell_params.H = &(Hgsl.matrix);
+  }
   asi_ell_params.b = &(bgsl.vector);
   asi_ell_params.y = y;
   asi_ell_params.dy = dy;
@@ -884,6 +911,9 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
     }
   }
   free(pen_funcs);
+  if (Htmp) {
+    gsl_matrix_free(Htmp);
+  }
 
   /* done, success ! */
   return(clean_return(INVLIB_SUCCESS));
