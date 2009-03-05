@@ -177,7 +177,7 @@ dE(1) = [dE(1)/2;dE(2:end);dE(end)/2];
 
 H0 = G*spdiag(dE,0,NE,NE);
 
-fit.result = calllib('invlib','ana_spec_inv_multi',y,dy,Egrid,H0,dt,b,int_params,real_params,outFilePtr,Eout,fluxPtr,dlogfluxPtr,lambdaPtr,supportPtr,resultsPtr);
+fit.result = calllib('invlib','ana_spec_inv_multi',y',dy,Egrid,H0',dt,b',int_params,real_params,outFilePtr,Eout,fluxPtr,dlogfluxPtr,lambdaPtr,supportPtr,resultsPtr);
 
 fit.flux = fluxPtr.value';
 fit.dlogflux = dlogfluxPtr.value';
