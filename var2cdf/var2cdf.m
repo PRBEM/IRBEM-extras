@@ -55,6 +55,11 @@ function [varlist,VATTRIB,GATTRIB] = add_to_list(varlist,VATTRIB,GATTRIB,name,va
 
 % this is where the action happens
 
+if islogical(var),
+    disp(sprintf('Note: Converting logical "%s" to uint8',name));
+    var = uint8(var);
+end
+
 if isnumeric(var) || isa(var,'cdfepoch'),
     VATTRIB.type(size(VATTRIB.type,1)+1,:) = {name,class(var)};
     VATTRIB.size(size(VATTRIB.size,1)+1,:) = {name,size(var)};
