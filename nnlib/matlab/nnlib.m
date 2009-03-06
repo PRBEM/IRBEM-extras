@@ -45,6 +45,8 @@ if ~libisloaded('nnlib'),
     loadlibrary(libfile,hfile,'alias','nnlib');
 end
 
+varargout = cell(1,nargout);
+
 switch(lower(what)),
     case {'save_training_set'},
         [varargout{:}] = save_training_set(varargin{:});

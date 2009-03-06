@@ -39,6 +39,8 @@ if ~libisloaded('invlib'),
     loadlibrary(libfile,hfile,'alias','invlib');
 end
 
+varargout = cell(1,nargout);
+
 switch(lower(what)),
     case {'ana_spec_inv'},
         [varargout{:}] = ana_spec_inv(varargin{:});
