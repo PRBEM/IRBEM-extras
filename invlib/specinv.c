@@ -332,7 +332,7 @@ void make_lambda(const gsl_vector *q,const asi_ell_paramsTy *asi_ell_params,gsl_
  ****************************/
 
 double asi_ell_combine(const gsl_vector *q, void *params_void, gsl_vector *grad, gsl_matrix *hess) {
-  double ell; /* neglogp */
+  double ell=0; /* neglogp */
   double E,h;
   long int j,i;
   double grad_ell_lambdak,hess_ell_lambdak;
@@ -340,6 +340,7 @@ double asi_ell_combine(const gsl_vector *q, void *params_void, gsl_vector *grad,
   gsl_vector *lambda=0,*flux=0,*grad_lambda_q=0,*grad_lambda_qj=0;
   gsl_matrix *hess_lambda_q=0,*hess_lambda_qj=0;
   asi_ell_paramsTy *asi_ell_params = (asi_ell_paramsTy *)params_void;
+
   flux = gsl_vector_alloc(asi_ell_params->NE);
   flux_multi(asi_ell_params->flux_func,q,asi_ell_params->Egrid,asi_ell_params->flux_func_params,flux,NULL);
 
