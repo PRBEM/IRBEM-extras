@@ -69,7 +69,11 @@ double optimize(gsl_vector *q, optfunTy *optfun, const long int minimizer_flag, 
     break;
   case OPTIM_MIN_BFGS:
   default:
+#ifdef OLDGSL
+    Tfdf = gsl_multimin_fdfminimizer_vector_bfgs; /* old version of GSL has no bfgs2 */
+#else
     Tfdf = gsl_multimin_fdfminimizer_vector_bfgs2;
+#endif
     break;
   }
 

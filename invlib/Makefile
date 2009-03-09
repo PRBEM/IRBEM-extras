@@ -20,9 +20,30 @@ NULL=true
 MAKE=make
 SO=so
 CC=gcc
-IFLAGS=-I/usr/local/include -I./ -I../nnlib/
-LFLAGS=-L/usr/local/lib -L./ 
-CFLAGS= -Wall $(IFLAGS) $(LFLAGS)
+
+ifeq ($(HOST),coto-ago1)
+  IFLAGS= -I./ -I../nnlib/
+  LFLAGS= -L./
+  CFLAGS= -Wall $(IFLAGS) $(LFLAGS) -DOLDGSL
+  OMPCC = gcc
+else
+  IFLAGS=-I/usr/local/include -I./ -I../nnlib/
+  LFLAGS=-L/usr/local/lib -L./
+  CFLAGS= -Wall $(IFLAGS) $(LFLAGS)
+  ifeq ($(HOST),fellowship)
+	OMPCC= gcc42
+  else
+	# cygwin
+	OMPCC= gcc-4
+  endif
+endif
+
+ifeq ($(OSTYPE),msys)
+  STATIC= -static
+else
+ STATIC=
+endif
+
 
 NNLIBCFILES=../nnlib/matrix_inv.c ../nnlib/nn.c ../nnlib/nnio.c
 INVLIBCFILES=invutil.c specinv.c omni2uni.c o2u_TEM1.c optim.c  $(NNLIBCFILES)
@@ -34,16 +55,16 @@ help:
 	$(CC) $(CFLAGS) -c $<
 
 specinv_test.exe:  specinv_test.c  $(INVLIBCFILES)
-	$(CC) $(CFLAGS) -o specinv_test.exe specinv_test.c $(INVLIBCFILES) -static -lgsl -lgslcblas -lm
+	$(CC) $(CFLAGS) -o specinv_test.exe specinv_test.c $(INVLIBCFILES) $(STATIC) -lgsl -lgslcblas -lm
 
 omni2uni_test.exe:  omni2uni_test.c  $(INVLIBCFILES)
-	$(CC) $(CFLAGS) -o omni2uni_test.exe omni2uni_test.c $(INVLIBCFILES) -static -lgsl -lgslcblas -lm
+	$(CC) $(CFLAGS) -o omni2uni_test.exe omni2uni_test.c $(INVLIBCFILES) $(STATIC) -lgsl -lgslcblas -lm
 
 invlib.dll: $(INVLIBCFILES)
-	$(CC) $(CFLAGS) -shared -o invlib.dll $(INVLIBCFILES) -Wl,--add-stdcall-alias -fno-second-underscore -w  -static -lgsl -lgslcblas -lm 
+	$(CC) $(CFLAGS) -shared -o invlib.dll $(INVLIBCFILES) -Wl,--add-stdcall-alias -fno-second-underscore -w  $(STATIC) -lgsl -lgslcblas -lm 
 
 invlib.so: $(INVLIBCFILES)
-	$(CC) $(CFLAGS) -shared -o invlib.so $(INVLIBCFILES) -Wl,--add-stdcall-alias -fno-second-underscore -static -lgsl -lgslcblas -lm
+	$(CC) $(CFLAGS) -shared -o invlib.so $(INVLIBCFILES) $(STATIC)  -lgsl -lgslcblas -lm
 
 clean:
 	\rm -f *.o *.so *.dll *~ invlib.tar* *_test.exe *.a
