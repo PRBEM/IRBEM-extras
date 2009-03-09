@@ -20,6 +20,8 @@ double optim_f( const gsl_vector *q, void *params) {
   /* just evaluate ell_combine at q */
   optfunTy *optfun = params;
   double neglogp = optfun->func(q,optfun->params,NULL,NULL);
+  printf("%s (debug): q[0]=%g, q[1]=%g\n",__func__,gsl_vector_get(q,0),gsl_vector_get(q,1));
+  printf("%s (debug): neglogp=%g\n",__func__,neglogp);
   return(neglogp);
 }
 
@@ -33,6 +35,8 @@ void optim_fdf( const gsl_vector *q, void *params, double *f, gsl_vector *df ) {
   /* evaluate ell_combine and get gradient  wrt q */
   optfunTy *optfun = params;
   *f = optfun->func(q,optfun->params,df,NULL);
+  printf("%s (debug): q[0]=%g, q[1]=%g\n",__func__,gsl_vector_get(q,0),gsl_vector_get(q,1));
+  printf("%s (debug): neglogp=%g\n",__func__,*f);
 }
 
 double optimize(gsl_vector *q, optfunTy *optfun, const long int minimizer_flag, const long int MaxIter, FILE *fid) {
