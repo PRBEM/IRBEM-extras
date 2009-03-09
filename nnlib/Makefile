@@ -22,7 +22,7 @@ MAKE=make
 SO=so
 CC=gcc
 MPICC=mpicc
-ifeq ($(HOST),coto-c1)
+ifeq ($(HOST),coto-ago1)
   IFLAGS= -I./
   LFLAGS= -L./
   CFLAGS= $(IFLAGS) $(LFLAGS) -DOLDGSL
@@ -74,7 +74,7 @@ nnlib.dll: $(NNLIBCFILES)
 	$(CC) $(CFLAGS) -shared -o nnlib.dll $(NNLIBCFILES) -Wl,--add-stdcall-alias -fno-second-underscore -w -static $(LIBS)
 
 nnlib.so: $(NNLIBCFILES)
-	$(CC) $(CFLAGS) -shared -o nnlib.so $(NNLIBCFILES) -Wl,--add-stdcall-alias -fno-second-underscore -w -static $(LIBS)
+	echo $(CC) $(CFLAGS) -shared -o nnlib.so $(NNLIBCFILES) $(LIBS)
 
 dist:
 	\rm -f nnlib.tar.gz nnlib.tar ; \
