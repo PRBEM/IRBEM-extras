@@ -766,22 +766,9 @@ Quiet. Table~\ref{tblVampola} gives the coefficients provided in
 \citet{Vampola1996}. For $L_m$ in bounds, linear interpolation
 is used. For $L_m$ out of bounds, the nearest boundary value is used.
 
-Whereas the TEM-1 method required a constrained fit, the Vampola
-method requires only a numerical integral:
-
-\begin{eqnarray}
-f_{\rm uni}(\alpha) &=& f_0 \sin^n\alpha, \\
-f_{\rm iso} &\approx& \sum_j H_j f_0 \sin^n \alpha_j , \\ 
-\verb|uniflux| &=& \frac{f_{\rm iso}}{\sum_{j} H_j f_0 \sin^n \alpha_j}.
-\end{eqnarray}
-
-The Vampola method also uses the AE8 atmospheric cutoff, like TEM-1.
-Finally, because Vampola did not provide error estimates on $n$, the
-output error estimate (\verb|dloguniflux|) for the Vampola method is
-the input error (\verb|dlogomniflux| or \verb|dlogwideflux|).
-
-\begin{table}
+\begin{table}[htbp]
 \caption{Exponent in $\sin^n\alpha$ fits from \citet{Vampola1996}}
+\label{tblVampola}
 \begin{tabular}{ll}
 $L_m$ & $n$ \\
 \hline
@@ -808,6 +795,21 @@ $L_m$ & $n$ \\
     8.00 &   0.852
 \end{tabular}
 \end{table}
+
+Whereas the TEM-1 method required a constrained minimization, the
+Vampola method requires only a numerical integral:
+
+\begin{eqnarray}
+f_{\rm uni}(\alpha) &=& f_0 \sin^n\alpha, \\
+f_{\rm iso} &\approx& \sum_j H_j f_0 \sin^n \alpha_j , \\ 
+\verb|uniflux| &=& \frac{f_{\rm iso}}{\sum_{j} H_j f_0 \sin^n \alpha_j}\sin^n\alpha_{0}.
+\end{eqnarray}
+
+The Vampola method also uses the AE8 atmospheric cutoff, like TEM-1.
+Finally, because Vampola did not provide error estimates on $n$, the
+output error estimate (\verb|dloguniflux|) for the Vampola method is
+the input error (\verb|dlogomniflux| or \verb|dlogwideflux|).
+
 
 \subsection{Function Arguments}
 
@@ -984,7 +986,7 @@ In \verb|invlib.tex| (this file), add appropriate documentation:
 
 Test compilation with \verb|make| commands. Recompile this file with \verb|pdflatex|.
 
-\begin{thebibliography}
+\begin{thebibliography}{}
 \bibitem[{\it Vampola}(1996)]{Vampola1996}
 Vampola, A.L.
 Outer zone energetic electron environment update,
