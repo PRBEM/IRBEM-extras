@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "invlib.h"
+#include "omni2uni.h" /* defines W2U_METHOD_* macros */
 
 /* test omni2uni */
 
@@ -11,7 +12,6 @@ int main (int argc, char *argv[]) {
   double omniflux,dlogomniflux,uniflux,dloguniflux,real_params[10];
 
   int_params[0] = 50; /* NA - number of angular gridpoints */
-  int_params[1] = -1; /* TEM-1 method */
   int_params[2] = 1; /* 1 = verbose to standard out */
   int_params[3] = 3; /* minimizer, 0=BFGS, 3=NM */
   int_params[4] = 1000; /* maximumn # of iterations */
@@ -25,9 +25,17 @@ int main (int argc, char *argv[]) {
 
   printf("omni2uni_test:inputs = omni=%.5e (dlog=%.5e) @ [%.1f keV, B/B0=%.2f, Lm=%.2f]\n",
 	 omniflux,dlogomniflux, real_params[0],real_params[1],real_params[2]);
+
+  printf("TEM1 Method:\n"); 
+  int_params[1] = W2U_METHOD_TEM1; /* TEM-1 method */
+  uniflux = dloguniflux = 0;
   result = omni2uni(&omniflux,&dlogomniflux,int_params,real_params,NULL,&uniflux,&dloguniflux);
-  printf("omni2uni_test:inputs = omni=%.5e (dlog=%.5e) @ [%.1f keV, B/B0=%.2f, Lm=%.2f]\n",
-	 omniflux,dlogomniflux, real_params[0],real_params[1],real_params[2]);
+  printf("omni2uni_test:result = %i, uni=%.5e (dlog=%.5e)\n",result,uniflux,dloguniflux);
+
+  printf("Vampola Method:\n"); 
+  int_params[1] = W2U_METHOD_VAMPOLA; /* Vampola method */
+  uniflux = dloguniflux = 0;
+  result = omni2uni(&omniflux,&dlogomniflux,int_params,real_params,NULL,&uniflux,&dloguniflux);
   printf("omni2uni_test:result = %i, uni=%.5e (dlog=%.5e)\n",result,uniflux,dloguniflux);
   return(0);
 }

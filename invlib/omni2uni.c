@@ -9,6 +9,7 @@ OMNI2UNI Section - this section defines omni2uni, wide2uni and the routines they
 #include "invlib_const.h" /* defines constants, e.g., return codes */
 #include "omni2uni.h" /* prototypes for omni2uni and wide2uni */
 #include "o2u_TEM1.h" /* routines for TEM1 method */
+#include "o2u_vampola.h" /* routines for Vampola method */
 
 /**************************
  Other omni2uni and wide2uni routines
@@ -68,10 +69,12 @@ int wide2uni(const double *wideflux, const double *dlogwideflux,
   case W2U_METHOD_TEM1:
     ret = wide2uni_TEM1(wideflux,dlogwideflux,PAgrid,H,int_params,real_params,outFile,ialpha0,uniflux,dloguniflux);
     break;
+  case W2U_METHOD_VAMPOLA:
+    ret = wide2uni_vampola(wideflux,dlogwideflux,PAgrid,H,int_params,real_params,outFile,ialpha0,uniflux,dloguniflux);
+    break;
   default:
     return(INVLIB_ERR_INVALIDMETH);
   }
-
 
   /* done, success ! */
   return(ret);
@@ -97,7 +100,9 @@ int omni2uni(const double *omniflux, const double *dlogomniflux,
   if (!int_params) {
     return(INVLIB_ERR_NULL);
   }
+
   NA = int_params[0];
+
   PAgrid = malloc(NA*sizeof(double));
   H = malloc(NA*sizeof(double));
 

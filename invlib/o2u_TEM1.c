@@ -6,10 +6,13 @@
 #include <gsl/gsl_matrix.h>
 #include <gsl/gsl_blas.h>
 #include "invlib_const.h" /* defines constants, e.g., return codes */
-#include "invutil.h" /* defines inv_matrix_once, fector_func */
+#include "invutil.h" /* defines inv_matrix_once, vector_func */
 #include "nnlib.h" /* used by TEM1 routines */
 #include "optim.h" /* optimize, fzero and optfunTy */
+#include "ae8_atmocutoff.h" /* AE8_AtmoCutoff() */
 
+/* TEM1 uses AE8 atmospheric cutoff model */
+#define TEM1_AtmoCutoff(Lm) AE8_AtmoCutoff(Lm)
 
 /* holds params for likelihood function for a single wide2omni fit */
 typedef struct {
@@ -113,25 +116,6 @@ void TEM1_net_eval(const double keV, const double EPAdeg, const double Lm, doubl
   x[1] = EPAdeg;
   x[2] = Lm;
   nnlib_eval(1,TEM1_Nx,x,TEM1_Nh,TEM1_theta, &TEM1_xbar, &TEM1_ybar, &TEM1_sx, &TEM1_sy,TEM1_Ny,y,0,NULL,NULL);
-}
-
-double TEM1_AtmoCutoff(const double Lm) {
-  /* returns atmospheric cutoff in equatorial pitch angle, degrees */
-  /* From Vette, AE-8, equation 5.4 */
-  /* returns NaN for Lm<1 */
-  double BB0, ac;
-  if (Lm<1) {
-    return(GSL_NAN);
-  } else if (Lm < 2.4) {
-    BB0 = 0.6572*pow(Lm,3.452);
-  } else if (Lm <= 3.0) {
-    BB0 = 0.196*pow(Lm,4.878);
-  } else {
-    BB0 = 1.4567*pow(Lm,3.050);
-  }
-  BB0 = GSL_MAX(BB0,1.0);
-  ac = 180.0/M_PI*asin(1.0/sqrt(BB0));
-  return(ac);
 }
 
 void TEM1_mu_sigma(const double keV, const double EPAdeg, const double Lm, double *mu, double *sigma) {

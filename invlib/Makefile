@@ -46,7 +46,7 @@ endif
 
 
 NNLIBCFILES=../nnlib/matrix_inv.c ../nnlib/nn.c ../nnlib/nnio.c
-INVLIBCFILES=invutil.c specinv.c omni2uni.c o2u_TEM1.c optim.c  $(NNLIBCFILES)
+INVLIBCFILES=invutil.c specinv.c omni2uni.c o2u_TEM1.c o2u_vampola.c optim.c ae8_atmocutoff.c  $(NNLIBCFILES)
 
 help:
 	@grep '^.\.' Makefile

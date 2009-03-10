@@ -4,7 +4,9 @@
 #ifndef OMNI2UNI_H
 
 /* macros for wide2uni and omni2uni */
-#define W2U_METHOD_TEM1 (-1)
+#define W2U_METHOD_TEM1    (-1)
+#define W2U_METHOD_VAMPOLA (-2)
+#define W2U_METHOD_CHEN    (-3)
 
 #define OMNI2UNI_H 1
 #endif

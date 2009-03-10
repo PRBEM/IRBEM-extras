@@ -1,6 +1,7 @@
 \documentclass{article}    % Specifies the document style.
 \usepackage{epsf}
 \usepackage{graphicx}
+\usepackage[square]{natbib}
 
 \addtolength{\oddsidemargin}{-1.0in}
 \addtolength{\evensidemargin}{-1.0in}
@@ -47,6 +48,8 @@ best-fit energy spectrum from a multi-channel measurement.
 \label{secChanges}
 
 \begin{itemize}
+\item{3/10/2009} Added ``Vampola'' method for angular inversion (\verb|omni2uni| and \verb|wide2uni|).
+\item{3/9/2009} Fixed failure to initialize \verb|ell| in \verb|ana_spec_inv|.
 \item{3/5/2009} Added option to let \verb|ana_spec_inv| do compute $\Delta E$ form \verb|Egrid|. Minor fix to Makefile.
 \item{3/4/2009} Created invlib.m, changed $\delta t$ to $\delta t$ in equations.
 \item{3/3/2009} Made modifications to \verb|ana_spec_inv| and \verb|ana_spec_inv_multi| to support return of estimated counts.
@@ -755,6 +758,57 @@ combination of the angular inversion error and the measurement error
 \verb|dlogwideflux|, as if they were independent (not a bad
 assumption).
 
+\subsection{Calculations Performed - Vampola Method}
+
+The Vampola method is based on a $\sin^n\alpha$ fit, where $n$ depends
+on the $L$ shell, in this case McIlwain $L_m$ in Olson-Pfitzer
+Quiet. Table~\ref{tblVampola} gives the coefficients provided in
+\citet{Vampola1996}. For $L_m$ in bounds, linear interpolation
+is used. For $L_m$ out of bounds, the nearest boundary value is used.
+
+Whereas the TEM-1 method required a constrained fit, the Vampola
+method requires only a numerical integral:
+
+\begin{eqnarray}
+f_{\rm uni}(\alpha) &=& f_0 \sin^n\alpha, \\
+f_{\rm iso} &\approx& \sum_j H_j f_0 \sin^n \alpha_j , \\ 
+\verb|uniflux| &=& \frac{f_{\rm iso}}{\sum_{j} H_j f_0 \sin^n \alpha_j}.
+\end{eqnarray}
+
+The Vampola method also uses the AE8 atmospheric cutoff, like TEM-1.
+Finally, because Vampola did not provide error estimates on $n$, the
+output error estimate (\verb|dloguniflux|) for the Vampola method is
+the input error (\verb|dlogomniflux| or \verb|dlogwideflux|).
+
+\begin{table}
+\caption{Exponent in $\sin^n\alpha$ fits from \citet{Vampola1996}}
+\begin{tabular}{ll}
+$L_m$ & $n$ \\
+\hline
+    3.00 &   5.380 \\
+    3.25 &   5.078 \\
+    3.50 &   4.669 \\
+    3.75 &   3.916 \\
+    4.00 &   3.095 \\
+    4.25 &   2.494 \\
+    4.50 &   2.151 \\
+    4.75 &   1.998 \\
+    5.00 &   1.899 \\
+    5.25 &   1.942 \\
+    5.50 &   1.974 \\
+    5.75 &   1.939 \\
+    6.00 &   1.970 \\
+    6.25 &   2.136 \\
+    6.50 &   1.775 \\
+    6.75 &   1.438 \\
+    7.00 &   1.254 \\
+    7.25 &   1.194 \\
+    7.50 &   1.046 \\
+    7.75 &   0.989 \\
+    8.00 &   0.852
+\end{tabular}
+\end{table}
+
 \subsection{Function Arguments}
 
 \subsubsection{omni2uni}
@@ -765,6 +819,7 @@ assumption).
 \subitem \verb|int_params[0]| \verb|NA| = number of grid points for angular integral.
 \subitem \verb|int_params[1]| angular inversion method:
 \subsubitem[-1] - TEM-1.
+\subsubitem[-2] - Vampola.
 \subitem \verb|int_params[2]| Verbose setting (choose one):
 \subitem \verb|int_params[3]| Choice of root finder (choose one):
 \subsubitem[0] Powell's Hybrid method, scaled (recommended),
@@ -928,6 +983,15 @@ In \verb|invlib.tex| (this file), add appropriate documentation:
 \end{itemize}
 
 Test compilation with \verb|make| commands. Recompile this file with \verb|pdflatex|.
+
+\begin{thebibliography}
+\bibitem[{\it Vampola}(1996)]{Vampola1996}
+Vampola, A.L.
+Outer zone energetic electron environment update,
+{\it Final Report of ESA/ESTEC/WMA/P.O. 151351}, 
+ESA-ESTEC, Noordwijk, The Netherlands, 1996.
+\end{thebibliography}
+
 
 \end{document}             % End of document.
 
