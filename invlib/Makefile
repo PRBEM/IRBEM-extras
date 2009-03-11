@@ -64,7 +64,7 @@ invlib.dll: $(INVLIBCFILES)
 	$(CC) $(CFLAGS) -shared -o invlib.dll $(INVLIBCFILES) -Wl,--add-stdcall-alias -fno-second-underscore -w  $(STATIC) -lgsl -lgslcblas -lm 
 
 invlib.so: $(INVLIBCFILES)
-	$(CC) $(CFLAGS) -shared -o invlib.so $(INVLIBCFILES) $(STATIC)  -lgsl -lgslcblas -lm
+	$(CC) $(CFLAGS) -fPIC -shared -o invlib.so $(INVLIBCFILES) $(STATIC)  -lgsl -lgslcblas -lm
 
 clean:
 	\rm -f *.o *.so *.dll *~ invlib.tar* *_test.exe *.a

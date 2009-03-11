@@ -74,7 +74,7 @@ nnlib.dll: $(NNLIBCFILES)
 	$(CC) $(CFLAGS) -shared -o nnlib.dll $(NNLIBCFILES) -Wl,--add-stdcall-alias -fno-second-underscore -w -static $(LIBS)
 
 nnlib.so: $(NNLIBCFILES)
-	echo $(CC) $(CFLAGS) -shared -o nnlib.so $(NNLIBCFILES) $(LIBS)
+	echo $(CC) $(CFLAGS) -fPIC -shared -o nnlib.so $(NNLIBCFILES) $(LIBS)
 
 dist:
 	\rm -f nnlib.tar.gz nnlib.tar ; \
