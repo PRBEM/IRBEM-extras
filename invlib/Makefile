@@ -3,7 +3,7 @@ NULL=true
 
 # Lines starting with #. will be printed as helps
 #. make inversion library (invlib.so or invlib.dll)
-#. (depends on libnnlib.a in ../nnlib)
+#. (depends on ../nnlib)
 #. make help - display this help
 #. make invlib.so - make unix/cygwin shared object
 #. make invlib.dll - make windows shared object (from MSYS/MINGW only)
