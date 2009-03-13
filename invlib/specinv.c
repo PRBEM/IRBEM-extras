@@ -634,7 +634,7 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
     Htmp = gsl_matrix_alloc(NY,NE);
     gsl_matrix_memcpy(Htmp,&(Hgsl.matrix));
     for (i=0; i < NE; i++) {
-          gsl_vector_view Hcol = gsl_matrix_column(Htmp,i);
+      gsl_vector_view Hcol = gsl_matrix_column(Htmp,i);
       gsl_vector_scale(&(Hcol.vector),gsl_vector_get(dE_tmp,i));
     }
     gsl_vector_free(dE_tmp);
@@ -929,11 +929,11 @@ int ana_spec_inv_multi(const long int Ntimes,
 		       double *flux, double *dlogflux, 
 		       double *lambda, double *support_data, int *result_codes) {
   long int i,j,t,NE,NY;
-  double *H;
+  double *H,*sdptr,*lambdaptr;
   int result_code = INVLIB_SUCCESS;
 
   /* test for input NULLs */
-  if ((!y) || (!dy) || (!Egrid) || (!H) || (!b) || (!int_params) || (!flux) || (!dlogflux) || (!result_codes)) {
+  if ((!y) || (!dy) || (!Egrid) || (!H0) || (!dt) || (!b) || (!int_params) || (!flux) || (!dlogflux) || (!result_codes)) {
     return(INVLIB_ERR_NULL);
   }
 
@@ -952,9 +952,21 @@ int ana_spec_inv_multi(const long int Ntimes,
 	H[NY*j+i] = H0[NY*j+i]*dt[t];
       }
     }
+    if (lambda) {
+      lambdaptr = lambda+NY*t;
+    } else {
+      lambdaptr = NULL;
+    }
+
+    if (support_data) {
+      sdptr = support_data+ASI_SD_START(1,NY)*(ASI_MAX_POW2+1)*t;
+    } else {
+      sdptr = NULL;
+    }
+
     result_codes[t] = ana_spec_inv(y+NY*t,dy,Egrid,H,b+NY*t,int_params,real_params,
 				   outFile,Eout,flux+NE*t,dlogflux+NE*t,
-				   lambda+NY,support_data+ASI_SD_START(1,NY)*(ASI_MAX_POW2+1)*t);
+				   lambdaptr,sdptr);
     if (result_codes[t] != INVLIB_SUCCESS) {
       result_code = result_codes[t]; /* store first error code, to be returned later */
     }

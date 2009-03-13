@@ -44,7 +44,7 @@ int_params(1+6) = 4; % 0 = verbose off, no text output, 4 = write messages to ou
 real_params(1+0) = 0.511; % electron rest energy, MeV */
 
 if ~libisloaded('invlib'),
-    loadlibrary('invlib','invlib.h','alias','invlib'); % load the library
+    loadlibrary('invlib.dll','invlib.h','alias','invlib'); % load the library
 end
 
 nullPtr = libpointer('cstring',outfile); % empty pointer to char *
@@ -68,3 +68,9 @@ set(gca,'xlim',[0.9,8.5]);
 xlabel('Energy, MeV');
 ylabel('Flux, #/cm^2/s/sr/MeV');
 
+% now, try it with the invlib version
+fit = invlib('ana_spec_inv',c(:)',dc(:)',Egrid,reshape(H,NE,NC)',1,b(:)',Eout,'pl','exp','dE_mode','G=GdE','outfile',[outfile,'2']);
+
+if any(fit.flux' ~= flux) || any(fit.dlogflux' ~= dlogflux),
+    error('call to ana_spec_inv (via calllib) and ana_spec_inv_multi (via invlib) disagree');
+end

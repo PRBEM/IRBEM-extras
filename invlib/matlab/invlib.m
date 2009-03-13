@@ -12,6 +12,7 @@ function varargout = invlib(what,varargin)
 %   (at least one function required)
 % set 'trapz' to use trapezoidal energy integral (default)
 % set 'plateau' to use plateau weights in energy integral
+% set 'G=GdE' to assume dE included in G
 % set rest_energy for RM and RM2: ...,'rest_energy',rest_energy,...
 % set Ebreak for PLE: ...,'Ebreak',Ebreak,...
 % set E0 for PLE: ...,'E0',E0,...
@@ -53,7 +54,7 @@ function fit = ana_spec_inv(y,dy,Egrid,H0,dt,b,Eout,varargin)
 [NT,NY] = size(y);
 NE = length(Egrid);
 NEout = length(Eout);
-if numel(dy) ~= dy,
+if numel(dy) ~= NY,
     error('dy must have size NYx1');
 end
 if (numel(H0) ~= NY*NE) || (size(H0,1) ~= NY),
@@ -129,6 +130,8 @@ while i <= length(varargin),
         case 'e0',
             E0 = varargin{i+1};
             i = i+1;
+        case 'g=gde',
+            dE_mode = 0;
         case 'trapz',
             dE_mode = 1;
         case 'plateau',
@@ -162,26 +165,30 @@ fxns.ple.flux = @(q,E,Ebreak,E0)flux_ple;
 int_params = int32(zeros(10,1));
 real_params = nan(10,1);
 
-int_params(1+0) = NC;
+int_params(1+0) = NY;
 int_params(1+1) = NE;
 int_params(1+2) = NEout;
 int_params(1+3) = fxn_bitmap; % analtyical functions bitmap*/
 int_params(1+4) = minimizer; % minimizer, 0=BFGS, 3=NM */
 int_params(1+5) = MaxIter; % maximumn # of iterations */
 int_params(1+6) = verbose; % 0 = verbose off, no text output, 4 = write messages to outfile */
-int_params(1+7) = dE_mode; 
+int_params(1+7) = dE_mode;
 real_params(1+0) = rest_energy;
 real_params(1+1) = Ebreak;
 real_params(1+2) = E0;
 
-outFilePtr = libpointer('cstring',outfile);
+if verbose,
+    outFilePtr = libpointer('cstring',outfile);
+else
+    outFilePtr = libpointer('cstring'); % NULL
+end
 fluxPtr = libpointer('doublePtr',nan(NEout,NT));
 lambdaPtr = libpointer('doublePtr',nan(NY,NT));
 dlogfluxPtr = libpointer('doublePtr',nan(NEout,NT));
-supportPtr = libpointer('doublePtr',nan((ASI_MAX_POW2+1)*(2+ASI_MAX_NQ+NY)),NT);
+supportPtr = libpointer('doublePtr',nan((ASI_MAX_POW2+1)*(2+ASI_MAX_NQ+NY),NT));
 resultsPtr = libpointer('int32Ptr',zeros(NT,1));
 
-fit.result = calllib('invlib','ana_spec_inv_multi',y',dy,Egrid,H0',dt,b',int_params,real_params,outFilePtr,Eout,fluxPtr,dlogfluxPtr,lambdaPtr,supportPtr,resultsPtr);
+fit.result = calllib('invlib','ana_spec_inv_multi',NT,y',dy,Egrid,H0',dt,b',int_params,real_params,outFilePtr,Eout,fluxPtr,dlogfluxPtr,lambdaPtr,supportPtr,resultsPtr);
 
 fit.flux = fluxPtr.value';
 fit.dlogflux = dlogfluxPtr.value';
@@ -196,10 +203,10 @@ for k = 1:length(functions),
     f = functions{k};
     if bitand(fxn_bitmap,fxns.(f).bit),
         fit.(f) = fxns.(f);
-        fit.(f).ell = support_data(:,k,1);
-        fit.(f).weight = support_data(:,k,2);
-        fit.(f).q = support_data(:,k,1:fxns.(f).Nq);
-        fit.(f).lambda = support_data(:,k,2+ASI_MAX_NQ+(1:NY));
+        fit.(f).ell = reshape(support_data(:,k,1),NT,1);
+        fit.(f).weight = reshape(support_data(:,k,2),NT,1);
+        fit.(f).q = reshape(support_data(:,k,1:fxns.(f).Nq),NT,fxns.(f).Nq);
+        fit.(f).lambda = reshape(support_data(:,k,2+ASI_MAX_NQ+(1:NY)),NT,NY);
     end
 end
 
