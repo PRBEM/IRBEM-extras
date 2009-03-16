@@ -20,7 +20,7 @@
 ;*				program.
 ;*
 ;*****************
-PRO CREATE_CDF, saveset_name, main, strucNames, outNames, varTypes, varDims, dimensions
+PRO CREATE_CDF, saveset_name, var, strucNames, outNames, varTypes, varDims, dimensions
 ;*
 ;* Determine output filename based upon name of saveset
 result  = STRSPLIT(saveset_name, '.', /EXTRACT)
@@ -47,11 +47,12 @@ variable_dummy = CDF_ATTCREATE(id, 'CreatedFrom', /GLOBAL)
 
 CDF_ATTPUT, id, 'CreatedBy',   0, 'Edith Mazur'
 CDF_ATTPUT, id, 'CreatedAt',   0, 'The Aerospace Corporation, Chantilly'
-CDF_ATTPUT, id, 'CreatedFrom', 0,  saveset_name
+;CDF_ATTPUT, id, 'CreatedFrom', 0,  saveset_name
+; TBG:  this doesn't work, CDF_ATTPUT is looking for a data type instead of 'saveset_name'
 
 ;* Create an attribute associated with each variable containing the 
 ;* number of elements in the arrays.
-attid = CDF_ATTCREATE(id, 'array_size', /VARIABLE_SCOPE)
+attid = CDF_ATTCREATE(id, 'size', /VARIABLE_SCOPE)
 
 FOR hh = 0, N_ELEMENTS(outNames) -1 DO BEGIN
     CASE varTypes(hh) OF
@@ -145,10 +146,10 @@ ENDFOR
 ;* Load all requested variables into a new structure.  This is necessary
 ;* because the requested variables can have a varying number of
 ;* array elements.
-command = 'main = CREATE_STRUCT("' + variables(0) + '", '+ variables(0)+')'
+command = 'var = CREATE_STRUCT("' + variables(0) + '", '+ variables(0)+')'
 result  = EXECUTE(command)
 FOR cc = 1, count - 1 DO BEGIN
-    command = 'main = CREATE_STRUCT(main, "' + variables(cc) + '", '+ variables(cc)+')'
+    command = 'var = CREATE_STRUCT(var, "' + variables(cc) + '", '+ variables(cc)+')'
     result  = EXECUTE(command)
 ENDFOR
 ;*
@@ -157,14 +158,14 @@ ENDFOR
 ;* when using cdf_varcreate
 ;*
 
-varNames = TAG_NAMES(main)
-numTags  = N_TAGS(main)
-level1   = 'main.'
-varinfo  = SIZE(main, /STRUCTURE)
+varNames = TAG_NAMES(var)
+numTags  = N_TAGS(var)
+level1   = 'var.'
+varinfo  = SIZE(var, /STRUCTURE)
 varType  = varinfo.type
 varDim   = varinfo.n_dimensions
 dimensions = varinfo.dimensions
-strucNames = 'main'
+strucNames = 'var'
 outNames = level1 + varNames(0)
 FOR dd = 0, numTags - 1 DO BEGIN
     elemName = level1 + varNames(dd)
@@ -204,7 +205,7 @@ FOR dd = 0, numTags - 1 DO BEGIN
     ENDIF
 ENDFOR
 ;*
-;* Add main structure name to outNames
-outNames = ['main', outNames]
-CREATE_CDF, saveset_name, main, strucNames, outNames, varType, varDim, dimensions
+;* Add var structure name to outNames
+outNames = ['var', outNames]
+CREATE_CDF, saveset_name, var, strucNames, outNames, varType, varDim, dimensions
 END

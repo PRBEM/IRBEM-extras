@@ -23,10 +23,13 @@ var = [];
 data = cdfread(cdffile); % all variables, in rawvars order
 for ivar = 1:length(vars),
     if isfield(info.VariableAttributes,'size'),
-            isize = strmatch(vars{ivar},info.VariableAttributes.size(:,1),'exact'); % find var's index in data cell array
-            sz = lower(info.VariableAttributes.size{isize,2});
+        isize = strmatch(vars{ivar},info.VariableAttributes.size(:,1),'exact'); % find var's index in data cell array
+        sz = info.VariableAttributes.size{isize,2};
+        if numel(sz)==1,
+            sz = [sz 1];
+        end
     else
-        sz = [1 1]; % default is scalar
+        sz = []; % default is empty
     end
     if isfield(info.VariableAttributes,'type'),
         itype = strmatch(vars{ivar},info.VariableAttributes.type(:,1),'exact'); % find var's index in data cell array
@@ -35,7 +38,7 @@ for ivar = 1:length(vars),
         if isfield(info.GlobalAttributes,'STRUCTURE_NAMES') && ismember(vars{ivar},info.GlobalAttributes.STRUCTURE_NAMES),
             type_str = 'struct';
         else
-            type_str = class(data{isort{ivar}});
+            type_str = class(data{isort(ivar)});
         end
     end
     switch(type_str),
@@ -46,15 +49,20 @@ for ivar = 1:length(vars),
         case {'struct'},
             % do nothing, for now
         case {'char','uchar',... % character types (some of these strings are guesses)
-                'byte','int1','int2','int4','uint1','unit2','uint4',... % int types
-                'real4','real8','float','double',... % real types
+                'byte','int1','int2','int4','uint1','unit2','uint4',... % CDF int types
+                'int8','int16','int32','int64','uint8','uint16','uint32','uint64', ...
+                'logical',...
+                'real4','real8','float','double','single',... % real types
                 'unknown'}, % unknown, for incoming idl variables
             vardata = data{isort(ivar)};
             if isnumeric(vardata),
-                if ~preserve_format, 
+                if ~preserve_format,
                     vardata = double(vardata); % force numeric data to Matlab's standard format
                 end
-                vardata = reshape(vardata,sz);
+                if ~isempty(sz)
+                    vardata = reshape(vardata,sz);
+                end
+
             end
             cmd = [vars{ivar},'=','vardata;'];
             eval(cmd); % copy data;
@@ -64,3 +72,4 @@ for ivar = 1:length(vars),
             error('Don''t know how to handle type "%s"',info.VariableAttributes.type{itype,2});
     end
 end
+return;
