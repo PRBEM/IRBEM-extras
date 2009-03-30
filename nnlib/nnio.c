@@ -185,7 +185,7 @@ void nnlib_load_net(const char *filename, unsigned long int *Nx,
   fread(&temp, sizeof(uint32_t), 1, filep);
   *cov_flag = temp;
   if (inflag != 99999) {
-    if (! theta) {
+    if ((inflag & 3) && (! theta)) {
       fprintf(stderr,"%s: theta is NULL for cov_flag==%li, trying to read theta\n",__func__,inflag);
       fclose(filep);
       return;
@@ -211,7 +211,7 @@ void nnlib_load_net(const char *filename, unsigned long int *Nx,
       fread(sy,sizeof(double),*Ny,filep);
     }
 
-    if (cov_flag) {
+    if (cov_flag && (inflag & 3)) {
       if (! theta_cov) {
 	fprintf(stderr,"%s: theta_cov is NULL for cov_flag==%li, trying to read theta_cov\n",__func__,inflag);
 	fclose(filep);

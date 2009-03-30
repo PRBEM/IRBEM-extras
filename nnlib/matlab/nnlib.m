@@ -6,17 +6,24 @@ function varargout = nnlib(what,varargin)
 %
 % Y = nnlib('eval',X,Nh,theta,xbar,ybar,sx,sy)
 % [Y,dY] = nnlib('eval',X,Nh,theta,xbar,ybar,sx,sy,dY_flag,theta_cov)
+% Y = nnlib('eval',X,net))
+% [Y,dY] = nnlib('eval',X,net,dY_flag)
 %    dY_flag & 3 = 0: don't compute dY (theta_cov ignored)
 %    dY_flag & 3 = 1: for 1 x Ny dY (standard errors)
 %    dY_flag & 3 = 2: for Ny x Ny dY (covariance matrix)
-%    dY_flag & 4 = 4: theta_cov is really theta_hess
+%    dY_flag & 4 = 4: theta_cov is theta_hess (not need in net syntax)
 % [ell,grad,hess] = nnlib('ell_debug',X,Nh,Y,s,theta,xbar,ybar,sx,sy)
 %
 % nnlib('save_net',filename,Nx,Ny,theta,xbar,ybar,sx,sy,theta_cov);
 % nnlib('save_net',filename,Nx,Ny,theta,xbar,ybar,sx,sy,theta_hess,'hess_theta');
 %
+% net = nnlib('load_net',filename); 
+% [Nx,Nh,Ny,theta,xbar,ybar,sx,sy] = nnlib('load_net',filename); 
+% (theta_cov not read, even if present in file)
+% net = nnlib('load_net',filename,'theta_cov'); 
 % [Nx,Nh,Ny,theta,xbar,ybar,sx,sy,theta_cov] = nnlib('load_net',filename); 
 %  (theta_cov returns empty if not in file)
+% net = nnlib('load_net',filename,'theta_hess'); 
 % [Nx,Nh,Ny,theta,xbar,ybar,sx,sy,theta_hess] = nnlib('load_net',filename,'theta_hess'); 
 %  (theta_hess returns empty if not in file)
 %  NOTE: theta_cov = inv(theta_hess)
@@ -138,9 +145,41 @@ Y = Yptr.value';
 s = reshape(sptr.value,size_s); % libpointers can only hold matrices, no 3-D stuff
 s = permute(s,ndims(s):-1:1);
 
-function [Y,dY] = eval(X,Nh,theta,xbar,ybar,sx,sy,dY_flag,theta_cov)
+function [Y,dY] = eval(X,varargin)
 Nt = size(X,1);
 Nx = size(X,2);
+if length(varargin) > 2,
+    Nh = varargin{1};
+    theta = varargin{2};
+    xbar = varargin{3};
+    ybar = varargin{4};
+    sx = varargin{5};
+    sy = varargin{6};
+    dY_flag = varargin{7};
+    theta_cov = varargin{8};
+else
+    if length(varargin)==2,
+        dY_flag = varargin{2};
+    else
+        dY_flag = 0;
+    end
+    net = varargin{1};
+    Nh = net.Nh;
+    theta = net.theta;
+    xbar = net.xbar;
+    ybar = net.ybar;
+    sx = net.sx;
+    sy = net.sy;
+    if isfield(net,'theta_cov'),
+        theta_cov = net.theta_cov;
+    end
+    if isfield(net,'theta_hess'),
+        theta_hess = net.theta_hess;
+        theta_cov = theta_hess;
+        dY_flag = bitor(dY_flag,4); % turn on flag indicating theta_cov is theta_hess
+    end
+end
+
 Ntheta = length(theta);
 Ny = (Ntheta-(Nx+1)*Nh)/(Nh+1);
 
@@ -188,18 +227,25 @@ Ntheta = length(theta);
 Nh = (Ntheta-Ny)/(Nx+Ny+1);
 calllib('nnlib','nnlib_save_net',filename,Nx,Nh,Ny,theta,xbar,ybar,sx,sy,cov_flag,theta_cov');
 
-function [Nx,Nh,Ny,theta,xbar,ybar,sx,sy,cov_theta] = load_net(filename,theta_hess_flag)
-do_cov = (nargout > 8);
+function varargout = load_net(filename,theta_hess_flag)
+do_struct = (nargout == 1);
+cov_name = 'theta_cov';
+if nargin>=2,
+    do_cov = true;
+    theta_hess_flag = strcmpi('theta_hess',theta_hess_flag);
+else
+    do_cov = (nargout > 8);
+    theta_hess_flag = false;
+end
+
+if theta_hess_flag,
+    cov_name = 'theta_hess';
+end
 
 if ~exist(filename,'file'),
     error('%s: load_net, file not found "%s"',mfilename,filename);
 end
 
-if nargin>=2,
-    theta_hess_flag = strcmpi('theta_hess',theta_hess_flag);
-else
-    theta_hess_flag = false;
-end
 
 Nxptr = libpointer('uint32Ptr',0);
 Nhptr = libpointer('uint32Ptr',0);
@@ -248,6 +294,18 @@ if flag,
     end
 else
     cov_theta = [];
+end
+
+if do_struct,
+    varargout = {struct('Nx',Nx,'Nh',Nh,'Ny',Ny,'theta',theta,'xbar',xbar,'ybar',ybar,'sx',sx,'sy',sy)};
+    if do_cov,
+        varargout{1}.(cov_name) = cov_theta;
+    end
+else
+    varargout = {Nx,Nh,Ny,theta,xbar,ybar,sx,sy};
+    if do_cov,
+        varargout{end+1} = cov_theta;
+    end
 end
 
 
