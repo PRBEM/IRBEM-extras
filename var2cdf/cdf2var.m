@@ -22,6 +22,9 @@ rawvars = info.Variables(:,1); % list of variable names
 var = [];
 data = cdfread(cdffile); % all variables, in rawvars order
 for ivar = 1:length(vars),
+    if iscell(data{isort(ivar)}),
+        data{isort(ivar)} = cell2mat(data{isort(ivar)});
+    end
     if isfield(info.VariableAttributes,'size'),
         isize = strmatch(vars{ivar},info.VariableAttributes.size(:,1),'exact'); % find var's index in data cell array
         sz = info.VariableAttributes.size{isize,2};
@@ -55,14 +58,16 @@ for ivar = 1:length(vars),
                 'real4','real8','float','double','single',... % real types
                 'unknown'}, % unknown, for incoming idl variables
             vardata = data{isort(ivar)};
+            if iscell(vardata),
+                vardata = cell2mat(vardata);
+            end
             if isnumeric(vardata),
                 if ~preserve_format,
                     vardata = double(vardata); % force numeric data to Matlab's standard format
                 end
-                if ~isempty(sz)
+                if ~isempty(sz) && ~isempty(vardata),
                     vardata = reshape(vardata,sz);
                 end
-
             end
             cmd = [vars{ivar},'=','vardata;'];
             eval(cmd); % copy data;
