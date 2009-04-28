@@ -20,7 +20,7 @@ rawvars = info.Variables(:,1); % list of variable names
 [vars,isort] = sort(rawvars); % sort list to ensure struct appears before sub-structs
 
 var = [];
-data = cdfread(cdffile); % all variables, in rawvars order
+data = cdfread(cdffile,'ConvertEpochToDatenum', true); % all variables, in rawvars order
 for ivar = 1:length(vars),
     if iscell(data{isort(ivar)}),
         data{isort(ivar)} = cell2mat(data{isort(ivar)});

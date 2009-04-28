@@ -28,6 +28,9 @@ outFile = result(0)
 numVars = N_ELEMENTS(outNames)
 maxDim  = MAX(dimensions)
 id = CDF_CREATE(  outFile, [numVars, maxDim], /SINGLE_FILE, /COL_MAJOR, /CLOBBER)
+;CDF_COMPRESSION,id,SET_COMPRESSION=2
+;CDF_COMPRESSION,id,SET_COMPRESSION=5,SET_GZIP_LEVEL=5  ; set the compression 
+; to '5' = GZIP, and set the GZIP level to '9', the max.  TBG, 3/17/09
 
 ;*
 ;* Make sure output names are lower case.  CDF is case sensitive.
@@ -127,7 +130,7 @@ variables = STRLOWCASE(variables)
 variables = STRCOMPRESS(variables, /REMOVE_ALL)
 variables = STRSPLIT(variables, ',', count = count, /EXTRACT)
 
-RESTORE, saveset_name
+RESTORE, saveset_name, /VERBOSE
 ;*
 ;* Check to make sure that variables requested are structures.  If they
 ;* are not structures, put them into one.
@@ -151,6 +154,9 @@ result  = EXECUTE(command)
 FOR cc = 1, count - 1 DO BEGIN
     command = 'var = CREATE_STRUCT(var, "' + variables(cc) + '", '+ variables(cc)+')'
     result  = EXECUTE(command)
+    IF (result ne 1) THEN BEGIN
+      STOP, 'Could not create one of the substructures!  This command failed: ' + command
+    ENDIF  
 ENDFOR
 ;*
 ;* Create an array that contains the tag names of all the variables. Also create
@@ -183,6 +189,7 @@ FOR dd = 0, numTags - 1 DO BEGIN
        result  = EXECUTE(command)
        subNames = level2 + '.' + subNames
        outNames = [outNames, subNames]
+       ;varType = [varType, varinfo.type]   ; TBG: seeing if this works.  
        ;*
        ;* Determine if any of the substructure variables are themselves structures.
        Nsubs = N_ELEMENTS(subNames)
@@ -199,6 +206,24 @@ FOR dd = 0, numTags - 1 DO BEGIN
               result  = EXECUTE(command)
               sub2Names = level3 + '.' + sub2Names
               outNames = [outNames, sub2Names]
+              ;varType = [varType, varinfo.type]   
+              ; TBG: Now need to loop over at least one more level of sub2Names
+              N2subs = N_ELEMENTS(sub2Names)
+              FOR gg = 0, N2subs-1 DO BEGIN
+                 command = 'varinfo = SIZE(' + sub2Names(gg) + ', /structure)'
+                 result  = EXECUTE(command)
+                 varType = [varType, varinfo.type]
+                 varDim  = [varDim,  varinfo.n_dimensions]
+                 dimensions = [ [dimensions], [varinfo.dimensions] ]
+                 IF varinfo.type EQ 8 THEN BEGIN
+                    level4  = sub2Names(gg)
+                    strucNames = [strucNames, level4]
+                    command = 'sub3Names = TAG_NAMES(' + level4 + ')'
+                    result  = EXECUTE(command)
+                    sub3Names = level4 + '.' + sub3Names
+                    outNames = [outNames, sub3Names]
+                 ENDIF
+              ENDFOR
            ENDIF
               
        ENDFOR
