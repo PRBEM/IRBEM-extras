@@ -332,10 +332,10 @@ end
 if length(Nh)>1,
     theta = Nh;
     Ntheta = length(theta);
-    Nh = calc_Nh(Nx,Ny,Ntheta); Nh = Nh{1};
+    Nh = calc_Nh(Nx,Ny,Ntheta);
     flag = flag+16; % start at initial theta
 else
-    Ntheta = calc_Ntheta(Nx,Nh,Ny); Ntheta = Ntheta{1};
+    Ntheta = calc_Ntheta(Nx,Nh,Ny);
     theta = nan(Ntheta,1);
 end
 
