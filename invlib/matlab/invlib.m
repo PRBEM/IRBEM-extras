@@ -186,7 +186,7 @@ fluxPtr = libpointer('doublePtr',nan(NEout,NT));
 lambdaPtr = libpointer('doublePtr',nan(NY,NT));
 dlogfluxPtr = libpointer('doublePtr',nan(NEout,NT));
 supportPtr = libpointer('doublePtr',nan((ASI_MAX_POW2+1)*(2+ASI_MAX_NQ+NY),NT));
-resultsPtr = libpointer('int32Ptr',zeros(NT,1));
+resultsPtr = libpointer('longPtr',zeros(NT,1));
 
 fit.result = calllib('invlib','ana_spec_inv_multi',NT,y',dy,Egrid,H0',dt,b',int_params,real_params,outFilePtr,Eout,fluxPtr,dlogfluxPtr,lambdaPtr,supportPtr,resultsPtr);
 

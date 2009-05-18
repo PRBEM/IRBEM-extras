@@ -111,10 +111,10 @@ if ~exist(filename,'file'),
     error('%s: load_training_set, file not found "%s"',mfilename,filename);
 end
 
-Ntptr = libpointer('uint32Ptr',0);
-Nxptr = libpointer('uint32Ptr',0);
-Nyptr = libpointer('uint32Ptr',0);
-flagptr = libpointer('uint32Ptr',99999);
+Ntptr = libpointer('ulongPtr',0);
+Nxptr = libpointer('ulongPtr',0);
+Nyptr = libpointer('ulongPtr',0);
+flagptr = libpointer('ulongPtr',99999);
 Xptr = libpointer('doublePtr',nan);
 Yptr = libpointer('doublePtr',nan);
 sptr = libpointer('doublePtr',nan);
@@ -247,10 +247,10 @@ if ~exist(filename,'file'),
 end
 
 
-Nxptr = libpointer('uint32Ptr',0);
-Nhptr = libpointer('uint32Ptr',0);
-Nyptr = libpointer('uint32Ptr',0);
-flagptr = libpointer('uint32Ptr',99999);
+Nxptr = libpointer('ulongPtr',0);
+Nhptr = libpointer('ulongPtr',0);
+Nyptr = libpointer('ulongPtr',0);
+flagptr = libpointer('ulongPtr',99999);
 thetaptr = libpointer('doublePtr',nan);
 xbarptr = libpointer('doublePtr',nan);
 ybarptr = libpointer('doublePtr',nan);
