@@ -31,7 +31,7 @@ else
   IFLAGS=-I/usr/local/include -I./
   LFLAGS=-L/usr/local/lib -L./
   CFLAGS= -Wall $(IFLAGS) $(LFLAGS)
-  ifeq ($(HOST),fellowship)
+  ifeq ($(HOST),fellowship.aero.org)
 	OMPCC= gcc42
   else
 	# cygwin
