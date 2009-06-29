@@ -33,9 +33,9 @@ else
   CFLAGS= -Wall $(IFLAGS) $(LFLAGS)
   ifeq ($(HOST),fellowship.aero.org)
 	OMPCC= gcc42
-  else
-	# cygwin
-	OMPCC= gcc-4
+#  else
+#	# cygwin
+#	OMPCC= gcc-4
   endif
 endif
 
