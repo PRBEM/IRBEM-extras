@@ -33,12 +33,10 @@ else
   CFLAGS= -Wall $(IFLAGS) $(LFLAGS)
   ifeq ($(HOST),fellowship.aero.org)
 	OMPCC= gcc42
-#  else
-#	# cygwin
-#	OMPCC= gcc-4
+  else
+	OMPCC = gcc
   endif
 endif
-
 
 
 NNLIBCFILES=nn.c nnio.c matrix_inv.c
