@@ -40,6 +40,10 @@ function varargout = nnlib(what,varargin)
 % 'fr' - use conjugate_fr minimizer
 % 'pr' - use conjugate_pr minimizer
 % 'nm' - use neldear-mead simplex
+%
+% theta_struct = nnlib('theta2struct',Nx,Ny,theta);
+% theta_struct = nnlib('theta2struct',net);
+% convert theta from vector to struct (fields w, v, w0, v0)
 
 
 if ~libisloaded('nnlib'),
@@ -73,6 +77,8 @@ switch(lower(what)),
         [varargout{:}] = calc_Ntheta(varargin{:});
     case {'nh'},
         [varargout{:}] = calc_Nh(varargin{:});
+    case {'theta2struct'},
+        [varargout{:}] = theta2struct(varargin{:});
     otherwise
         error('%s: Unknown "what": "%s"',mfilename,what);
 end
@@ -417,3 +423,34 @@ end
 ell = calllib('nnlib','nnlib_ell_debug',Nt,Nx,X',Nh,Ny,Y',xbar,ybar,sx,sy,s,flag,theta,gradPtr,hessPtr);
 grad = get(gradPtr,'value');
 hess = get(hessPtr,'value')';
+
+
+function [theta_struct] = theta2struct(Nx,Ny,theta)
+% theta_struct = nnlib('theta2struct',Nx,Ny,theta);
+% theta_struct = nnlib('theta2struct',net);
+if nargin == 1,
+    net = Nx;
+    Nx = net.Nx;
+    Ny = net.Ny;
+    Nh = net.Nh;
+    theta = net.theta;
+    Ntheta = length(theta);
+else
+    Ntheta = length(theta);
+    Nh = calc_Nh(Nx,Ny,Ntheta);
+end
+% #define theta_w(Nx,Nh,Ny,j,i) (((i)-1)*(Nx) + (j)-1)
+% #define theta_v(Nx,Nh,Ny,i,k) ((Nh)*(Nx) + ((k)-1)*(Nh)+(i)-1) 
+% #define theta_w0(Nx,Nh,Ny,i) ((Nh)*(Nx) + (Ny)*(Nh) + (i)-1)
+% #define theta_v0(Nx,Nh,Ny,k) ((Nh)*(Nx) + (Ny)*(Nh) + (Nh) + (k)-1)
+% #define theta_Ntheta(Nx,Nh,Ny) ((Ny) + (Ny)*(Nh) + (Nh) + (Nh)*(Nx))
+
+theta_struct = struct('Nh',Nh,'Nx',Nx,'Ny',Ny,'Ntheta',Ntheta);
+i0 = 0;
+theta_struct.w = reshape(theta(i0+(1:(Nx*Nh))),Nx,Nh);
+i0 = i0+Nx*Nh;
+theta_struct.v = reshape(theta(i0+(1:(Nh*Ny))),Nh,Ny);
+i0 = i0+Nh*Ny;
+theta_struct.w0 = reshape(theta(i0+(1:Nh)),1,Nh);
+i0 = i0+Nh;
+theta_struct.v0 = reshape(theta(i0+(1:Ny)),1,Ny);
