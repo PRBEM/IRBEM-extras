@@ -13,7 +13,13 @@ put the matlab folder second, Matlab/Octave will try to load the
 this won't work. In a later rev, I'll rename the .dll and .so
 something else (like libkdtree.*) so it won't have this name conflict.
 
-Files of interest:
+**** Algorithm ****
+
+The kdtree search is approximately log(n) for finding k nearest
+neighbors in a point cloud of n points. More at
+http://en.wikipedia.org/wiki/Kd-tree
+
+**** Files of interest ****
 Makefile - has make commands that work on CentOS, cygwin, and MinGW
 
 kdree.h - C function prototypes
