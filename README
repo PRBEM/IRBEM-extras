@@ -40,3 +40,6 @@ pitch-angle inversion of space particle data. Some Matlab and IDL
 examples/wrappers are provided. Requires GSL and nnlib. POC: Paul
 O'Brien.
 
+kdtree - a C library for building and accessing k-dimensional
+trees. These are handy for finding nearest neighbors in a Pythagorean
+or maximum coordinate distance sense.
