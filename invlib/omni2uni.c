@@ -35,7 +35,7 @@ int wide2uni(const double *wideflux, const double *dlogwideflux,
     return(INVLIB_ERR_NULL);
   }
 
-  if ((*wideflux<=0) || (*dlogwideflux<=0)) {
+  if ((*wideflux<=0) || (*dlogwideflux<0)) {
     return(INVLIB_ERR_DATANAN);
   }
 
