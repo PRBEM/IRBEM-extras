@@ -48,6 +48,7 @@ best-fit energy spectrum from a multi-channel measurement.
 \label{secChanges}
 
 \begin{itemize}
+\item{1/6/2010} Created Matlab wrapper and fixed documentation for \verb|omni2uni|.
 \item{3/13/2009} Fixed some pointer bugs in \verb|ana_spec_inv_multi|, tested and fixed invlib.m.
 \item{3/10/2009} Added ``Vampola'' method for angular inversion (\verb|omni2uni| and \verb|wide2uni|).
 \item{3/9/2009} Fixed failure to initialize \verb|ell| in \verb|ana_spec_inv|.
@@ -824,6 +825,12 @@ the input error (\verb|dlogomniflux| or \verb|dlogwideflux|).
 \subsubitem[-1] - TEM-1.
 \subsubitem[-2] - Vampola.
 \subitem \verb|int_params[2]| Verbose setting (choose one):
+\subsubitem[0] no text output,
+\subsubitem[1] text output to standard output stream,
+\subsubitem[2] text output to standard error stream,
+\subsubitem[3] text output to outFile (assumes outFile is actually a \verb|FILE *|).
+\subsubitem[4] text output to outFile, overwrite existing file
+\subsubitem[5] text output to outFile, append to existing file
 \subitem \verb|int_params[3]| Choice of root finder (choose one):
 \subsubitem[0] Powell's Hybrid method, scaled (recommended),
 \subsubitem[1] Powell's Hybrid method
@@ -833,17 +840,11 @@ the input error (\verb|dlogomniflux| or \verb|dlogwideflux|).
 \subsubitem[5] Powell's Hybrid method w/ numerical Hessian
 \subsubitem[6] Discrete Newton's method  (numerical Hessian)
 \subsubitem[7] Broyden's algorithm (numerical Hessian)
-\subitem \verb|int_params[4]| Maximum number of iterations by minimizer (recommend 10,000).
-\subsubitem[0] no text output,
-\subsubitem[1] text output to standard output stream,
-\subsubitem[2] text output to standard error stream,
-\subsubitem[3] text output to outFile (assumes outFile is actually a \verb|FILE *|).
-\subsubitem[4] text output to outFile, overwrite existing file
-\subsubitem[5] text output to outFile, append to existing file
+\subitem \verb|int_params[4]| Maximum number of iterations by root finder (recommend 1,000).
 \item \verb|real_params| (input) real parameters, length 3 (TBR).
-\subitem \verb|real_params[0]| = Energy of electron flux energy, keV
+\subitem \verb|real_params[0]| = Energy of particle flux, keV
 \subitem \verb|real_params[1]| = $B/B_0$ of spacecraft location, dimensionless.
-\subitem \verb|real_params[2]| = $L_m$, McIlwain L for locally mirroring electron, in Olson-Pfitzer Quiet.
+\subitem \verb|real_params[2]| = $L_m$, McIlwain L for locally mirroring particle, in Olson-Pfitzer Quiet.
 \item \verb|outFile| (input) provides filename or \verb|FILE *| for verbose output (see verbose setting above). Null terminated string.
 \item \verb|uniflux| (output) Locally-mirroring unidirectional flux, (e.g., in \#/keV/cm$^2$/sr/s).
 \item \verb|dloguniflux| (output) Standard error of natural log of \verb|uniflux| (dimensionless).
@@ -889,7 +890,7 @@ the units of \verb|wideflux|/\verb|H| give units of \verb|uniflux|.
 \item[-103] One or more invalid (NaN or infinite) in input arrays, or 
   some \verb|y[i]|$<0$, \verb|dy[i]|$<0$, \verb|Egrid[j]|$\le 0$, or \verb|Egrid[j]|$\le 0$.
 \item[-104] Negative or zero input \verb|omniflux|, \verb|wideflux|, \verb|dlogomniflux|, \verb|dlogwideflux|.
-\item[-401] Invalid minimizer selected.
+\item[-401] Invalid minimizer or root finder selected.
 \item[-402] Invalid iterations requested (zero or negative).
 \item[-501] Invalid value of verbose provided or user-requested file stream NULL (outFile).
 \item[-502] User-requested verbose output file (outFile) could not be opened.
