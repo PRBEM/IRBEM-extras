@@ -17,7 +17,7 @@ extern "C"
 }  /* end extern "C" */
 #endif
 
-DEFUN_DLD (kdtree_build_oct,args,nargout,"kdtree_buld help, see kdtree.m")
+DEFUN_DLD (kdtree_build_oct,args,nargout,"kdtree_build help, see kdtree.m")
 {
 
 /*
