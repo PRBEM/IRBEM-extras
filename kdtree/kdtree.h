@@ -90,3 +90,26 @@ return value (1) presently not used
 */
 
 
+/* IDL wrappers */
+/* form: return_type example(int argc, void *argv[]) */
+/* expects all arguments passed by reference. In IDL
+   this requires an extra "VALUE" keyword to be set
+   to a byte array of zeros with length argc. Strings
+   should be passed as null-terminated arrays of bytes
+   (this can be accomplished by converting them in IDL
+   or by setting the corresponding entry in VALUE to 1).
+ */
+
+long int kdtree_build_idl( int argc, void *argv[]);
+/* IDL call:
+   call_extern,'kdtree.so','kdtree_build_idl_', \
+   X,Nx,Nc,flags,root,c,parent,left,right, \
+   value=bytearry(9))
+ */
+long int kdtree_kNN_idl( int argc, void *argv[]);
+/* IDL call:
+   call_extern,'kdtree.so','kdtree_kNN_idl_', \
+   X,Nx,Nc,flags,root,c,parent,left,right, \
+   X0, NX0,k,DistScale,index,R2, \
+   value=bytearry(15))
+ */
