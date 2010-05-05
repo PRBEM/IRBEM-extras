@@ -15,15 +15,15 @@ is meant to be called as a dll from Matlab--that's why no structures.
 
 long int kdtree_build_idl( int argc, void *argv[]) {
   /* expects all arguments passed by reference */
-  return(kdtree_build(argv[0], /* *X */
+  return(kdtree_build((double *)argv[0], /* *X */
 		      *(unsigned long int *)argv[1], /* Nx */
 		      *(unsigned long int *)argv[2], /* Nc */
 		      *(int *)argv[3], /* flags */
-		      argv[4], /* *root */
-		      argv[5], /* *c */
-		      argv[6], /* *parent */
-		      argv[7], /* *left */
-		      argv[8])); /* *right */
+		      (unsigned long int *)argv[4], /* *root */
+		      (unsigned short int *)argv[5], /* *c */
+		      (unsigned long int *)argv[6], /* *parent */
+		      (unsigned long int *)argv[7], /* *left */
+		      (unsigned long int *)argv[8])); /* *right */
 }
 int kdtree_build(const double *X, 
 		 const unsigned long int Nx,
@@ -307,16 +307,16 @@ long int kdtree_kNN_idl( int argc, void *argv[]) {
 		    *(unsigned long int*)argv[2], /* Nc */
 		    *(int*)argv[3], /* flags */
 		    *(unsigned long int*)argv[4], /* root */
-		    argv[5], /* *c */
-		    argv[6], /* *parent */
-		    argv[7], /* *left */
-		    argv[8], /* *right */
-		    argv[9], /* *X0 */
+		    (unsigned short int*)argv[5], /* *c */
+		    (unsigned long int*)argv[6], /* *parent */
+		    (unsigned long int*)argv[7], /* *left */
+		    (unsigned long int*)argv[8], /* *right */
+		    (double*)argv[9], /* *X0 */
 		    *(unsigned long int*)argv[10], /* NX0 */
 		    *(unsigned long int*)argv[11], /* k */
-		    argv[12], /* *DistScale */
-		    argv[13], /* *index */
-		    argv[14])); /* *R2 */
+		    (double*)argv[12], /* *DistScale */
+		    (unsigned long int*)argv[13], /* *index */
+		    (double*)argv[14])); /* *R2 */
 }
 
 int kdtree_kNN(const double *X, 

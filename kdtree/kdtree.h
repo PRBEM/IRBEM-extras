@@ -102,14 +102,14 @@ return value (1) presently not used
 
 long int kdtree_build_idl( int argc, void *argv[]);
 /* IDL call:
-   call_extern,'kdtree.so','kdtree_build_idl_', \
+   call_external,'kdtree.so','kdtree_build_idl_', \
    X,Nx,Nc,flags,root,c,parent,left,right, \
-   value=bytearry(9))
+   value=bytarr(9))
  */
 long int kdtree_kNN_idl( int argc, void *argv[]);
 /* IDL call:
-   call_extern,'kdtree.so','kdtree_kNN_idl_', \
+   call_external,'kdtree.so','kdtree_kNN_idl_', \
    X,Nx,Nc,flags,root,c,parent,left,right, \
    X0, NX0,k,DistScale,index,R2, \
-   value=bytearry(15))
+   value=bytarr(15))
  */
