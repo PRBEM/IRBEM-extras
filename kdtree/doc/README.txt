@@ -11,7 +11,12 @@ path: .../kdtree/matlab first, then .../kdtree. If you accidentally
 put the matlab folder second, Matlab/Octave will try to load the
 .dll/.so file as a MEX file when you call the "kdtree" function, and
 this won't work. In a later rev, I'll rename the .dll and .so
-something else (like libkdtree.*) so it won't have this name conflict.
+something else (like libkdtree.*) so it won't have this name conflict. 
+See kdtree_demo.m for an example of using the wrapper.
+
+3. For IDL users, you'll need to add two folders to your
+path: .../kdtree and .../kdtree/idl. See kdtree_demo.pro
+for an example of using the wrapper.
 
 **** Algorithm ****
 
@@ -24,9 +29,9 @@ Makefile - has make commands that work on CentOS, cygwin, and MinGW
 
 kdree.h - C function prototypes
 
-matlab/kdtree.m - Matlab/Octave wrapper
-
 matlab/kdtree_demo.m - Matlab/Octave demo
+
+idl/kdtree_demo.m - idl demo
 
 Paul O'Brien
 paul.obrien@aero.org
