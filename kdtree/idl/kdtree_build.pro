@@ -5,8 +5,6 @@ FUNCTION kdtree_build,X,LIB_PATH=inLIB_PATH,STOREX=inSTOREX
   ; tree is an anonymous structure that describes
   ;  the kdtree for fast nearest-neighbors look-up
   ; KEYWORDS:
-  ; /STOREX - stores a double-precision copy of X in tree
-  ;   (use when X is not inherently double precision)
   ; LIB_PATH, string, contains extra paths in 
   ;  which to look for kdtree.so or kdtree.dll
   ;  path_list is delimited by the system's path
@@ -38,9 +36,7 @@ FUNCTION kdtree_build,X,LIB_PATH=inLIB_PATH,STOREX=inSTOREX
     root,c,parent,left,right,value=bytarr(9))    
     
   tree = create_struct('root',root,'c',c,'parent',parent, $
-    'left',left,'right',right)
-    
-  if keyword_set(inSTOREX) then tree = create_struct('X',X,tree);
+    'left',left,'right',right,'X',X,'Nx',Nx,'Nc',Nc)
 
   return,tree
   
