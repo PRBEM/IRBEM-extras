@@ -1,5 +1,16 @@
-FUNCTION kdtree_build,X,LIB_PATH=inLIB_PATH
+FUNCTION kdtree_build,X,LIB_PATH=inLIB_PATH,STOREX=inSTOREX
   ; tree = kdtree_build(X) - build kdtree
+  ; X is an Nx x Nc double matrix
+  ;  of Nx points in an Nc-dimensional space
+  ; tree is an anonymous structure that describes
+  ;  the kdtree for fast nearest-neighbors look-up
+  ; KEYWORDS:
+  ; /STOREX - stores a double-precision copy of X in tree
+  ;   (use when X is not inherently double precision)
+  ; LIB_PATH, string, contains extra paths in 
+  ;  which to look for kdtree.so or kdtree.dll
+  ;  path_list is delimited by the system's path
+  ;  separator (; or :)
 
   if size(X,/tname) ne 'DOUBLE' then begin
     Xdbl = double(X) ; convert X to double, try again
@@ -15,19 +26,21 @@ FUNCTION kdtree_build,X,LIB_PATH=inLIB_PATH
   
   ITYPE = 13; unsigned long int = ULONG = type 13
   
-  root = ulong(7)
+  root = ulong(0)
   c = intarr(Nx)
   parent = make_array(Nx,TYPE=ITYPE)
   left = make_array(Nx,TYPE=ITYPE)
   right = make_array(Nx,TYPE=ITYPE)
     
-  flags = fix(1) ; IDL is row major (fix = int)
+  flags = fix(0) ; IDL is effectively column major because it indexes [column,row] and calls itself row major (fix = int)
   
   result = call_external(lib_file,'kdtree_build_idl',X,Nx,Nc,flags, $
-    root,c,parent,left,right,value=bytarr(9),/unload)    
+    root,c,parent,left,right,value=bytarr(9))    
     
   tree = create_struct('root',root,'c',c,'parent',parent, $
     'left',left,'right',right)
+    
+  if keyword_set(inSTOREX) then tree = create_struct('X',X,tree);
 
   return,tree
   
