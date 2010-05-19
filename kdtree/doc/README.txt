@@ -30,6 +30,7 @@ Makefile - has make commands that work on CentOS, cygwin, and MinGW
 kdree.h - C function prototypes
 
 matlab/kdtree_demo.m - Matlab/Octave demo
+matlab/kdtree_conjunction_finder.m - example fast conjunction finding
 
 idl/kdtree_demo.m - idl demo
 

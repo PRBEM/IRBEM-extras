@@ -278,7 +278,7 @@ else % end of octave specific code
     
     %int32 kdtree_kNN(doublePtr, ulong, ulong, int32, ulong, uint16Ptr, ulongPtr, ulongPtr, ulongPtr, doublePtr, ulong, ulong, doublePtr, ulongPtr, doublePtr)
     
-    
+
     calllib('kdtree','kdtree_kNN',X,Nx,Nc,flags,...
         tree.root,tree.c,tree.parent,tree.left,tree.right,...
         X0,NX0,k,DistScale,indexPtr,R2Ptr);
