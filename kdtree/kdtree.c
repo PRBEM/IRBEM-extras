@@ -156,7 +156,11 @@ int kdtree_kNN_range(const unsigned long int i1,
   /* i1, i2 1-based indices for which X0's to do in this call (helps parallilization) */
 
   const short int XmajorFlag = (flags & 1);
+#ifdef INFINITY
   const double double_inf = INFINITY;  /* positive infinity from math.h */
+#else
+  const double double_inf = +1.0/0.0;
+#endif
 
     inline unsigned long int ss2(const unsigned long int Nrows, 
 				 const unsigned long int Ncols,
