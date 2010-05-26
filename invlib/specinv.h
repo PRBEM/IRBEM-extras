@@ -3,6 +3,9 @@
 
 #ifndef SPECINV_H
 
+#define INV_TYPE_ASI (0)
+#define INV_TYPE_PC (1)
+
 /* macros for analytical spectral inversion, match these to instructions in header file */
 /* macros for function bitmaps */
 #define ASI_FXN_PL  (1)
@@ -13,9 +16,9 @@
 #define ASI_MAX_POW2 (4)
 #define ASI_FXN_ALL (ASI_FXN_PL | ASI_FXN_EXP | ASI_FXN_RM | ASI_FXN_PLE | ASI_FXN_RM2)
 
-#define ASI_DE_INCLUDED (0)
-#define ASI_DE_TRAPZ (1)
-#define ASI_DE_PLATEAU (2)
+#define SPECINV_DE_INCLUDED (0)
+#define SPECINV_DE_TRAPZ (1)
+#define SPECINV_DE_PLATEAU (2)
 
 /* maximum number of free parameters for any fit */
 #define ASI_MAX_NQ (10)
