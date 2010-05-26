@@ -1248,6 +1248,13 @@ int pc_spec_inv(const double *y, const double *dy, const double *Egrid, const do
   fluxgsl = gsl_vector_view_array(flux,NE);
   flux_pc(q,&ell_params,&(fluxgsl.vector),grad_matrix);
 
+  if (support_data) { /* ell, q[0],q[1],... */
+    support_data[0] = ell;
+    for (j=0; j < q->size; j++) {
+      support_data[j+1] = gsl_vector_get(q,j);
+    }
+  }
+  
   /* loop through j and calculate sigmas[i][j] */
   for (j=1; j <= NE; j++) {
     gsl_vector_set_zero(grad);
