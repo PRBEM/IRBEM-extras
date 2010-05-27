@@ -406,9 +406,7 @@ double ell_combine(const gsl_vector *q, void *params_void, gsl_vector *grad, gsl
 
   if (grad) { /* prepare space for gradient computation */
     gsl_vector_set_zero(grad);
-    if (ell_params->type == INV_TYPE_ASI) {
-      flux_grad = gsl_matrix_alloc(ell_params->NE,q->size);
-    }
+    flux_grad = gsl_matrix_alloc(ell_params->NE,q->size);
     grad_lambda_qj = gsl_vector_alloc(q->size);
     grad_ell_lambdak_ptr = &grad_ell_lambdak; /* if grad is NULL, this remains NULL, so won't be computed in ancillary routines */
     if (hess) { /* prepare space for hessian computation */
@@ -440,6 +438,7 @@ double ell_combine(const gsl_vector *q, void *params_void, gsl_vector *grad, gsl
     /* grad_ell_lambdak, hess_ell_lambdak are scalars */
     ell += (ell_params->pen_funcs[i-1])(gsl_vector_get(lambda,i-1),ell_params->y[i-1],
 				    &(ell_params->dy[i-1]), grad_ell_lambdak_ptr, hess_ell_lambdak_ptr);
+
     if (grad) { /* compute gradient */
       if (hess) {
 	/* hess needs to accumulate grad and hess over j, so clear these variables to be accumulators */
@@ -451,14 +450,14 @@ double ell_combine(const gsl_vector *q, void *params_void, gsl_vector *grad, gsl
 	/* now, evaulate flux function at E(j) and get grad/hess as needed */
 	if (ell_params->type == INV_TYPE_ASI) {
 	  E = gsl_vector_get(ell_params->Egrid,j-1); /* E_j */
-	  ell_params->flux_func(q,E,ell_params->flux_func_params,grad_lambda_qj, hess_lambda_qj);
+	  ell_params->flux_func(q,E,ell_params->flux_func_params,grad_lambda_qj, hess_lambda_qj); /* set grad and hess as needed */
 	} else {
-	  gsl_matrix_get_row(grad_lambda_qj, flux_grad, j); /* dflux(j)/dq for all q */
+	  gsl_matrix_get_row(grad_lambda_qj, flux_grad, j-1); /* dflux(j)/dq for all q */
 	  if (hess) {
 	    /* d^2flux_j / dq_k dq_l = flux_j*A_{jk}*A_{jl} = dflux_j/dq_k * A_{jl} */
 	    for (k=1; k <= q->size; k++) {
 	      for (l=1; l <= q->size; l++) {
-		gsl_matrix_set(hess_lambda_qj,k,l,gsl_matrix_get(flux_grad,j-1,k-1)*gsl_matrix_get(ell_params->basis_vectors,j-1,l-1));
+		gsl_matrix_set(hess_lambda_qj,k-1,l-1,gsl_matrix_get(flux_grad,j-1,k-1)*gsl_matrix_get(ell_params->basis_vectors,j-1,l-1));
 	      }
 	    }
 	  }
@@ -483,6 +482,7 @@ double ell_combine(const gsl_vector *q, void *params_void, gsl_vector *grad, gsl
     }
   }
 
+
   /* now, add prior penalty for PC inversion */
   if (ell_params->type == INV_TYPE_PC) {
     /* re-use grad_lambda_qj for pen_grad (_qj b/c _q is only initialized for hess) */
@@ -493,14 +493,13 @@ double ell_combine(const gsl_vector *q, void *params_void, gsl_vector *grad, gsl
     }
   };
 
+
   /* free memory */
   gsl_vector_free(lambda);
   gsl_vector_free(flux);
   if (grad) {
     gsl_vector_free(grad_lambda_qj);
-    if (flux_grad) {
-      gsl_matrix_free(flux_grad);
-    }
+    gsl_matrix_free(flux_grad);
     if (hess) {
       gsl_vector_free(grad_lambda_q);
       gsl_matrix_free(hess_lambda_q);
@@ -1228,6 +1227,7 @@ int pc_spec_inv(const double *y, const double *dy, const double *Egrid, const do
   grad = gsl_vector_alloc(q->size); /* dell/dq */
   hess = gsl_matrix_alloc(q->size,q->size); /* d^2ell/dq^2 */
   covq = gsl_matrix_alloc(q->size,q->size); /* q error covariance = inv(hess) */
+
   ell = ell_combine(q,(void*)&ell_params,grad,hess); /* get ell, grad, and hess */
 
   /* store lambda in lambda */
@@ -1235,12 +1235,10 @@ int pc_spec_inv(const double *y, const double *dy, const double *Egrid, const do
     gsl_vector_view lambda_view = gsl_vector_view_array(lambda,NY);
     make_lambda(q,&ell_params,&(lambda_view.vector));
   }
-  if (support_data) {
-    /* store ell, q in support_data */
-  }
 
-  /* compute dlogflux = sqrt(diag(dq/dlogflux * d^2ell/dq^2 * dq/dlogflux)) */
+  /* compute dlogflux = sqrt(diag(dlogflux/dq * inv(d^2ell/dq^2) * dlogflux/dq)) */
   inv_matrix_once(hess,covq,1);
+
   gsl_matrix_free(hess);
   /* store flux in flux*/
   fluxgsl = gsl_vector_view_array(flux,NE);
@@ -1268,5 +1266,64 @@ int pc_spec_inv(const double *y, const double *dy, const double *Egrid, const do
   gsl_vector_free(q);
   gsl_vector_free(grad);
   gsl_matrix_free(covq);
+
+  return(clean_return(INVLIB_SUCCESS));
 }
 
+int pc_spec_inv_multi(const long int Ntimes,
+		      const double *y, const double *dy, 
+		      const double *Egrid, const double *H0, 
+		      const double *dt,const double *b,
+		      const double *mean_log_flux, const double *basis_vectors, const double *basis_variance,
+		      const long int *int_params, const double *real_params,
+		      char *outFile, 
+		      double *flux, double *dlogflux, double *lambda, double *support_data, int *result_codes) {
+  long int i,j,t,NE,NY,NQ;
+  double *H,*sdptr,*lambdaptr;
+  int result_code = INVLIB_SUCCESS;
+
+  /* test for input NULLs */
+  if ((!y) || (!dy) || (!Egrid) || (!H0) || (!dt) || (!b) || (!int_params) || (!flux) || (!dlogflux) || (!result_codes)) {
+    return(INVLIB_ERR_NULL);
+  }
+
+  /* start initialization */
+  NY = int_params[0];
+  NE = int_params[1];
+  NQ = int_params[3]; /* Nactive_bases */
+  if ((Ntimes<1) || (NY<=1) || (NE<=1) || (NQ<1)) {
+    return(INVLIB_ERR_DATAEMPTY);
+  }
+
+  H = malloc(NE*NY*sizeof(double));
+  for (t=0; t < Ntimes; t++) {
+    /* set H = H0*dt */
+    for (i = 0; i < NY; i++) {
+      for (j=0; j < NE; j++) {
+	H[NY*j+i] = H0[NY*j+i]*dt[t];
+      }
+    }
+    if (lambda) {
+      lambdaptr = lambda+NY*t;
+    } else {
+      lambdaptr = NULL;
+    }
+
+    if (support_data) {
+      sdptr = support_data+(1+NQ)*t;
+    } else {
+      sdptr = NULL;
+    }
+
+    result_codes[t] = pc_spec_inv(y+NY*t,dy,Egrid,H,b+NY*t,
+				  mean_log_flux,basis_vectors,basis_variance,
+				  int_params,real_params,
+				  outFile,flux+NE*t,dlogflux+NE*t,
+				  lambdaptr,sdptr);
+    if (result_codes[t] != INVLIB_SUCCESS) {
+      result_code = result_codes[t]; /* store first error code, to be returned later */
+    }
+  }
+  free(H);
+  return(result_code);
+}

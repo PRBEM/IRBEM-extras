@@ -9,6 +9,15 @@ int pc_spec_inv(const double *y, const double *dy, const double *Egrid, const do
 		const long int *int_params, const double *real_params,
 		char *outFile, double *flux, double *dlogflux, double *lambda, double *support_data);
 
+int pc_spec_inv_multi(const long int Ntimes,
+		      const double *y, const double *dy, 
+		      const double *Egrid, const double *H0, 
+		      const double *dt,const double *b,
+		      const double *mean_log_flux, const double *basis_vectors, const double *basis_variance,
+		      const long int *int_params, const double *real_params,
+		      char *outFile, 
+		      double *flux, double *dlogflux, double *lambda, double *support_data, int *result_codes);
+
 int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const double *H, const double *b,
 		  const long int *int_params, const double *real_params,
 		 char *outFile, double *Eout, double *flux, double *dlogflux, double *lambda, double *support_data);

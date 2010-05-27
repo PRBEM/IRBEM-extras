@@ -33,6 +33,20 @@ function varargout = invlib(what,varargin)
 % flux.exp.weight = weight of fit in combined solution (i.e., in fit.flux)
 % flux.exp.lambda(t,i) = expected counts in t'th sample, i'th channel for fit
 %
+% pc_spec_inv: perform principal component spectral inverse
+% fit = invlib('pc_spec_inv',y,dy,Egrid,G,dt,b,mean_log_flux,basis_vectors,basis_variance...)
+% common arguments have same meaning as for ana_spec_inv
+% mean_log_flux - NE x 1 vector of mean log flux
+% basis_vectors - NE x Nq matrix of basis vectors (columns)
+% basis_variance - Nq x 1 vector of variance in log flux explained by each
+%    basis vector
+% options: supports appropriate options for ana_spec_inv, plus
+% 'num_bases',num_bases - select a reduced number of bases to use
+% fit has fields:
+% flux, dlogflux, lambda, result, result_codes as returned by pc_spec_inv_multi
+% fit.ell = negative log likelihood of fit
+% flux.q(t,m) m'th PC coefficient for t'th sample
+%
 % omni2uni:
 % [uniflux,dloguniflux,result] = invlib('omni2uni',omniflux,dlogomniflux,method,...)
 % calls omni2uni as defined in invlib.pdf
@@ -71,17 +85,17 @@ varargout = cell(1,nargout);
 switch(lower(what)),
     case {'ana_spec_inv'},
         [varargout{:}] = ana_spec_inv(varargin{:});
+    case {'pc_spec_inv'},
+        [varargout{:}] = pc_spec_inv(varargin{:});
     case {'omni2uni'},
         [varargout{:}] = omni2uni(varargin{:});
     otherwise
         error('%s: Unknown "what": "%s"',mfilename,what);
 end
 
-function fit = ana_spec_inv(y,dy,Egrid,H0,dt,b,Eout,varargin)
-
+function [NT,NY,NE] = spec_inv_check_args(y,dy,Egrid,H0,dt,b)
 [NT,NY] = size(y);
 NE = length(Egrid);
-NEout = length(Eout);
 if numel(dy) ~= NY,
     error('dy must have size NYx1');
 end
@@ -95,99 +109,113 @@ if (numel(b) ~= NT*NY) || (size(b,1) ~= NT),
     error('b must have size NT x NY');
 end
 
+function options = parse_options(varargin)
 % constants from specinv.h
-ASI_FXN_PL   = (1);
-ASI_FXN_EXP  = (2);
-ASI_FXN_RM   = (4);
-ASI_FXN_PLE  = (8);
-ASI_FXN_RM2  = (16);
-ASI_MAX_POW2 = 4;
-ASI_MAX_NQ = 10;
+options.ASI_FXN_PL   = (1);
+options.ASI_FXN_EXP  = (2);
+options.ASI_FXN_RM   = (4);
+options.ASI_FXN_PLE  = (8);
+options.ASI_FXN_RM2  = (16);
+options.ASI_MAX_POW2 = 4;
+options.ASI_MAX_NQ = 10;
 
 % constants from optim.h
-OPTIM_MIN_BFGS  = (0);
-OPTIM_MIN_FR    = (1);
-OPTIM_MIN_PR    = (2);
-OPTIM_MIN_NM    = (3);
+options.OPTIM_MIN_BFGS  = (0);
+options.OPTIM_MIN_FR    = (1);
+options.OPTIM_MIN_PR    = (2);
+options.OPTIM_MIN_NM    = (3);
 
-minimizer = 0; % BFGS
-MaxIter = 1000;
-fxn_bitmap = 0;
-outfile = '';
-rest_energy = 0.511; % electron rest energy, MeV
-Ebreak = 100; % power-law to exponential tail transition energy, MeV
-E0 = 345; % power-law to exponential tail transition energy, MeV
-append = false; % append to text file?
-dE_mode = 1; % default - trapz
+options.num_bases = inf;
+options.minimizer = 0; % BFGS
+options.MaxIter = 1000;
+options.fxn_bitmap = 0;
+options.outfile = '';
+options.rest_energy = 0.511; % electron rest energy, MeV
+options.Ebreak = 100; % power-law to exponential tail transition energy, MeV
+options.E0 = 345; % power-law to exponential tail transition energy, MeV
+options.append = false; % append to text file?
+options.dE_mode = 1; % default - trapz
+
 
 i = 1;
 while i <= length(varargin),
     switch(lower(varargin{i})),
         case 'bfgs',
-            minimizer = OPTIM_MIN_BFGS;
+            options.minimizer = options.OPTIM_MIN_BFGS;
         case 'fr',
-            minimizer = OPTIM_MIN_FR;
+            options.minimizer = options.OPTIM_MIN_FR;
         case 'pr',
-            minimizer = OPTIM_MIN_PR;
+            options.minimizer = options.OPTIM_MIN_PR;
         case 'nm',
-            minimizer = OPTIM_MIN_NM;
+            options.minimizer = options.OPTIM_MIN_NM;
         case 'pl',
-            fxn_bitmap = bitor(fxn_bitmap,ASI_FXN_PL);
+            options.fxn_bitmap = bitor(options.fxn_bitmap,options.ASI_FXN_PL);
         case 'exp',
-            fxn_bitmap = bitor(fxn_bitmap,ASI_FXN_EXP);
+            options.fxn_bitmap = bitor(options.fxn_bitmap,options.ASI_FXN_EXP);
         case 'rm',
-            fxn_bitmap = bitor(fxn_bitmap,ASI_FXN_RM);
+            options.fxn_bitmap = bitor(options.fxn_bitmap,options.ASI_FXN_RM);
         case 'ple',
-            fxn_bitmap = bitor(fxn_bitmap,ASI_FXN_PLE);
+            options.fxn_bitmap = bitor(options.fxn_bitmap,options.ASI_FXN_PLE);
         case 'rm2',
-            fxn_bitmap = bitor(fxn_bitmap,ASI_FXN_RM2);
+            options.fxn_bitmap = bitor(options.fxn_bitmap,options.ASI_FXN_RM2);
         case 'maxiter',
-            MaxIter = varargin{i+1};
+            options.MaxIter = varargin{i+1};
             i = i+1;
         case 'outfile',
-            outfile = varargin{i+1};
+            options.outfile = varargin{i+1};
             i = i+1;
         case 'append',
-            append = true;
+            options.append = true;
         case 'rest_energy',
-            rest_energy = varargin{i+1};
+            options.rest_energy = varargin{i+1};
             i = i+1;
         case 'ebreak',
-            Ebreak = varargin{i+1};
+            options.Ebreak = varargin{i+1};
             i = i+1;
         case 'e0',
-            E0 = varargin{i+1};
+            options.E0 = varargin{i+1};
             i = i+1;
         case 'g=gde',
-            dE_mode = 0;
+            options.dE_mode = 0;
         case 'trapz',
-            dE_mode = 1;
+            options.dE_mode = 1;
         case 'plateau',
-            dE_mode = 2;
+            options.dE_mode = 2;
+        case 'num_bases',
+            options.num_bases = varargin{i+1};
+            i = i+1;
     end
     i = i+1;
 end
 
-if ~fxn_bitmap,
+if isempty(options.outfile),
+    options.verbose = 0; % silent
+else
+    options.verbose = 4+options.append; % 4 replace, 5 append
+end
+
+
+function fit = ana_spec_inv(y,dy,Egrid,H0,dt,b,Eout,varargin)
+
+[NT,NY,NE] = spec_inv_check_args(y,dy,Egrid,H0,dt,b);
+options = parse_options(varargin{:});
+NEout = length(Eout);
+
+
+if ~options.fxn_bitmap,
     error('No analytical spectrum function(s) selected');
 end
 
-if isempty(outfile),
-    verbose = 0; % silent
-else
-    verbose = 4+append; % 4 replace, 5 append
-end
-
 % create function table
-fxns.pl = struct('bit',ASI_FXN_PL,'Nq',2);
+fxns.pl = struct('bit',options.ASI_FXN_PL,'Nq',2);
 fxns.pl.flux = @(q,E)exp(q(1)-q(2)*log(E));
-fxns.exp = struct('bit',ASI_FXN_EXP,'Nq',2);
+fxns.exp = struct('bit',options.ASI_FXN_EXP,'Nq',2);
 fxns.exp.flux = @(q,E)exp(q(1)+q(2)*E);
-fxns.rm = struct('bit',ASI_FXN_RM,'Nq',2);
-fxns.rm.flux = @(q,E)E.*(1+E./rest_energy/2).*exp(q(1)+q(2)*E);
-fxns.rm2 = struct('bit',ASI_FXN_RM2,'Nq',4);
-fxns.rm2.flux = @(q,E)E.*(1+E./rest_energy/2).*(exp(q(1)+q(2)*E)+exp(q(3)+q(4)*E));
-fxns.ple = struct('bit',ASI_FXN_PLE,'Nq',2);
+fxns.rm = struct('bit',options.ASI_FXN_RM,'Nq',2);
+fxns.rm.flux = @(q,E)E.*(1+E./options.rest_energy/2).*exp(q(1)+q(2)*E);
+fxns.rm2 = struct('bit',options.ASI_FXN_RM2,'Nq',4);
+fxns.rm2.flux = @(q,E)E.*(1+E./options.rest_energy/2).*(exp(q(1)+q(2)*E)+exp(q(3)+q(4)*E));
+fxns.ple = struct('bit',options.ASI_FXN_PLE,'Nq',2);
 fxns.ple.flux = @(q,E,Ebreak,E0)flux_ple;
 
 int_params = int32(zeros(10,1));
@@ -196,24 +224,24 @@ real_params = nan(10,1);
 int_params(1+0) = NY;
 int_params(1+1) = NE;
 int_params(1+2) = NEout;
-int_params(1+3) = fxn_bitmap; % analtyical functions bitmap*/
-int_params(1+4) = minimizer; % minimizer, 0=BFGS, 3=NM */
-int_params(1+5) = MaxIter; % maximumn # of iterations */
-int_params(1+6) = verbose; % 0 = verbose off, no text output, 4 = write messages to outfile */
-int_params(1+7) = dE_mode;
-real_params(1+0) = rest_energy;
-real_params(1+1) = Ebreak;
-real_params(1+2) = E0;
+int_params(1+3) = options.fxn_bitmap; % analtyical functions bitmap*/
+int_params(1+4) = options.minimizer; % minimizer, 0=BFGS, 3=NM */
+int_params(1+5) = options.MaxIter; % maximumn # of iterations */
+int_params(1+6) = options.verbose; % 0 = verbose off, no text output, 4 = write messages to outfile */
+int_params(1+7) = options.dE_mode;
+real_params(1+0) = options.rest_energy;
+real_params(1+1) = options.Ebreak;
+real_params(1+2) = options.E0;
 
-if verbose,
-    outFilePtr = libpointer('cstring',outfile);
+if options.verbose,
+    outFilePtr = libpointer('cstring',options.outfile);
 else
     outFilePtr = libpointer('cstring'); % NULL
 end
 fluxPtr = libpointer('doublePtr',nan(NEout,NT));
 lambdaPtr = libpointer('doublePtr',nan(NY,NT));
 dlogfluxPtr = libpointer('doublePtr',nan(NEout,NT));
-supportPtr = libpointer('doublePtr',nan((ASI_MAX_POW2+1)*(2+ASI_MAX_NQ+NY),NT));
+supportPtr = libpointer('doublePtr',nan((options.ASI_MAX_POW2+1)*(2+options.ASI_MAX_NQ+NY),NT));
 resultsPtr = libpointer('longPtr',zeros(NT,1));
 
 fit.result = calllib('invlib','ana_spec_inv_multi',NT,y',dy,Egrid,H0',dt,b',int_params,real_params,outFilePtr,Eout,fluxPtr,dlogfluxPtr,lambdaPtr,supportPtr,resultsPtr);
@@ -222,21 +250,84 @@ fit.flux = fluxPtr.value';
 fit.dlogflux = dlogfluxPtr.value';
 fit.lambda = lambdaPtr.value';
 fit.result_codes = resultsPtr.value;
-support_data = reshape(supportPtr.value,2+ASI_MAX_NQ+NY,ASI_MAX_POW2+1,NT);
+support_data = reshape(supportPtr.value,2+options.ASI_MAX_NQ+NY,options.ASI_MAX_POW2+1,NT);
 support_data = permute(support_data,[3,2,1]);
 
 functions = fieldnames(fxns);
 
 for k = 1:length(functions),
     f = functions{k};
-    if bitand(fxn_bitmap,fxns.(f).bit),
+    if bitand(options.fxn_bitmap,fxns.(f).bit),
         fit.(f) = fxns.(f);
         fit.(f).ell = reshape(support_data(:,k,1),NT,1);
         fit.(f).weight = reshape(support_data(:,k,2),NT,1);
         fit.(f).q = reshape(support_data(:,k,1:fxns.(f).Nq),NT,fxns.(f).Nq);
-        fit.(f).lambda = reshape(support_data(:,k,2+ASI_MAX_NQ+(1:NY)),NT,NY);
+        fit.(f).lambda = reshape(support_data(:,k,2+options.ASI_MAX_NQ+(1:NY)),NT,NY);
     end
 end
+
+
+function fit = pc_spec_inv(y,dy,Egrid,H0,dt,b,mean_log_flux,basis_vectors,basis_variance,varargin)
+% pc_spec_inv: perform principal component spectral inverse
+% fit = invlib('pc_spec_inv',y,dy,Egrid,G,dt,b,mean_log_flux,basis_vectors,basis_variance...)
+% common arguments have same meaning as for ana_spec_inv
+% mean_log_flux - NE x 1 vector of mean log flux
+% basis_vectors - NE x Nq matrix of basis vectors (columns)
+% basis_variance - Nq x 1 vector of variance in log flux explained by each
+%    basis vector
+% options: supports appropriate options for ana_spec_inv, plus
+% 'num_bases',num_bases - select a reduced number of bases to use
+
+[NT,NY,NE] = spec_inv_check_args(y,dy,Egrid,H0,dt,b);
+options = parse_options(varargin{:});
+
+Nq = length(basis_variance);
+options.num_bases = min(options.num_bases,Nq);
+
+if numel(mean_log_flux) ~= NE,
+    error('mean_log_flux must be NE x 1');
+end
+
+if numel(basis_vectors) ~= NE*Nq,
+    error('basis_vectors must be NE x Nq');
+end
+
+
+int_params = int32(zeros(10,1));
+real_params = nan(10,1);
+
+int_params(1+0) = NY;
+int_params(1+1) = NE;
+int_params(1+2) = Nq; % size of basis_vectors
+int_params(1+3) = options.num_bases; % num bases to actually use
+int_params(1+4) = options.minimizer;
+int_params(1+5) = options.MaxIter;
+int_params(1+6) = options.verbose;
+int_params(1+7) = options.dE_mode;
+
+if options.verbose,
+    outFilePtr = libpointer('cstring',options.outfile);
+else
+    outFilePtr = libpointer('cstring'); % NULL
+end
+fluxPtr = libpointer('doublePtr',nan(NE,NT));
+lambdaPtr = libpointer('doublePtr',nan(NY,NT));
+dlogfluxPtr = libpointer('doublePtr',nan(NE,NT));
+supportPtr = libpointer('doublePtr',nan(1+options.num_bases,NT));
+resultsPtr = libpointer('longPtr',zeros(NT,1));
+
+assert(NT==1); % for now, sin
+fit.result = calllib('invlib','pc_spec_inv_multi',NT,y',dy,Egrid,H0',dt,b',mean_log_flux,basis_vectors',basis_variance,...
+    int_params,real_params,outFilePtr,fluxPtr,dlogfluxPtr,lambdaPtr,supportPtr,resultsPtr);
+
+fit.flux = fluxPtr.value';
+fit.dlogflux = dlogfluxPtr.value';
+fit.lambda = lambdaPtr.value';
+%fit.result_codes = resultsPtr.value;
+support_data = supportPtr.value';
+fit.ell = support_data(:,1);
+fit.q = support_data(:,2:end);
+
 
 function flux = flux_ple(q,E,Ebreak,E0)
 flux = nan(size(E));
