@@ -1136,7 +1136,7 @@ int pc_spec_inv(const double *y, const double *dy, const double *Egrid, const do
   optfunTy optfun; 
   gsl_vector *grad,*q;
   gsl_vector_view fluxgsl;
-  gsl_matrix *hess,*covq,*grad_matrix;
+  gsl_matrix *hess,*covq;
   double ell;
   gsl_matrix *Htmp=0; /* holds H*dE if necessary */
   /* the following "const" view variables will be declared inline below
@@ -1242,11 +1242,9 @@ int pc_spec_inv(const double *y, const double *dy, const double *Egrid, const do
   /* compute dlogflux = sqrt(diag(dq/dlogflux * d^2ell/dq^2 * dq/dlogflux)) */
   inv_matrix_once(hess,covq,1);
   gsl_matrix_free(hess);
-  /* store flux in flux, get grad_matrix */
-  /* will get grad_matrix because we're computing a whole spectrum with flux_pc */
-  grad_matrix = gsl_matrix_alloc(NE,q->size);
+  /* store flux in flux*/
   fluxgsl = gsl_vector_view_array(flux,NE);
-  flux_pc(q,&ell_params,&(fluxgsl.vector),grad_matrix);
+  flux_pc(q,&ell_params,&(fluxgsl.vector),NULL);
 
   if (support_data) { /* ell, q[0],q[1],... */
     support_data[0] = ell;
@@ -1258,19 +1256,17 @@ int pc_spec_inv(const double *y, const double *dy, const double *Egrid, const do
   /* loop through j and calculate sigmas[i][j] */
   for (j=1; j <= NE; j++) {
     gsl_vector_set_zero(grad);
-    /* sigma_flux_i = sqrt(flux_grad_p*covq*flux_grad_p'); */
-    gsl_vector_view grad_matrix_row = gsl_matrix_row(grad_matrix,j-1);
+    /* sigma_flux_i = sqrt(logflux_grad_p*covq*logflux_grad_p'); */
+    gsl_vector_const_view grad_matrix_row = gsl_matrix_const_row(ell_params.basis_vectors,j-1);
     gsl_blas_dgemv(CblasNoTrans,1.0,covq,&(grad_matrix_row.vector),0.0,grad); /* grad = covq*row */
-    double sigma_flux_j=0;
-    gsl_blas_ddot(grad,&(grad_matrix_row.vector),&sigma_flux_j);
-    sigma_flux_j = sqrt(sigma_flux_j);
-    dlogflux[j-1] = sigma_flux_j;
+    double varlogflux_j=0;
+    gsl_blas_ddot(grad,&(grad_matrix_row.vector),&varlogflux_j); /* varlogflux_j = row'*grad */
+    dlogflux[j-1] = sqrt(varlogflux_j);
   }
 
   free(pen_funcs);
   gsl_vector_free(q);
   gsl_vector_free(grad);
   gsl_matrix_free(covq);
-  gsl_matrix_free(grad_matrix);
 }
 
