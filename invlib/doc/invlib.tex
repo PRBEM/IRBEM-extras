@@ -48,6 +48,7 @@ best-fit energy spectrum from a multi-channel measurement.
 \label{secChanges}
 
 \begin{itemize}
+\item{5/27/2010} Created \verb|pc_spec_inv| and \verb|pc_spec_inv_multi| and associated documentation. Reorganized documentation a little.
 \item{1/6/2010} Created Matlab wrapper and fixed documentation for \verb|omni2uni|.
 \item{3/13/2009} Fixed some pointer bugs in \verb|ana_spec_inv_multi|, tested and fixed invlib.m.
 \item{3/10/2009} Added ``Vampola'' method for angular inversion (\verb|omni2uni| and \verb|wide2uni|).
@@ -71,47 +72,38 @@ best-fit energy spectrum from a multi-channel measurement.
 \item{4/25/2008} Library and documentation created and released.
 \end{itemize}
 
-\section{Library Functions ana\_spec\_inv and ana\_spec\_inv\_multi}
+\section{Spectral Inversion Functions}
 
-The library provides a spectral inversion function,
-\verb|ana_spec_inv|, with the following C prototype (found in
-``invlib.h''):
-\begin{verbatim}
-int ana_spec_inv(const double *y, const double *dy, 
-                 const double *Egrid, const double *H, const double *b,
-                 const long int *int_params, const double *real_params,
-                 char *outFile, double *Eout, 
-                 double *flux, double *dlogflux, 
-		 double *lambda, double *support_data);
-\end{verbatim}
-                  
-This function takes a set of counts \verb|y|, estimated relative error
-on those counts \verb|dy|, and measurement matrix \verb|H| defined on
-energy grid \verb|Egrid|, with estimated background counts \verb|b|,
-and returns \verb|flux| on output energy grid \verb|Eout|. The user
-can select from a variety of analytical functions that will be
-individually fit to the data, and then a ``weighted expected value''
-method will be used to combine multiple analytical fits. The user can
-also control which nonlinear minimization solver is used, and whether
-and where progress messages are printed. The function returns a code
-that indicates success or one of several failure modes. There is a
-multi-case version \verb|ana_spec_inv_multi| described at the end of
-this section.
+The library provides several spectral inversion function,
+\verb|ana_spec_inv|, \verb|ana_spec_inv_multi|, \verb|pc_spec_inv|, and \verb|pc_spec_inv_multi|. These
+routines provide either analytical spectral inversions (power-laws and
+such), or principal component spectral inversions (PC's derived from
+observations or simulations). The \verb|_multi| variants support
+multiple calls with the same energy response functions but
+different values for the counts in each data channel and duration
+of the time accumulation.
 
 \subsection{Calculations Performed}
 
-In continuous form, the function \verb|ana_spec_inv| solves
+In continuous form, the spectral inversion functions solve
 \begin{equation}
 \vec{y} \approx \vec{\lambda} = \delta t\int_0^{\infty} \vec{G}(E)f(E)dE + \vec{b}, \label{eqInt1}
 \end{equation}
 where $\vec{y}$ is a vector of observed counts, $\vec{\lambda}$ is a
-vector of expected counts, $\delta t$ is the integration time, $\vec{G}$ is a
-vector of energy-geometric factors (response functions), and $f(E)$ is
-the differential particle flux at energy $E$, and $\vec{b}$ is a
-vector of expected background counts. In this equation, all vectors
-have length $N_y$, the number of energy channels. {\it Throughout this
-  subsection, we use the one-based linear algebra convention for
-  vector and matrix subscripts.}
+vector of expected counts, $\delta t$ is the integration time,
+$\vec{G}$ is a vector of energy-geometric factors (response
+functions), and $f(E)$ is the differential particle flux at energy
+$E$, and $\vec{b}$ is a vector of expected background counts. In this
+equation, all vectors in (\ref{eqInt1}) have length $N_y$, the number
+of energy channels. Equation (\ref{eqInt1}) is solved by
+parameterizing $f(E) = f(E;\vec{q})$ and determining the maximum
+likelihood value of the $N_q$ free parameters $\vec{q}$. The maximum
+likelihood equation for $\vec{q}$ is invariably nonlinear, and so a
+nonlinear optimizer (a nonlinear minimizer) must be used once the
+problem is set up.
+
+{\it Throughout this subsection, we use the one-based linear algebra
+ convention for vector and matrix subscripts.}
 
 \subsubsection{Numerical Problem to be Solved}
 
@@ -130,9 +122,9 @@ at least a trapezoidal integral, regardless of the grid:
 \begin{equation}
   \Delta E_j = \left\{
 \begin{array}{cl}
-E_j = (E_{j+1}-E_j)/2 & j=1 \\
-E_j = (E_{j}-E_{j-1})/2 & j=N_E \\
-E_j = (E_{j+1}-E_{j-1})/2 & {\rm otherwise}
+(E_{j+1}-E_j)/2 & j=1 \\
+(E_{j}-E_{j-1})/2 & j=N_E \\
+(E_{j+1}-E_{j-1})/2 & {\rm otherwise}
 \end{array}
 \right.
 \end{equation}
@@ -140,20 +132,22 @@ The plateau energy weight (not recommended) would be given by:
 \begin{equation}
   \Delta E_j = \left\{
 \begin{array}{cl}
-E_j = (E_{j+1}-E_j) & j=1 \\
-E_j = (E_{j}-E_{j-1}) & j=N_E \\
-E_j = (E_{j+1}-E_{j-1})/2 & {\rm otherwise}
+(E_{j+1}-E_j) & j=1 \\
+(E_{j}-E_{j-1}) & j=N_E \\
+(E_{j+1}-E_{j-1})/2 & {\rm otherwise}
 \end{array}
 \right.
 \end{equation}
 
-\subsubsection{Penalty Functions}
 
-The next step is to define a ``penalty'' function based on the
-likelihood of observing counts $\vec{y}$ given expected counts
+
+\subsubsection{Measurement Penalty Functions}
+
+The next step is to define a measurement ``penalty'' function based on
+the likelihood of observing counts $\vec{y}$ given expected counts
 $\vec{\lambda}$. The observations differ from the expected counts due
 to a variety of possible error processes. The most common two errors
-are Poisson error and calibration error. 
+are Poisson error and calibration error.
 
 \subsubsubsection{Poisson Error Penalty Function}
 
@@ -221,7 +215,7 @@ relative error ($\delta y$).
 
 Thus, the final function to be minimized is:
 \begin{equation}
-\ell(\vec{\lambda}) = \sum_i \ell_i(\lambda_i).
+\ell(\vec{\lambda}) = \sum_i \ell_i(\lambda_i). \label{eqEll}
 \end{equation}
 This equation assumes that the error processes in the $N_y$ channels
 are independent; i.e., the deviations $y_i-\lambda_i$ are not
@@ -236,8 +230,11 @@ The derivatives are given by:
 \subsubsection{Analytical Spectral Functions}
 \label{secAnalyticalSpectra}
 
-Next, we must define the analytical (parametric) spectral functions
-that we wish to fit.
+For the functions \verb|ana_spec_inv| and \verb|ana_spec_inv_multi|,
+we use analytical (parametric) spectral functions. We do not have any
+prior information with which to constrain the parameters of these
+analytical functions, so we will postpone discussion of prior model
+penalty functions until section \ref{secPCspectra}.
 
 \subsubsubsection{Power Law Spectrum}
 
@@ -334,7 +331,7 @@ Its derivatives are:
 \frac{\partial^2 f^{\rm (PLE)}}{\partial q_2^2} &=& \theta^2 f(E).
 \end{eqnarray}
 
-\subsubsection{Fit Errors and Combination of Multiple Spectral Fits}
+\subsubsubsection{Fit Errors and Combination of Multiple Spectral Fits}
 
 For a given spectral function $f^{(k)}(E)$, the fit is the
 minimization of $\ell^{(k)}(\vec{\lambda})$ with respect to
@@ -413,26 +410,243 @@ p(\ln f^{\rm combined)}(E)) &=& \sum_k w_k p(f^{(k)}(E)), \\
 
 When the function returns, $\verb|flux[j]| = \hat{f}(E_j)$, and $\verb|dlogflux[j]| = \delta \ln \hat{f}(E_j)$.
 
+\subsubsection{Principal Component Spectral Function}
+\label{secPCspectra}
+
+For the functions \verb|pc_spec_inv| and \verb|pc_spec_inv_multi|, we
+use data-derived (discrete) spectral basis functions to parameterize
+the spectrum and associated prior information to constrain those
+parameters.
+
+We begin by assuming a data set of log fluxes:
+\begin{equation}
+x_{j}(t) = \ln f(E_j,t).
+\end{equation}
+
+We compute the mean log flux as:
+\begin{equation}
+\bar{\vec{x}} = \left<\vec{x}(t)\right>,
+\end{equation}
+where $\left<\cdot\right>$ implies an average over time.
+
+We compute the covariance of log flux as:
+\begin{equation}
+\dbul{\Sigma} = \left< \left(\vec{x}(t)-\bar{\vec{x}}\right)\left(\vec{x}(t)-\bar{\vec{x}}\right)^{T} \right>.
+\end{equation}
+
+We eigenfactor $\dbul{\Sigma}$ as:
+\begin{eqnarray}
+\dbul{\Sigma} &=& \dbul{V}\,\dbul{D}\,\dbul{V}^T, \\
+D_{ij} &=& \delta_{ij}d_i.
+\end{eqnarray}
+The columns of $\dbul{V}$ are orthonormal basis vectors, and the
+values $\vec{d}$ on the diagonal of $\dbul{D}$ are the amount of variance
+of the log flux explained by each vector.
+
+Therefore, for any time, we can write:
+\begin{eqnarray}
+\vec{x}(t) &=& \bar{\vec{x}} + \dbul{V}\vec{q}(t), \\
+f(E_j,t) &=& \exp\left[\bar{x}_j + \sum_m V_{jm}q_m(t)\right].
+\end{eqnarray}
+
+The gradient and Hessian of $f$ and $\ln f$ with respect to $\vec{q}$ are:
+\begin{eqnarray}
+\frac{\partial f(E_j)}{\partial q_m} &=& f(E_j)V_{jm}, \\
+\frac{\partial^2 f(E_j)}{\partial q_m \partial q_{m'}} &=& f(E_j)V_{jm}V_{jm'}, \\
+\frac{\partial \ln f(E_j)}{\partial q_m} &=& V_{jm}, \\
+\frac{\partial^2 \ln f(E_j)}{\partial q_m \partial q_{m'}} &=& 0.
+\end{eqnarray}
+
+The $\vec{q}$'s are uncorrelated, nominally Gaussian variables with zero mean and variance
+given by the corresponding entries in $\vec{d}$:
+\begin{equation}
+p(\vec{q}) = \frac{1}{(2\pi)^{N_q/2}||\vec{d}||}\exp\left[-\frac{1}{2}\vec{q}^T\dbul{D}^{-1}\vec{q}\right].
+\end{equation}
+(The underlying assumption of this prior model is that each flux $f(E_j)$ is
+distributed as a log-normal distribution over time).
+
+We denote the negative log likelihood penalty function associated with the prior information as
+$\hat{\ell}$:
+\begin{equation}
+-\ln p(\vec{q}) = \hat{\ell}(\vec{q}) = \frac{1}{2}\vec{q}^T\dbul{D}^{-1}\vec{q} + {\rm ~~ constants}.
+\end{equation}
+Its gradient and Hessian are:
+\begin{eqnarray}
+\frac{\partial \hat{\ell}}{\partial q_m} &=& \frac{q_m}{d_m}, \\ 
+\frac{\partial^2 \hat{\ell}}{\partial q_m \partial q_{m'}} &=& \frac{\delta_{mm'}}{d_m}.
+\end{eqnarray}
+
+The prior information penalty function $\hat{\ell}$ is added to the measurement penalty function (\ref{eqEll}) to give:
+\begin{equation}
+\ell(\vec{q}) = \hat{\ell}(\vec{q}) + \sum_i \ell_i(\lambda_i(\vec{q})). \label{eqEll2}
+\end{equation}
+(In the analytical spectral fitting, there was no prior information to
+constrain the solution $\vec{q}$). Because of the presence of prior
+information it is now technically possible to have more free
+parameters than constraints (i.e., $N_q > N_y$ is allowed).
+
+As before, a nonlinear optimizer is used to minimizer $\vec{\ell}$
+with respect to $\vec{q}$. The solution is denoted $\hat{q}$. The
+error covariance for $\vec{q}$ and $\vec{x}$ (log flux) are given by:
+\begin{eqnarray}
+\cov(q_m,q_{m'}) &=& \left(
+\begin{array}{ccc}
+~ & \vdots & ~ \\
+\cdots & \left.
+\frac{\partial^2 \ell}{\partial q_m \partial q_{m'}}
+\right|_{\hat{q}}
+& \cdots \\
+~ & \vdots & ~ 
+\end{array}
+\right)^{-1}, \\
+\cov(x_j,x_{j'}) &=&
+\sum_{m,m'}\left.\frac{\partial \ln f(E_j)}{\partial q_m}\right|_{\hat{q}}
+\cov(q_m,q_{m'})
+\left.\frac{\partial \ln f(E_{j'})}{\partial q_{m'}}\right|_{\hat{q}}
+= 
+\sum_{m,m'}V_{jm}\cov(q_m,q_{m'})V_{j'm'}.
+\end{eqnarray}
+
+
+\subsection{C language prototypes}
+
+The C language prototypes for the spectral inversion functions can be
+found in ``invlib.h''.
+
+\subsubsection{ana\_spec\_inv}
+
+The first library function is \verb|ana_spec_inv| with the following C prototype:
+\begin{verbatim}
+int ana_spec_inv(const double *y, const double *dy, 
+                 const double *Egrid, const double *H, const double *b,
+                 const long int *int_params, const double *real_params,
+                 char *outFile, double *Eout, 
+                 double *flux, double *dlogflux, 
+		 double *lambda, double *support_data);
+\end{verbatim}
+                  
+This function takes a set of counts \verb|y|, estimated relative error
+on those counts \verb|dy|, and measurement matrix \verb|H| defined on
+energy grid \verb|Egrid|, with estimated background counts \verb|b|,
+and returns \verb|flux| on output energy grid \verb|Eout|. The user
+can select from a variety of analytical functions that will be
+individually fit to the data, and then a ``weighted expected value''
+method will be used to combine multiple analytical fits. The user can
+also control which nonlinear minimization solver is used, and whether
+and where progress messages are printed. The function returns a code
+that indicates success or one of several failure modes. There is a
+multi-case version \verb|ana_spec_inv_multi| described at the end of
+this section.
+
+\subsubsection{ana\_spec\_inv\_multi}
+
+The library also provides a multi-case function,
+\verb|ana_spec_inv_multi|, with the following C prototype:
+\begin{verbatim}
+int ana_spec_inv_multi(const long int Ntimes,
+		       const double *y, const double *dy, 
+		       const double *Egrid, const double *H0, 
+		       const double *dt, const double *b,
+		       const long int *int_params, const double *real_params,
+		       char *outFile, double *Eout, 
+		       double *flux, double *dlogflux, 
+		       double *lambda, double *support_data, 
+		       int *result_codes);
+\end{verbatim}
+This function calls \verb|ana_spec_inv| \verb|Ntimes|, in each case
+advancing the \verb|y| and \verb|b| pointers by \verb|NY| (i.e.,
+moving one row forward, if \verb|y| and \verb|b| are interpreted as
+\verb|Ntimes|$\times$\verb|NY| row-major matrices), and, similarly,
+advancing \verb|flux| and \verb|dlogflux| by
+\verb|NE|. \verb|lambda|, if requested, is advanced by \verb|NY|.
+\verb|support_data|, if requested, is advanced by $(2+\verb|ASI_MAX_NQ|+\verb|NY|)\times(\verb|ASI_MAX_POW2|+1)$,
+where \verb|ASI_MAX_POW2| is presently 4 since $2^4$ is the largest
+function bitmap value, and is defined in ``specinv.h'' for C users.
+
+\verb|result_codes| provides the functional return values.
+The primary difference between \verb|ana_spec_inv| and
+\verb|ana_spec_inv_multi| is that the latter requires
+the aggregation time (\verb|dt|) be passed in separately from the
+instrument response function. For each call to \verb|ana_spec_inv|, a
+temporary \verb|H| will be set to \verb|H0|$\times$\verb|dt[t]|, to
+reflect a possibly changing integration time. The other inputs
+are passed directly to \verb|ana_spec_inv|, without alteration.
+
+The return code of \verb|ana_spec_inv_multi| is typically the first
+non-success result code returned by the multiple calls
+\verb|ana_spec_inv|. Of course, if all calls to \verb|ana_spec_inv| succeed,
+the return code from \verb|ana_spec_inv_multi| will indicate
+success. The only additional exception is if \verb|Ntimes|$<1$, in
+which case the empty input array error code will be returned (-102).
+
+\subsubsection{pc\_spec\_inv}
+\begin{verbatim}
+int pc_spec_inv(const double *y, const double *dy, const double *Egrid, 
+		const double *H, const double *b,
+		const double *mean_log_flux, const double *basis_vectors, 
+		const double *basis_variance,
+		const long int *int_params, const double *real_params,
+		char *outFile, double *flux, double *dlogflux, 
+		double *lambda, double *support_data);
+\end{verbatim}
+
+This function behaves like \verb|ana_spec_inv| except that instead of
+specifying a list of analytical spectral functions to try, prior model
+information is passed in (\verb|mean_log_flux|, \verb|basis_vectors|,
+and \verb|basis_variance|). This function does not have a separate
+energy grid \verb|Eout| for output flux: \verb|Eout| $\equiv$
+\verb|Egrid|.  As we will see below, the input
+\verb|int_params| and the output \verb|support_data| have slightly different
+meanings for this function.
+
+\subsubsection{pc\_spec\_inv\_multi}
+
+\begin{verbatim}
+int pc_spec_inv_multi(const long int Ntimes,
+		      const double *y, const double *dy, 
+		      const double *Egrid, const double *H0, 
+		      const double *dt,const double *b,
+		      const double *mean_log_flux, const double *basis_vectors, 
+		      const double *basis_variance,
+		      const long int *int_params, const double *real_params,
+		      char *outFile, 
+		      double *flux, double *dlogflux, 
+		      double *lambda, double *support_data, 
+		      int *result_codes);
+\end{verbatim}
+
+Like \verb|pc_spec_inv|, this function behaves like its counterpart
+\verb|ana_spec_inv_multi| except that it calls \verb|pc_spec_inv_mult| \verb|Ntimes|. 
+The same prior model information is used for each inversion, and the structure
+of \verb|support_data| is slightly different.
+
 \subsection{Function Arguments}
-\label{secAnaSpecInvArgs}
+\label{secSpecInvArgs}
 
 \begin{itemize}
 \item \verb|y| (input) \verb|y[NY*t+i]| $=$ counts in channel \verb|i| in case \verb|t|.
-\item \verb|dy| (input) \verb|dy[i]| $=$ relative error for channel \verb|i| (rms error of $\log_e\verb|y[i]|$ from calibration)  (dimensionless).
+\item \verb|dy| (input) \verb|dy[i]| $=$ relative error for channel \verb|i| (RMS error of $\ln\verb|y[i]|$ from calibration)  (dimensionless).
 \item \verb|Egrid| (input) \verb|Egrid[j]| $=$ nominal energy of \verb|j|$^{\rm th}$ grid point (e.g., in keV).
 \item \verb|H| (input) \verb|H[NY*j+i]| $=$ response of channel \verb|i| to flux at energy \verb|j| (e.g., in keV\,cm$^2$\,sr\,s).
 \item \verb|dt| (input) \verb|dt[t]| $=$ integration time for case \verb|t|.
 \item \verb|b| (input) \verb|b[NY*t+i]| $=$ expected background counts in channel \verb|i| for case \verb|t|. Best fit when \verb|y[i]|~$\approx$~\verb|b[NY*t+i]|~+~$\sum_j$~\verb|H[NY*j+i]*dt[t]*flux[NE*t+j]|.
+\item \verb|mean_log_flux| (input) \verb|mean_log_flux[j]| $=$ mean natural log flux at energy \verb|j| (e.g., flux in keV\,cm$^2$\,sr\,s).
+\item \verb|basis_vectors| (input) \verb|basis_vectors[|$N_q$\verb|*j+m]| $=V_{jm}$ (note 0-based index in C vs 1-based index in linear algebra).
+\item \verb|basis_variance| (input) \verb|basis_variance[m]| $=d_m$ variance in natural log flux explained by $m^{\rm th}$ basis vector.
 \item \verb|int_params| (input) integer parameters, length $=$ 10. (TBR)
 \subitem \verb|int_params[0]| Number of energy channels, \verb|NY|.
 \subitem \verb|int_params[1]| Number of energy grid points, \verb|NE|.
-\subitem \verb|int_params[2]| Number of energy output points \verb|NEout|.
-\subitem \verb|int_params[3]| Spectral Function Bit Mask (combined via bitwise OR):
+\subitem \verb|int_params[2]| {\it depends on function:}
+\subsubitem \verb|ana_spec_inv| or \verb|ana_spec_inv_multi|: Number of energy output points \verb|NEout|.
+\subsubitem \verb|pc_spec_inv| or \verb|pc_spec_inv_multi|: Number of basis vectors, $N_q$.
+\subitem \verb|int_params[3]| {\it depends on function:}
+\subsubitem \verb|ana_spec_inv| or \verb|ana_spec_inv_multi|: Spectral Function Bit Mask (combined via bitwise OR):
 \subsubitem[1] Power law (PL),
 \subsubitem[2] Exponential (EXP),
 \subsubitem[4] Relativistic Maxwellian (RM),
 \subsubitem[8] Power law with exponential tail (PLE).
 \subsubitem[16] Double Relativistic Maxwellian (RM2),
+\subsubitem \verb|pc_spec_inv| or \verb|pc_spec_inv_multi|: Number of basis vectors to actually use ($N_{q'} \le N_q$).
 \subitem \verb|int_params[4]| Choice of minimizer (choose one):
 \subsubitem[0] Broyden-Fletcher-Goldfarb-Shanno, BFGS (recommended),
 \subsubitem[1] Conjugate Fletcher-Reeves, Conjugate FR,
@@ -452,7 +666,7 @@ When the function returns, $\verb|flux[j]| = \hat{f}(E_j)$, and $\verb|dlogflux[
 \subsubitem[2] $H$ needs to be multiplied by $\Delta E$. Compute $\Delta E$ using plateau rule.
 \subitem \verb|int_params[8]| reserved.
 \subitem \verb|int_params[9]| reserved.
-\item \verb|real_params| (input) real parameters, length 10 (TBR).
+\item \verb|real_params| (input) real parameters, length 10, not used by \verb|pc_spec_inv| or \verb|pc_spec_inv_multi| (TBR)
 \subitem \verb|real_params[0]| = rest energy of particle species.
 \subitem \verb|real_params[1]| = $E_{\rm break}$ used by PLE.
 \subitem \verb|real_params[2]| = $E_0$ used by PLE.
@@ -469,17 +683,24 @@ When the function returns, $\verb|flux[j]| = \hat{f}(E_j)$, and $\verb|dlogflux[
 \item \verb|dlogflux| (output) \verb|dlogflux[NE*t+j]| $=$ standard error of natural log of \verb|flux[NE*t+j]| (dimensionless).
 \item \verb|lambda| (output) \verb|lambda[NY*t+i]| $=$ estimated counts from combined fit for \verb|y[NY*t+i]| (ignored if \verb|NULL|).
 \item \verb|support_data| (output) support data (ignored if \verb|NULL|)
-\subitem stride (\verb|...| below) for each $t$ is \verb|(2+ASI_MAX_NQ+NY)*(ASI_MAX_POW2+1)|. 
-\subitem \verb|support_data[...*t+(2+ASI_MAX_NQ+NY)*k]| $\ell$ for the spectral function with bit mask $2^k$ (dimensionless).
-\subitem \verb|support_data[...*t+(2+ASI_MAX_NQ+NY)*k+1]| $k^{\rm th}$ weight  (dimensionless).
-\subitem \verb|support_data[...*t+(2+ASI_MAX_NQ+NY)*k+2+m]| $m^{\rm th}$ fit parameter for $k^{\rm th}$ function  (dimensionless).
-\subitem \verb|support_data[...*t+(2+ASI_MAX_NQ+NY)*k+2+ASI_MAX_NQ+i]| expected counts for \verb|y[i]|. (usually dimensionless)
+\subitem if function is \verb|ana_spec_inv| or \verb|ana_spec_inv_multi|:
+\subitem stride (\verb|(...)| below) for each $t$ is \verb|(2+ASI_MAX_NQ+NY)*(ASI_MAX_POW2+1)|. 
+\subitem \verb|support_data[(...)*t+(2+ASI_MAX_NQ+NY)*k]| $\ell$ for the spectral function with bit mask $2^k$ (dimensionless).
+\subitem \verb|support_data[(...)*t+(2+ASI_MAX_NQ+NY)*k+1]| $k^{\rm th}$ weight  (dimensionless).
+\subitem \verb|support_data[(...)*t+(2+ASI_MAX_NQ+NY)*k+2+m]| $m^{\rm th}$ fit parameter for $k^{\rm th}$ function  (dimensionless).
+\subitem \verb|support_data[(...)*t+(2+ASI_MAX_NQ+NY)*k+2+ASI_MAX_NQ+i]| expected counts for \verb|y[i]|. (usually dimensionless)
+\subitem if function is \verb|pc_spec_inv| or \verb|pc_spec_inv_multi|:
+\subitem stride (\verb|(...)| below) for each $t$ is $1+N_{q'}$
+\subitem \verb|support_data[(...)*t| $\ell$ 
+\subitem \verb|support_data[(...)*t+1+m]| $m^{\rm th}$ fit parameter (dimensionless).
 \end{itemize}
 
 Notes:
 \begin{enumerate}
 \item Except where noted, array and matrix indices above are zero-based, following C convention rather than one-based linear algebra convention.
-\item For \verb|ana_spec_inv|, assume $t=0$ to compute array indices.
+\item All matrices are passed into/out of C in  ``row major'' format in the ``linear algebra'' sense. That is, each \verb|double *| points to a sequence
+of contiguous rows of the corresponding linear algebra matrix.
+\item For \verb|ana_spec_inv| and \verb|pc_spec_inv|, assume $t=0$ to compute array indices.
 \item \verb|ana_spec_inv| operates on {\it counts} not {\it count rate}|
 \item Missing counts can be replaced with NaN, and the channel will be ignored.
 \item If \verb|dy| is unknown, use $\ln(2)/2$ for factor of 2 95\% confidence bounds, or 0 for Poisson error only.
@@ -499,8 +720,10 @@ Notes:
   the power law, inadvertently giving two votes to roughly the same
   spectrum.
 \item \verb|outFile| is ignored for verbose settings 0, 1, and 2.
+\item \verb|N_{q'}| is used by \verb|pc_spec_inv| and \verb|pc_spec_inv_multi| to fit fewer principal components than $N_q$, which may be desirable
+for speed or stability.
 \item The 95\% confidence interval on \verb|flux[j]| is given by $\verb|flux[j]|\times\exp(\pm 1.9600\times\verb|dlogflux[j]|)$.
-\item  Entries in \verb|support_data| for fit functions not used (i.e., are not set in the spectral function bit mask) are returned without modification.
+\item  For \verb|ana_spec_inv| and \verb|ana_spec_inv_multi|, entries in \verb|support_data| for fit functions not used (i.e., are not set in the spectral function bit mask) are returned without modification.
 \item  \verb|ASI_MAX_NQ| is 10 at the moment, providing for up to 10 free parameters in some future fit function. It may change, but that's unlikely.
 	\verb|specinv.h| defines \verb|ASI_MAX_NQ|, \verb|ASI_MAX_POW2|, and some handy macros for C users.
 \end{enumerate}
@@ -555,51 +778,9 @@ and Matlab codes agree to within 5 or 6 decimal places for inputs of
 noisy power-law and exponential distributions fit to combinations of
 power-law, exponential and relativistic Maxwellian spectra.
 
-\subsection{Library Function ana\_spec\_inv\_multi}
-The library also provides a multi-case function,
-\verb|ana_spec_inv_multi|, with the following C prototype (found in
-``invlib.h''):
-\begin{verbatim}
-int ana_spec_inv_multi(const long int Ntimes,
-		       const double *y, const double *dy, 
-		       const double *Egrid, const double *H0, 
-		       const double *dt, const double *b,
-		       const long int *int_params, const double *real_params,
-		       char *outFile, double *Eout, 
-		       double *flux, double *dlogflux, 
-		       double *lambda, double *support_data, 
-		       int *result_codes);
-\end{verbatim}
-This function calls \verb|ana_spec_inv| \verb|Ntimes|, in each case
-advancing the \verb|y| and \verb|b| pointers by \verb|NY| (i.e.,
-moving one row forward, if \verb|y| and \verb|b| are interpreted as
-\verb|Ntimes|$\times$\verb|NY| row-major matrices), and, similarly,
-advancing \verb|flux| and \verb|dlogflux| by
-\verb|NE|. \verb|lambda| is advanced by \verb|NY|.
-\verb|support_data| is advanced by $(2+\verb|ASI_MAX_NQ|+\verb|NY|)\times(\verb|ASI_MAX_POW2|+1)$,
-where \verb|ASI_MAX_POW2| is presently 4 since $2^4$ is the largest
-function bitmap value, and is defined in ``specinv.h'' for C users.
+\section{Angular Inversion Functions}
 
-\verb|result_codes| provides the functional return values.
-The primary difference between \verb|ana_spec_inv| and
-\verb|ana_spec_inv_multi| is that the latter requires
-the aggregation time (\verb|dt|) be passed in separately from the
-instrument response function. For each call to \verb|ana_spec_inv|, a
-temporary \verb|H| will be set to \verb|H0|$\times$\verb|dt[t]|, to
-reflect a possibly changing integration time. The other inputs
-are passed directly to \verb|ana_spec_inv|, without alteration.
-
-The return code of \verb|ana_spec_inv_multi| is typically the first
-non-success result code returned by the multiple calls
-\verb|ana_spec_inv|. Of course, if all calls to \verb|ana_spec_inv| succeed,
-the return code from \verb|ana_spec_inv_multi| will indicate
-success. The only additional exception is if \verb|Ntimes|$<1$, in
-which case the empty input array error code will be returned (-102).
-
-
-\section{Library Functions omni2uni and wide2uni}
-
-This section describes planned angular inversion functions for
+This section planned angular inversion functions for
 single-channel omnidirectional and wide-angle measurements.
 
 The following C prototypes will be added to ``invlib.h'':
@@ -983,7 +1164,7 @@ In \verb|invlib.tex| (this file), add appropriate documentation:
 \begin{itemize}
 \item Note changes in section \ref{secChanges}, ``Changes''.
 \item Add definition and derivatives of new spectral function to section \ref{secAnalyticalSpectra}.
-\item Update argument list for \verb|ana_spec_inv|, section \ref{secAnaSpecInvArgs}.
+\item Update argument list for \verb|ana_spec_inv|, section \ref{secSpecInvArgs}.
 \end{itemize}
 
 Test compilation with \verb|make| commands. Recompile this file with \verb|pdflatex|.

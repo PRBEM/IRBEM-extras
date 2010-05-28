@@ -107,9 +107,8 @@ double rel_pen(const double lambda,const double y,const void *params, double *gr
   return(pen);
 }
 
-double pc_pen(const gsl_vector *q, const void *params,gsl_vector *grad) {
+double pc_pen(const gsl_vector *q, const void *params,gsl_vector *grad, gsl_matrix *hess) {
   /* principal component amplitude penalty function */
-  /* hess is zero */
   /* negative log likelihood of principal components penalty function */
   /* pc's are assumed to be gaussian with zero mean and variance given by basis_variance */
   double pen=0;
@@ -123,6 +122,12 @@ double pc_pen(const gsl_vector *q, const void *params,gsl_vector *grad) {
     /* d ell / dq_k = q_k / variance_k */
     gsl_vector_memcpy(grad,q);
     gsl_vector_div(grad,ell_params->basis_variance);
+    if (hess) {
+      gsl_matrix_set_zero(hess);
+      for (i=0; i < q->size; i++) {
+	gsl_matrix_set(hess,i,i,1.0/gsl_vector_get(ell_params->basis_variance,i));
+      }
+    }
   }
   return(pen);
 }
@@ -486,10 +491,12 @@ double ell_combine(const gsl_vector *q, void *params_void, gsl_vector *grad, gsl
   /* now, add prior penalty for PC inversion */
   if (ell_params->type == INV_TYPE_PC) {
     /* re-use grad_lambda_qj for pen_grad (_qj b/c _q is only initialized for hess) */
-    ell+=pc_pen(q,ell_params,grad_lambda_qj);
+    ell+=pc_pen(q,ell_params,grad_lambda_qj,hess_lambda_q);
     if (grad) {
       gsl_vector_add(grad,grad_lambda_qj);
-      /* pc_pen contribution to hess is zero */
+      if (hess) {
+	gsl_matrix_add(hess,hess_lambda_q);
+      }
     }
   };
 
@@ -511,7 +518,7 @@ double ell_combine(const gsl_vector *q, void *params_void, gsl_vector *grad, gsl
 }
 
 int check_common_inputs(const long int *int_params, 
-			long int *NYptr, long int *NEptr,
+			long int *NYptr, long int *Ny_validptr, long int *NEptr,
 			long int *minimizer_flagptr,
 			long int *MaxIterptr,
 			long int *verboseptr,
@@ -521,7 +528,8 @@ int check_common_inputs(const long int *int_params,
 			const double *flux, const double *dlogflux,
 			ell_paramsTy *ell_params,const char *outFile) {
   long int i,j; /* loop control vars */
-  int any_y_positive = 0, Ny_valid=0;
+  int any_y_positive = 0;
+  long int Ny_valid=0;
   long int NY,NE,minimizer_flag,MaxIter,verbose,dE_mode;
 
   /* test for input NULLs */
@@ -541,7 +549,7 @@ int check_common_inputs(const long int *int_params,
   *verboseptr = verbose;
   *dE_modeptr = dE_mode;
   /* check for not enough channels */
-  if ((NY<=1) || (NE<=1)) {
+  if ((NY<1) || (NE<=1)) {
     return(INVLIB_ERR_DATAEMPTY);
   }
 
@@ -568,8 +576,12 @@ int check_common_inputs(const long int *int_params,
     }
   }
 
+  if (Ny_validptr) {
+    *Ny_validptr = Ny_valid;
+  }
+
   /* check for not enough valid channels */
-  if (Ny_valid<=1) {
+  if (Ny_valid<1) {
     return(INVLIB_ERR_DATAEMPTY);
   }
 
@@ -715,6 +727,7 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
 ****/
   int result;
   long int NY, NE, NEout, fxn_bit_map, minimizer_flag, MaxIter, verbose, dE_mode;
+  long int Ny_valid=0;
   long int fxn_bit;
   long int i,j; /* loop control vars */
   double m0c2=0,E0=0,E_break=0;
@@ -751,7 +764,7 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
 
   /* check/initialize common inputs/vars */
   if ((result=check_common_inputs(int_params,
-				  &NY,&NE,&minimizer_flag,&MaxIter,&verbose,&dE_mode,
+				  &NY,&Ny_valid,&NE,&minimizer_flag,&MaxIter,&verbose,&dE_mode,
 				  y,dy,Egrid,H,b,flux,dlogflux,&ell_params,outFile
 				  )) != INVLIB_SUCCESS) {
     return(clean_return(result));
@@ -910,98 +923,109 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
       /* store size of q */
       ell_params.Nq = q->size;
 
-      /* now do the optimization */
-      optfun.func = &ell_combine;
-      optfun.params = (void *)(&ell_params);
-      optimize(q,&optfun, minimizer_flag, MaxIter,ell_params.outFilePtr);
-      if (verbose) {
-	/* report fit coefficients */
-	fprintf(ell_params.outFilePtr,"Fit results, q:\n");
-	gsl_vector_fprintf(ell_params.outFilePtr,q,"%lf ");
-	fprintf(ell_params.outFilePtr,"\n");
-      }
+      if (ell_params.Nq > Ny_valid) {
+	/* abort fit, too few constaints */
+	qs[i]=NULL; /* NULL q indicates not fit */
+	gsl_vector_free(q);
+      } else {
 
-      /* store q, flux & errors & covariance */
-      qs[i] = q;
-      /* allocate space for gradient, hess, and q error covariance */
-      grad = gsl_vector_alloc(q->size); 
-      hess = gsl_matrix_alloc(q->size,q->size);
-      covq = gsl_matrix_alloc(q->size,q->size); /* q error covariance = inv(hess) */
-      ells[i] = ell_combine(q,(void*)&ell_params,grad,hess); /* get ell, grad, and hess */
-      if (support_data) {
-      	/* store fit parameters in support data */
-      	support_data[ASI_SD_START(i,NY)] = ells[i];
-      	for (j=0; j < q->size; j++) {	
-      	  support_data[ASI_SD_START(i,NY)+2+j] = gsl_vector_get(q,j);
-      	}
-      }
-      if (support_data || lambda) {
-	/* populate estimated counts */
-	make_lambda(q,&ell_params,lambdak[i]);
+	/* now do the optimization */
+	optfun.func = &ell_combine;
+	optfun.params = (void *)(&ell_params);
+	optimize(q,&optfun, minimizer_flag, MaxIter,ell_params.outFilePtr);
+	if (verbose) {
+	  /* report fit coefficients */
+	  fprintf(ell_params.outFilePtr,"Fit results, q:\n");
+	  gsl_vector_fprintf(ell_params.outFilePtr,q,"%lf ");
+	  fprintf(ell_params.outFilePtr,"\n");
+	}
+	
+	/* store q, flux & errors & covariance */
+	qs[i] = q;
+	/* allocate space for gradient, hess, and q error covariance */
+	grad = gsl_vector_alloc(q->size); 
+	hess = gsl_matrix_alloc(q->size,q->size);
+	covq = gsl_matrix_alloc(q->size,q->size); /* q error covariance = inv(hess) */
+	ells[i] = ell_combine(q,(void*)&ell_params,grad,hess); /* get ell, grad, and hess */
 	if (support_data) {
-	  for (j=0; j < NY; j++) {
-	    support_data[ASI_SD_START(i,NY)+2+ASI_MAX_NQ+j] = gsl_vector_get(lambdak[i],j);
+	  /* store fit parameters in support data */
+	  support_data[ASI_SD_START(i,NY)] = ells[i];
+	  for (j=0; j < q->size; j++) {	
+	    support_data[ASI_SD_START(i,NY)+2+j] = gsl_vector_get(q,j);
 	  }
 	}
+	if (support_data || lambda) {
+	  /* populate estimated counts */
+	  make_lambda(q,&ell_params,lambdak[i]);
+	  if (support_data) {
+	    for (j=0; j < NY; j++) {
+	      support_data[ASI_SD_START(i,NY)+2+ASI_MAX_NQ+j] = gsl_vector_get(lambdak[i],j);
+	    }
+	  }
+	}
+	min_ell = gsl_min(ells[i],min_ell); /* update min_ell */
+	inv_matrix_once(hess,covq,1);
+	
+	gsl_matrix_free(hess); /* don't need this any more */
+	
+	/* prepare space for flux and sigma (dlogflux) */
+	fluxes[i] = gsl_vector_alloc(NEout);
+	sigmas[i] = gsl_vector_alloc(NEout);
+	
+	/* will grad_matrix because we're computing a whole spectrum with flux_multi */
+	grad_matrix = gsl_matrix_alloc(NEout,q->size);
+	/* compute flux spectrum, store gradient wrt q in grad_matrix */
+	flux_multi(ell_params.flux_func,q,&(Eoutgsl.vector),ell_params.flux_func_params,fluxes[i],grad_matrix);
+	
+	/* loop through j and calculate sigmas[i][j] */
+	for (j=1; j <= NEout; j++) {
+	  gsl_vector_set_zero(grad);
+	  /* sigma_flux_i = sqrt(flux_grad_p*covq*flux_grad_p'); */
+	  grad_matrix_row = gsl_matrix_row(grad_matrix,j-1);
+	  gsl_blas_dgemv(CblasNoTrans,1.0,covq,&(grad_matrix_row.vector),0.0,grad); /* grad = covq*row */
+	  gsl_blas_ddot(grad,&(grad_matrix_row.vector),&sigma_flux_j);
+	  sigma_flux_j = sqrt(sigma_flux_j);
+	  gsl_vector_set(sigmas[i],j-1,sigma_flux_j);
+	}
+	
+	/* free memory */
+	gsl_matrix_free(covq);
+	gsl_vector_free(grad);
+	gsl_matrix_free(grad_matrix);
+	
       }
-      min_ell = gsl_min(ells[i],min_ell); /* update min_ell */
-      inv_matrix_once(hess,covq,1);
-
-      gsl_matrix_free(hess); /* don't need this any more */
-
-      /* prepare space for flux and sigma (dlogflux) */
-      fluxes[i] = gsl_vector_alloc(NEout);
-      sigmas[i] = gsl_vector_alloc(NEout);
-
-      /* will grad_matrix because we're computing a whole spectrum with flux_multi */
-      grad_matrix = gsl_matrix_alloc(NEout,q->size);
-      /* compute flux spectrum, store gradient wrt q in grad_matrix */
-      flux_multi(ell_params.flux_func,q,&(Eoutgsl.vector),ell_params.flux_func_params,fluxes[i],grad_matrix);
-
-      /* loop through j and calculate sigmas[i][j] */
-      for (j=1; j <= NEout; j++) {
-	gsl_vector_set_zero(grad);
-	/* sigma_flux_i = sqrt(flux_grad_p*covq*flux_grad_p'); */
-	grad_matrix_row = gsl_matrix_row(grad_matrix,j-1);
-	gsl_blas_dgemv(CblasNoTrans,1.0,covq,&(grad_matrix_row.vector),0.0,grad); /* grad = covq*row */
-	gsl_blas_ddot(grad,&(grad_matrix_row.vector),&sigma_flux_j);
-	sigma_flux_j = sqrt(sigma_flux_j);
-	gsl_vector_set(sigmas[i],j-1,sigma_flux_j);
-      }
-
-      /* free memory */
-      gsl_matrix_free(covq);
-      gsl_vector_free(grad);
-      gsl_matrix_free(grad_matrix);
-
     }
   }
-
   /* compute weights for WEXV combo method
-    % subtract min(elli) from elli to avoid exp of very large numbers
+     % subtract min(elli) from elli to avoid exp of very large numbers
   */
-
+  
   /* compute weights and weight sum for each requested analtyical function */
   weight_sum = 0;
   for (i=0; i <= ASI_MAX_POW2; i++) {
     if (qs[i]) { /* qs[i]=NULL if this function not used */
       /* w = exp(-(elli-min(elli))-Ntheta)'; */
       weights[i] = exp(-(ells[i]-min_ell)-(qs[i]->size));
-      weight_sum += weights[i];
+	weight_sum += weights[i];
     } else {
       weights[i] = 0;
     }
   }
 
+  if (weight_sum == 0.0) {
+    /* abort - not enough data to do any of the q's */
+    return(clean_return(INVLIB_ERR_DATAEMPTY));
+  }
+    
   if (lambda) {
     /* create view of lambda and clear it */
     lambda_view = gsl_vector_view_array(lambda,NY);
     gsl_vector_set_zero(&(lambda_view.vector));
   }
-
-
+  
+  
   /* the following code is written to reduce memory alloc/dealloc,
-   so array/vector variables get reused */
+     so array/vector variables get reused */
   /* will acumulate over i "in place" in flux and dlogflux */
   /* for now, fluxhat is actually logflux, sigmahat is x2 */
   gsl_vector_set_zero(fluxhat); 
@@ -1017,10 +1041,10 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
 	logflux_j = log(flux_j);
 	sigma2_log_flux_j = gsl_pow_2(gsl_vector_get(sigmas[i],j-1)/flux_j); /* sigma squared */
 	/*
-                % weighted mean estimate:
-                logflux_hat(iE) = sum(w.*logflux);
-                x2 = sum(w.*(logflux.^2+sigma2_log_flux));
-                sigma_logflux_hat(iE) = sqrt(x2-logflux_hat(iE)^2);
+	  % weighted mean estimate:
+	  logflux_hat(iE) = sum(w.*logflux);
+	  x2 = sum(w.*(logflux.^2+sigma2_log_flux));
+	  sigma_logflux_hat(iE) = sqrt(x2-logflux_hat(iE)^2);
 	*/
 	tmp_dbl = gsl_vector_get(fluxhat,j-1);
 	gsl_vector_set(fluxhat,j-1,tmp_dbl+weights[i]*logflux_j);
@@ -1032,7 +1056,7 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
       }
     }
   }
-
+  
   /* now logflux -> flux, x2 -> sigma_logflux_hat */
   for (j=1; j <= NEout; j++) {
     logflux_j = gsl_vector_get(fluxhat,j-1);
@@ -1084,7 +1108,7 @@ int ana_spec_inv_multi(const long int Ntimes,
   /* start initialization */
   NY = int_params[0];
   NE = int_params[1];
-  if ((Ntimes<1) || (NY<=1) || (NE<=1)) {
+  if ((Ntimes<1) || (NY<1) || (NE<=1)) {
     return(INVLIB_ERR_DATAEMPTY);
   }
 
@@ -1157,7 +1181,7 @@ int pc_spec_inv(const double *y, const double *dy, const double *Egrid, const do
 
   /* check/initialize common inputs/vars */
   if ((result=check_common_inputs(int_params,
-				  &NY,&NE,&minimizer_flag,&MaxIter,&verbose,&dE_mode,
+				  &NY,NULL,&NE,&minimizer_flag,&MaxIter,&verbose,&dE_mode,
 				  y,dy,Egrid,H,b,flux,dlogflux,&ell_params,outFile
 				  )) != INVLIB_SUCCESS) {
     return(clean_return(result));
@@ -1291,7 +1315,7 @@ int pc_spec_inv_multi(const long int Ntimes,
   NY = int_params[0];
   NE = int_params[1];
   NQ = int_params[3]; /* Nactive_bases */
-  if ((Ntimes<1) || (NY<=1) || (NE<=1) || (NQ<1)) {
+  if ((Ntimes<1) || (NY<1) || (NE<=1) || (NQ<1)) {
     return(INVLIB_ERR_DATAEMPTY);
   }
 
