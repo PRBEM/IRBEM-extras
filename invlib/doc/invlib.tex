@@ -48,7 +48,7 @@ best-fit energy spectrum from a multi-channel measurement.
 \label{secChanges}
 
 \begin{itemize}
-\item{5/28/2010} Updated discussion of principal components transform and maximum likelihood problem setup.
+\item{5/28/2010} Updated discussion of principal components transform and maximum likelihood problem setup. Added figures showing example from CRRES p.c. model
 \item{5/27/2010} Created \verb|pc_spec_inv| and \verb|pc_spec_inv_multi| and associated documentation. Reorganized documentation a little.
 \item{1/6/2010} Created Matlab wrapper and fixed documentation for \verb|omni2uni|.
 \item{3/13/2009} Fixed some pointer bugs in \verb|ana_spec_inv_multi|, tested and fixed invlib.m.
@@ -588,9 +588,9 @@ covariance ($\cov{\delta\vec{q}}$) given by:
 \subsubsection{Example}
 
 The Matlab function \verb|invlib_pc_spec_inv.m| generates two
-figures. The first (Figure~\ref{figPC_Model} is a principal component
+figures. The first (Figure~\ref{figPC_Model}) is a principal component
 model generated from CRRES HEEF and MEA fluxes at $L \sim 4-5$. The
-second (Figure~\ref{figSpec_Inv_example} compares analytical spectral
+second (Figure~\ref{figSpec_Inv_example}) compares analytical spectral
 inversion results to those for principal component spectral
 inversion. Note that in the ``10-PC'' case, there are more free
 parameters than unknowns and the solution is still stable. The ICO
