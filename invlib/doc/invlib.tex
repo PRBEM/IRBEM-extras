@@ -585,6 +585,37 @@ covariance ($\cov{\delta\vec{q}}$) given by:
 \right]^{-1}
 \end{equation}
 
+\subsubsection{Example}
+
+The Matlab function \verb|invlib_pc_spec_inv.m| generates two
+figures. The first (Figure~\ref{figPC_Model} is a principal component
+model generated from CRRES HEEF and MEA fluxes at $L \sim 4-5$. The
+second (Figure~\ref{figSpec_Inv_example} compares analytical spectral
+inversion results to those for principal component spectral
+inversion. Note that in the ``10-PC'' case, there are more free
+parameters than unknowns and the solution is still stable. The ICO
+channels provide little constraint below about 0.8 MeV.
+
+\begin{figure}
+\center{
+\includegraphics[width=40pc]{pc_model.pdf}
+}
+\caption{Principal component derived by combining CRRES MEA and HEEF differential channels.}
+\label{figPC_Model}
+\end{figure}
+
+\begin{figure}
+\center{
+\includegraphics[width=40pc]{pc_spec_inv_example.pdf}
+}
+\caption{An example of fitting power law (PL) and exponential (EXP) spectra
+	or the CRRES principal components model to the counts in 5 ICO
+	electron channels to a simulated exponential with Poisson
+	noise. Dashed lines indicate 1 standard error above and below
+	the fits.}
+\label{figSpec_Inv_example}
+\end{figure}
+
 \subsection{C language prototypes}
 
 The C language prototypes for the spectral inversion functions can be

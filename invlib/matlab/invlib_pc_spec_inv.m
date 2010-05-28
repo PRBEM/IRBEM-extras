@@ -34,47 +34,84 @@ H = reshape(H,NE,NC)';
 
 % don't need Eout
 
-% Suppose you have X, and NT x NE matrix of log fluxes 
-% the mean_log_flux = mean(X);
-% Nq_max is the maximum number of bases you expect to use, Nq_max <= NE
-% [V,D] = eigs(cov(X),Nq_max,'la',struct('issym',1,'disp',0));
-% otherwise, you can use this little code block to make V,D
-V = [ones(NE,1) (1:NE)',((0.5:NE)'-(NE/2)).^2]; % flat, linear, and quadratic PCs
-V(:,1) = V(:,1)/norm(V(:,1));
-V(:,2) = V(:,2)-mean(V(:,2));
-V(:,2) = V(:,2)/norm(V(:,2));
-V(:,3) = V(:,3)-mean(V(:,3));
-V(:,3) = V(:,3)/norm(V(:,3));
-D = diag([3;2;1]); % dummy values for the 
+% load cress sample mean/cov data from CRRES MEA+HEEF combined
+% for L~4-5
 
-basis_vectors = V;
+% Nq_max is the maximum number of bases you expect to use,
+% Nq_max <= length(crres.MeV)
+crres = load('crres_demo_data.mat');
+Nq_max = 10;
+[V,D] = eigs(crres.covX,Nq_max,'la',struct('issym',1,'disp',0));
+
+% assume flux is zero outside crres energy range
+iEgrid = find((Egrid>=crres.MeV(1)) & (Egrid<=crres.MeV(end)));
+H = H(:,iEgrid);
+Egrid = Egrid(iEgrid);
+NE = length(Egrid);
+% in practice, we might use AE8 to extend the energy range above/below the
+% energy range of CRRES MEA+HEEF
+
+% now, interpolate the mean_log_flux and the V's (defined on crres.MeV) onto the Egrid
+mean_log_flux = interp1(log(crres.MeV),crres.meanX,log(Egrid),'linear');
+basis_vectors = interp1(log(crres.MeV),V,log(Egrid),'linear');
 basis_variance = diag(D);
 
-% now, make fake mean_log_flux from analytical fit
-asi_fit = invlib('ana_spec_inv',c(:)',dc(:)',Egrid,H,1,b(:)',Egrid,'pl','exp','dE_mode','G=GdE','outfile',[outfile,'3']);
-% force the mean log flux to a random deviation from the analytical
-% solution, plus some noise
-mean_log_flux = log(asi_fit.flux)'+V*(randn(size(V,2),1).*sqrt(basis_variance))+randn(size(asi_fit.flux'))/10; 
+figure;
+subplot(2,1,1);
+loglog(Egrid,exp(mean_log_flux),'k-','linew',2);
+xlabel('MeV');
+ylabel('#/cm^2/s/sr/MeV');
+legend('<log flux>');
+title('CRRES MEA/HEEF L~4-5 PC Model');
+grid on;
+subplot(2,2,3);
+semilogx(Egrid,basis_vectors(:,1:3),'linew',2);
+xlabel('MeV');
+ylabel('Basis Vectors 1-3');
+grid on;
+subplot(2,2,4);
+semilogy(basis_variance,'o-','linew',2);
+xlabel('PC #');
+ylabel('Variance in log flux');
+grid on;
 
 % now do pc fit
-Nq = 3; % a reduced number of bases to use in the inversion
-fit = invlib('pc_spec_inv',c(:)',dc(:)',Egrid,H,1,b(:)',mean_log_flux,basis_vectors,basis_variance,...
-    'dE_mode','G=GdE','outfile',[outfile,'4'],'num_bases',Nq);
+NQs = [3,5,Nq_max];
+fits = cell(size(NQs));
+for iNq = 1:length(NQs),
+    Nq = NQs(iNq);
+    % a reduced number of bases to use in the inversion
+    fits{iNq} = invlib('pc_spec_inv',c(:)',dc(:)',Egrid,H,1,b(:)',mean_log_flux,basis_vectors,basis_variance,...
+        'dE_mode','G=GdE','outfile',[outfile,'4'],'num_bases',Nq);
+end
+
+% for reference, the analytical fit
+asi_fit = invlib('ana_spec_inv',c(:)',dc(:)',Egrid,H,1,b(:)',Egrid,'pl','exp','dE_mode','G=GdE','outfile',[outfile,'3']);
 
 figure;
-h1 = loglog(Egrid,asi_fit.flux,'b.-',Egrid,asi_fit.flux.*exp(-asi_fit.dlogflux*2),'b.--',Egrid,asi_fit.flux.*exp(+asi_fit.dlogflux*2),'b.-');
+h1 = loglog(Egrid,asi_fit.flux,'ko-',Egrid,asi_fit.flux.*exp(-asi_fit.dlogflux*2),'ko--',Egrid,asi_fit.flux.*exp(+asi_fit.dlogflux*2),'ko--');
 hold on;
-h2 = loglog(Egrid,exp(mean_log_flux),'k-');
-h3 = loglog(Egrid,fit.flux,'ro-',Egrid,fit.flux.*exp(-fit.dlogflux*2),'ro--',Egrid,fit.flux.*exp(+fit.dlogflux*2),'ro--');
-set(gca,'xlim',[0.9,8.5]);
+h2 = loglog(Egrid,exp(mean_log_flux),'k-','linew',2);
+leg = {'Analytical Fit','<log flux> from PC model'};
+h = [h1(1),h2(1)];
+for iNq = 1:length(NQs),
+    fit = fits{iNq};
+    h3 = loglog(Egrid,fit.flux,'.-',Egrid,fit.flux.*exp(-fit.dlogflux*2),'.--',Egrid,fit.flux.*exp(+fit.dlogflux*2),'.--');
+    set(h3,'color',getcolor(iNq,length(NQs)));
+    h(end+1) = h3(1);
+    leg{end+1} = sprintf('%d-PC fit',length(fit.q));
+end
+
+%set(gca,'xlim',[0.9,8.5]);
 xlabel('Energy, MeV');
 ylabel('Flux, #/cm^2/s/sr/MeV');
-legend([h1(1),h2(1),h3(1)],'Analytical Fit','Assumed q=0 PC model','PC fit');
+title('ICO fit example');
+legend(h,leg{:});
 
 % % this code chunk tests calculation of dlogflux which, tragically
 % % is NaN sometimes when the nonlinear optimization fails (the hessian is
 % % not positive definite at the stopping point).
-% 
+%
 % flux = fit.flux';
 % lambda = H*flux;
 % logy = log(c(:));
@@ -85,7 +122,7 @@ legend([h1(1),h2(1),h3(1)],'Analytical Fit','Assumed q=0 PC model','PC fit');
 % pen_grad = -z./sigma./lambda;
 % pen_hess = (1+logy-loglam)./(sigma.*lambda).^2;
 % dfdq = diag(sparse(fit.flux))*basis_vectors(:,1:Nq);
-% 
+%
 % Nq = length(fit.q);
 % d2elldq2 = zeros(Nq);
 % for m = 1:Nq,
@@ -105,15 +142,15 @@ legend([h1(1),h2(1),h3(1)],'Analytical Fit','Assumed q=0 PC model','PC fit');
 %     end
 % end
 % d2elldq2 = d2elldq2+diag(1./basis_variance(1:Nq));
-% 
+%
 % g = basis_vectors(:,1:Nq);
 % varlogflux = g*inv(d2elldq2)*g';
 % dlogflux = sqrt(diag(varlogflux));
 % max(abs(dlogflux-fit.dlogflux'))
-% 
+%
 % disp([any(~isfinite(fit.dlogflux)) any(~isfinite(dlogflux))]);
-% 
+%
 % loglog(Egrid,fit.flux'.*exp(-dlogflux*2),'gs--',Egrid,fit.flux'.*exp(+dlogflux*2),'gs--');
-% 
+%
 % figure;
 % plot(dlogflux,fit.dlogflux,'.');
