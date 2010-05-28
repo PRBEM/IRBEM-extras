@@ -48,6 +48,7 @@ best-fit energy spectrum from a multi-channel measurement.
 \label{secChanges}
 
 \begin{itemize}
+\item{5/28/2010} Updated discussion of principal components transform and maximum likelihood problem setup.
 \item{5/27/2010} Created \verb|pc_spec_inv| and \verb|pc_spec_inv_multi| and associated documentation. Reorganized documentation a little.
 \item{1/6/2010} Created Matlab wrapper and fixed documentation for \verb|omni2uni|.
 \item{3/13/2009} Fixed some pointer bugs in \verb|ana_spec_inv_multi|, tested and fixed invlib.m.
@@ -420,7 +421,14 @@ parameters.
 
 We begin by assuming a data set of log fluxes:
 \begin{equation}
-x_{j}(t) = \ln f(E_j,t).
+x_{j}(t) = \ln f(E_j,t),
+\end{equation}
+with a log-normal distribution:
+\begin{equation}
+p(\vec{x}) = \frac{1}{\sqrt{(2\pi)^{N_E}|\dbul{\Sigma}|}}\exp
+\left[ 
+-\frac{1}{2}\left(\vec{x}-\bar{\vec{x}}\right)^{T}\dbul{\Sigma}^{-1}\left(\vec{x}-\bar{\vec{x}}\right)
+\right] \label{eqPx}
 \end{equation}
 
 We compute the mean log flux as:
@@ -437,15 +445,16 @@ We compute the covariance of log flux as:
 We eigenfactor $\dbul{\Sigma}$ as:
 \begin{eqnarray}
 \dbul{\Sigma} &=& \dbul{V}\,\dbul{D}\,\dbul{V}^T, \\
+\dbul{V}^T\dbul{V} &=& \dbul{I}, \\
 D_{ij} &=& \delta_{ij}d_i.
 \end{eqnarray}
 The columns of $\dbul{V}$ are orthonormal basis vectors, and the
 values $\vec{d}$ on the diagonal of $\dbul{D}$ are the amount of variance
-of the log flux explained by each vector.
+of the log flux spectrum explained by each vector.
 
 Therefore, for any time, we can write:
 \begin{eqnarray}
-\vec{x}(t) &=& \bar{\vec{x}} + \dbul{V}\vec{q}(t), \\
+\vec{x}(t) &=& \bar{\vec{x}} + \dbul{V}\vec{q}(t), \label{eqxVq}\\
 f(E_j,t) &=& \exp\left[\bar{x}_j + \sum_m V_{jm}q_m(t)\right].
 \end{eqnarray}
 
@@ -457,13 +466,19 @@ The gradient and Hessian of $f$ and $\ln f$ with respect to $\vec{q}$ are:
 \frac{\partial^2 \ln f(E_j)}{\partial q_m \partial q_{m'}} &=& 0.
 \end{eqnarray}
 
-The $\vec{q}$'s are uncorrelated, nominally Gaussian variables with zero mean and variance
-given by the corresponding entries in $\vec{d}$:
-\begin{equation}
-p(\vec{q}) = \frac{1}{(2\pi)^{N_q/2}||\vec{d}||}\exp\left[-\frac{1}{2}\vec{q}^T\dbul{D}^{-1}\vec{q}\right].
-\end{equation}
-(The underlying assumption of this prior model is that each flux $f(E_j)$ is
-distributed as a log-normal distribution over time).
+We can then determine the distribution for $\vec{q}$ from (\ref{eqPx}):
+\begin{eqnarray}
+\vec{q} &=& \dbul{V}^T(\vec{x}-\bar{\vec{x}}), \\
+\dbul{\Sigma}^{-1} &=& \dbul{V}\dbul{D}^{-1}\dbul{V}^T, \\
+|\Sigma| &=& |\dbul{D}|, \\
+p(\vec{q}) 
+&=& p(\vec{x})|\dbul{V}| = p(\vec{x})
+= \frac{1}{\sqrt{(2\pi)^{N_q}|\dbul{D}|}}\exp\left[-\frac{1}{2}\vec{q}^T\dbul{D}^{-1}\vec{q}\right].
+\end{eqnarray}
+The $|\dbul{V}|=1$ factor is included for completeness: it conserves
+probability under the change of variables from $\vec{x}$ to $\vec{q}$.  The $\vec{q}$'s are
+therefore uncorrelated, nominally Gaussian variables with zero mean
+and variance given by the corresponding entries in $\vec{d}$.
 
 We denote the negative log likelihood penalty function associated with the prior information as
 $\hat{\ell}$:
@@ -481,15 +496,15 @@ The prior information penalty function $\hat{\ell}$ is added to the measurement 
 \ell(\vec{q}) = \hat{\ell}(\vec{q}) + \sum_i \ell_i(\lambda_i(\vec{q})). \label{eqEll2}
 \end{equation}
 (In the analytical spectral fitting, there was no prior information to
-constrain the solution $\vec{q}$). Because of the presence of prior
+constrain the solution $\vec{q}$, so $\hat{\ell}$ was zero). Because of the presence of prior
 information it is now technically possible to have more free
 parameters than constraints (i.e., $N_q > N_y$ is allowed).
 
 As before, a nonlinear optimizer is used to minimizer $\vec{\ell}$
 with respect to $\vec{q}$. The solution is denoted $\hat{q}$. The
-error covariance for $\vec{q}$ and $\vec{x}$ (log flux) are given by:
+error covariances $\cov \delta \vec{q}$ and $\cov \delta \vec{x}$ (log flux) are given by:
 \begin{eqnarray}
-\cov(q_m,q_{m'}) &=& \left(
+\cov(\delta q_m, \delta q_{m'}) &=& \left(
 \begin{array}{ccc}
 ~ & \vdots & ~ \\
 \cdots & \left.
@@ -499,14 +514,76 @@ error covariance for $\vec{q}$ and $\vec{x}$ (log flux) are given by:
 ~ & \vdots & ~ 
 \end{array}
 \right)^{-1}, \\
-\cov(x_j,x_{j'}) &=&
+\cov(\delta x_j,\delta x_{j'}) &=&
 \sum_{m,m'}\left.\frac{\partial \ln f(E_j)}{\partial q_m}\right|_{\hat{q}}
-\cov(q_m,q_{m'})
+\cov(\delta q_m, \delta q_{m'})
 \left.\frac{\partial \ln f(E_{j'})}{\partial q_{m'}}\right|_{\hat{q}}
 = 
-\sum_{m,m'}V_{jm}\cov(q_m,q_{m'})V_{j'm'}.
+\sum_{m,m'}V_{jm}\cov(\delta q_m, \delta q_{m'})V_{j'm'}.
 \end{eqnarray}
 
+Finally the standard error of the natural log flux is:
+\begin{equation}
+\delta \ln f(E_j) = \delta x_j = \sqrt{\cov(\delta x_j,\delta x_j)}.
+\end{equation}
+
+\subsubsection{Why does this work?}
+
+Maximum likelihood methods are developed in several places; here we
+provide only a brief summary of how one sets up a maximum likelihood
+problem. We wish to solve for some unknowns $\vec{q}$ given some
+information $\vec{y}$. The maximum likelihood solution $\hat{q}$
+maximizes the probability of $\vec{q}$ conditioned on $\vec{y}$. In
+the common notation of probability theory, we maximize $p(\vec{q}|\vec{y})$:
+\begin{equation}
+p(\vec{q}|\vec{y}) = \frac{p(\vec{q},\vec{y})}{p(\vec{y})} = p(\vec{y}|\vec{q})\frac{p(\vec{q})}{p(\vec{y})}.
+\end{equation}
+In practice, we minimize the negative log likelihood:
+\begin{equation}
+-\ln p(\vec{q}|\vec{y}) = -\ln p(\vec{y}|\vec{q}) - \ln p(\vec{q}) + \ln p(\vec{y}).
+\end{equation}
+
+The measurement penalty functions $\ell_i(\lambda_i(\vec{q}))$ provide $-\ln p(\vec{y}|\vec{q})$:
+\begin{equation}
+-\ln p(y_i|\lambda_i(\vec{q})) = \ell_i(\lambda_i(\vec{q})) + {\rm ~~ constants}.
+\end{equation}
+The prior information penalty function $\hat{\ell}(\vec{q})$ provides $-\ln p(\vec{q})$:
+\begin{equation}
+-\ln p(\vec{q}) = \hat{\ell}(\vec{q}) + {\rm ~~ constants}.
+\end{equation}
+
+We note that $p(\vec{y})$ does not depend on $\vec{q}$, and can be dropped from
+the negative log likelihood expression, like other constants. Therefore,
+\begin{equation}
+-\ln p(\vec{q}|\vec{y}) = \ell(\vec{q}) = \hat{\ell}(\vec{q}) + \sum_i \ell_i(\lambda_i(\vec{q})) + {\rm ~~ constants}.
+\end{equation}
+
+In the vicinity of the solution $\hat{q}$, we can Taylor expand $\ell(\vec{q})$:
+\begin{equation}
+\ell(\vec{q}) = \ell(\hat{q}) + 
+\sum_m \left.\frac{\partial \ell}{\partial q_m}\right|_{\hat{q}_m}(q_m-\hat{q}_m) + 
+\sum_{m,m'} (q_{m'}-\hat{q}_{m'})\left.\frac{\partial^2 \ell}{\partial q_m \partial q_{m'}}\right|_{\hat{q_m,q_{m'}}}(q_m-\hat{q}_m) + \mathcal{O}(||\vec{q}-\hat{q}||^3).
+\end{equation}
+The first term is a constant, and the second term is zero (because we evaluate the derivative at the local minimum in $\ell$). If we truncate
+the series in the quadratic term, we have:
+\begin{equation}
+\ell(\vec{q}) = \sum_{m,m'} (q_{m'}-\hat{q}_{m'})\left.\frac{\partial^2 \ell}{\partial q_m \partial q_{m'}}\right|_{\hat{q_m,q_{m'}}}(q_m-\hat{q}_m) + {\rm ~~ constants}.
+\end{equation}
+This is just the expression for the negativelog likelihood of a
+Gaussian distribution in $\delta\vec{q} = \vec{q}-\hat{q}$ with
+covariance ($\cov{\delta\vec{q}}$) given by:
+\begin{equation}
+\cov(\delta\vec{q}) = \left[
+\begin{array}{ccc}
+~ & \vdots & ~ \\
+\cdots & \left.
+\frac{\partial^2 \ell}{\partial q_m \partial q_{m'}}
+\right|_{\hat{q}}
+& \cdots \\
+~ & \vdots & ~ 
+\end{array}
+\right]^{-1}
+\end{equation}
 
 \subsection{C language prototypes}
 
