@@ -68,6 +68,7 @@ subplot(2,2,3);
 semilogx(Egrid,basis_vectors(:,1:3),'linew',2);
 xlabel('MeV');
 ylabel('Basis Vectors 1-3');
+legend('1','2','3','orientation','horiz','location','no');
 grid on;
 subplot(2,2,4);
 semilogy(basis_variance,'o-','linew',2);
@@ -90,6 +91,7 @@ asi_fit = invlib('ana_spec_inv',c(:)',dc(:)',Egrid,H,1,b(:)',Egrid,'pl','exp','d
 
 figure;
 h1 = loglog(Egrid,asi_fit.flux,'ko-',Egrid,asi_fit.flux.*exp(-asi_fit.dlogflux*2),'ko--',Egrid,asi_fit.flux.*exp(+asi_fit.dlogflux*2),'ko--');
+set(h1(1),'linew',2);
 hold on;
 h2 = loglog(Egrid,exp(mean_log_flux),'k-','linew',2);
 leg = {'Analytical Fit','<log flux> from PC model'};
@@ -98,6 +100,7 @@ for iNq = 1:length(NQs),
     fit = fits{iNq};
     h3 = loglog(Egrid,fit.flux,'.-',Egrid,fit.flux.*exp(-fit.dlogflux*2),'.--',Egrid,fit.flux.*exp(+fit.dlogflux*2),'.--');
     set(h3,'color',getcolor(iNq,length(NQs)));
+    set(h3(1),'linew',2);
     h(end+1) = h3(1);
     leg{end+1} = sprintf('%d-PC fit',length(fit.q));
 end
