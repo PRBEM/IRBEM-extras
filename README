@@ -43,3 +43,7 @@ O'Brien.
 kdtree - a C library for building and accessing k-dimensional
 trees. These are handy for finding nearest neighbors in a Pythagorean
 or maximum coordinate distance sense.
+
+rfl - Response Function Library, a set of routines to perform standard
+tasks relating to the response function of idealized and simulated
+instruments.

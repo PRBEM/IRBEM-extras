@@ -1,0 +1,102 @@
+function [inst_info,result_code] = rfl_load_inst_info(FileName,FileType)
+% [inst_info,result_code] = rfl_load_inst_info(FileName,FileType);
+% Populates an inst_info object from file FileName.
+% Supported file types are .cdf, .hd5, .xml (and native, e.g., .mat)
+% FileType can be specified with or without the .
+% if FileType is omitted, the extension of FileName will be used to
+% determine what file type it is.
+% FileName can also be a structure, in which case
+% the returned inst_info will be "fleshed out" with
+% appropriate function pointers and all properties
+% propagated to the channels from their parent
+
+if isstruct(FileName),
+    inst_info = FileName;
+else
+    error('%s not yet defined',mfilename);
+end
+
+if ~isfield(inst_info,'CHANNEL_NAMES'),
+    if nargout >= 2,
+        result_code = -3;
+        return;
+    else
+        error('Missing global property: CHANNEL_NAMES');
+    end
+end
+
+% define fields that can propagate down to channel/species  responses
+prop_flds = {'L_UNIT','E_UNIT','DEAD_TIME_PER_COUNT','DEAD_TYPE','COUNTS_MAX','XCAL','XCAL_RMSE',...
+    'RESP_TYPE','ETP_TYPE','E_TYPE','TP_TYPE','TH_TYPE','E_GRID','TH_GRID','PH_GRID','EPS',...
+    'R','A','G','E0','E1','DE','R1','R2','W1','W2','H1','H2','D','BIDIRECTIONAL'};
+
+for ichan = 1:length(inst_info.CHANNEL_NAMES),
+    chan = inst_info.CHANNEL_NAMES{ichan};
+    % copy inst_info to chan
+    if ~isfield(inst_info.(chan),'SPECIES'),
+        inst_info.(chan).SPECIES = inst_info.SPECIES;
+    end
+    if ~isfield(inst_info,'SPECIES'),
+        if nargout >= 2,
+            result_code = -4;
+            return;
+        else
+            error('Missing channel property: SPECIES');
+        end
+    end
+    for ifld = 1:length(prop_flds),
+        fld = prop_flds{ifld};
+        if ~isfield(inst_info.(chan),fld) && isfield(inst_info,fld),
+            inst_info.(chan).(fld) = inst_info.(fld);
+        end
+    end
+    % copy chan to species
+    for isp = 1:length(inst_info.(chan).SPECIES),
+        sp = inst_info.(chan).SPECIES{isp};
+        for ifld = 1:length(prop_flds),
+            fld = prop_flds{ifld};
+            if ~isfield(inst_info.(chan).(sp),fld) && isfield(inst_info.(chan),fld),
+                inst_info.(chan).(sp).(fld) = inst_info.(chan).(fld);
+            end
+            % copy inst_info.(sp) to inst_info.(chan).(sp)
+            if ~isfield(inst_info.(chan).(sp),fld) && isfield(inst_info.(sp),fld),
+                inst_info.(chan).(sp).(fld) = inst_info.(sp).(fld);
+            end
+        end
+    end
+end
+
+try
+    for ichan = 1:length(inst_info.CHANNEL_NAMES),
+        chan = inst_info.CHANNEL_NAMES{ichan};
+        for isp = 1:length(inst_info.(chan).SPECIES),
+            sp = inst_info.(chan).SPECIES{isp};
+            if ~isfield(inst_info.(chan).(sp),'RESP_TYPE'),
+                error('rfl_load_inst_info:Error5','Missing channel property: RESP_TYPE');
+            end
+            switch(inst_info.(chan).(sp).RESP_TYPE),
+                case {'[E]','[E],[TH]','[E],[TH,PH]'}
+                    inst_info.(chan).(sp) = rfl_init_Eseparable(inst_info.(chan).(sp));
+                case {'[E,TH,PH]'}
+                    inst_info.(chan).(sp) = rfl_init_inseparable(inst_info.(chan).(sp));
+                otherwise
+                    error('rfl_load_inst_info:Error6','Unknown RESP_TYPE: %s',inst_info.(chan).(sp).RESP_TYPE);
+            end
+        end
+    end
+catch err
+    if nargout >= 2,
+        warning(err); % display error info as warning 
+        result_code = -sscanf(err.identifier,'rfl_load_inst_info:Error%d'); % extract error code
+        if isempty(result_code), % extract didn't work
+            result_code = 0; % unknown error
+        end
+        return
+    else
+        error(err); % rethrow
+    end
+end
+
+function resp = rfl_init_inseparable(resp)
+% RESP_TYPE = '[E,TH,PH]';
+error('Not Defined Yet');
