@@ -737,7 +737,8 @@ of \verb|support_data| is slightly different.
 \item \verb|Egrid| (input) \verb|Egrid[j]| $=$ nominal energy of \verb|j|$^{\rm th}$ grid point (e.g., in keV).
 \item \verb|H| (input) \verb|H[NY*j+i]| $=$ response of channel \verb|i| to flux at energy \verb|j| (e.g., in keV\,cm$^2$\,sr\,s).
 \item \verb|dt| (input) \verb|dt[t]| $=$ integration time for case \verb|t|.
-\item \verb|b| (input) \verb|b[NY*t+i]| $=$ expected background counts in channel \verb|i| for case \verb|t|. Best fit when \verb|y[i]|~$\approx$~\verb|b[NY*t+i]|~+~$\sum_j$~\verb|H[NY*j+i]*dt[t]*flux[NE*t+j]|.
+\item \verb|b| (input) \verb|b[NY*t+i]| $=$ expected background counts in channel \verb|i| for case \verb|t|. \\
+Best fit when \verb|y[i]|~$\approx$~\verb|b[NY*t+i]|~+~$\sum_j$~\verb|H[NY*j+i]*dt[t]*flux[NE*t+j]|.
 \item \verb|mean_log_flux| (input) \verb|mean_log_flux[j]| $=$ mean natural log flux at energy \verb|j| (e.g., flux in keV\,cm$^2$\,sr\,s).
 \item \verb|basis_vectors| (input) \verb|basis_vectors[|$N_q$\verb|*j+m]| $=V_{jm}$ (note 0-based index in C vs 1-based index in linear algebra).
 \item \verb|basis_variance| (input) \verb|basis_variance[m]| $=d_m$ variance in natural log flux explained by $m^{\rm th}$ basis vector.
