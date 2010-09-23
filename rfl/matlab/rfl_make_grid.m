@@ -11,10 +11,16 @@ else
     int_method = 'trapz'; % default
 end
 
+if isfield(options,'Nint'),
+    Nint = options.Nint;
+else
+    Nint = 100; % default
+end
+
 if isfield(options,['d',var]),
     dX = options.(['d',var]);
 else
-    dX = (xmin-xmax)/100;
+    dX = (xmin-xmax)/Nint;
 end
 
 switch(int_method),

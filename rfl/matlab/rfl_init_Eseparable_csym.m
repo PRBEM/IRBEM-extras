@@ -13,8 +13,10 @@ switch(inst_info.RESP_TYPE),
         switch(inst_info.TH_TYPE),
             case 'TBL',
                 inst_info.internal.A = @(inst_info,theta,phi)interpn(inst_info.TH_GRID,inst_info.A,theta,'linear',0); % zero outside grid, ignore phi
-                %             case 'PINHOLE', %%
-                %             case 'CYL_TELE', %%
+            case 'PINHOLE',
+                inst_info = init_pinhole(inst_info);
+            case 'CYL_TELE', %%
+                inst_info = init_telescope_csym(inst_info);
             case 'SLAB',
                 inst_info = init_single_element(inst_info,inst_info.H1*inst_info.W1);
             case 'DISK',
@@ -28,6 +30,39 @@ switch(inst_info.RESP_TYPE),
         error('RESP_TYPE %s not defined yet',inst_info.RESP_TYPE);
 end
 
+function inst_info = init_telescope_csym(inst_info)
+% initialize cylindrically symmetric 2-element telescope
+% overloads inst_info.internal.A, sets some inst_info.internal fields, too
+% R1, R2, D, BIDIRECTIONAL
+
+% Using Sullivan's 1971 paper as updated in ~2010
+inst_info.internal.Rs = min(inst_info.R1,inst_info.R2);
+inst_info.internal.thetac = atand(abs(inst_info.R1-inst_info.R2)/inst_info.D);
+inst_info.internal.thetam = atand((inst_info.R1+inst_info.R2)/inst_info.D);
+inst_info.internal.A = @telescope_csym_A;
+
+function A = telescope_csym_A(inst_info,theta,phi)
+% effective area for 2-element cylindrical telescope
+% ignores phi
+% right out of Sullivan's updated paper, equation (10)
+A = zeros(size(theta));
+
+if inst_info.internal.bidirectional,
+    theta = min(theta,180-theta);
+end
+
+f = (theta <= inst_info.internal.thetac);
+if any(f),
+    A(f) = pi*inst_info.internal.Rs^2*cosd(theta(f));
+end
+
+f = (theta > inst_info.internal.thetac) & (theta < inst_info.internal.thetam);
+if any(f),
+    tantheta = tand(theta(f));
+    Psi1 = acos((inst_info.R1^2 + inst_info.D^2*tantheta.^2 - inst_info.R2^2) ./ (2*inst_info.D*inst_info.R1*tantheta)); % rads
+    Psi2 = acos((inst_info.R2^2 + inst_info.D^2*tantheta.^2 - inst_info.R1^2) ./ (2*inst_info.D*inst_info.R2*tantheta)); % rads
+    A(f) = cosd(theta(f))./2.*( inst_info.R1^2*(2*Psi1 - sin(2*Psi1)) + inst_info.R2^2*(2*Psi2-sin(2*Psi2)) );
+end
 
 function inst_info = init_single_element(inst_info,area)
 % initialize angle methods for single element telescopes
@@ -38,7 +73,7 @@ function inst_info = init_single_element(inst_info,area)
 
 inst_info.internal.area = area;
 
-if strcmpi(inst_info.BIDIRECTIONAL,'TRUE'),
+if inst_info.internal.bidirectional,
     inst_info.internal.A = @(inst_info,theta,phi)inst_info.internal.area*cosd(theta);
     inst_info.internal.hA0 = area*2*pi;
 else % this is the case Sullivan treats
@@ -52,7 +87,7 @@ function inst_info = rfl_init_omni(inst_info)
 % make_hA* part of response function with
 % idealized omnidirectional channel
 
-if strcmpi(inst_info.BIDIRECTIONAL,'TRUE'),
+if inst_info.internal.bidirectional,
     inst_info.internal.A = @(inst_info,theta,phi)inst_info.G/4/pi;
     inst_info.internal.hAthetaphi = @fullomni_hAthetaphi;
     inst_info.internal.hAtheta = @fullomni_hAtheta;

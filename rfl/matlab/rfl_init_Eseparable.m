@@ -58,8 +58,9 @@ switch(inst_info.RESP_TYPE),
     case '[E],[TH,PH]',
         switch(inst_info.TP_TYPE),
             case 'TBL',
-                inst_info.internal.A = @(inst_info,theta,phi)interpn(inst_info.TH_GRID,inst_info.PH_GRID,inst_info.A,theta,phi,'linear',0); % zero outside grid
-            %            case 'RECT_TELE', %%
+                inst_info.internal.A = @(inst_info,theta,phi)interpn(inst_info.TH_GRID,inst_info.PH_GRID,inst_info.A,theta,phi,'linear',0); % zero outside grid                
+            case 'RECT_TELE',
+                inst_info = init_telescope_rect(inst_info);
             otherwise
                 error('TP_TYPE %s not defined yet',inst_info.TP_TYPE);
         end
@@ -71,6 +72,38 @@ end
 
 if isa(inst_info.internal.hA0,'function_handle'), % this is a constant, once initialized
     inst_info.internal.hA0 = inst_info.internal.hA0(inst_info);
+end
+
+function inst_info = init_telescope_rect(inst_info)
+% initialize rectangular 2-element telescope
+% overloads inst_info.internal.A, sets some inst_info.internal fields, too
+% W1,H1,W2,H2, D, BIDIRECTIONAL
+
+% Using Sullivan's 1971 paper as updated in ~2010
+inst_info.internal.X = @(zeta,a1,a2) min(zeta+a1/2,a1/2) - max(zeta-a1/2,-a2/2);
+inst_info.internal.A = @telescope_rect_A;
+
+
+function A = telescope_rect_A(inst_info,theta,phi)
+% effective area for 2-element rectangular telescope
+% right out of Sullivan's updated paper, equation (13)
+A = zeros(size(theta));
+
+tantheta = tand(theta);
+zeta = inst_info.D*tantheta.*cosd(phi);
+eta = inst_info.D*tantheta.*sind(phi);
+
+X = inst_info.internal.X(zeta,inst_info.W1,inst_info.W2);
+Y = inst_info.internal.X(eta,inst_info.H1,H2);
+if inst_info.internal.bidirectional,
+    theta = min(theta,180-theta);
+    costheta = cosd(theta);
+else
+    costheta = cosd(min(90,theta));
+end
+f = find((costheta>0) & (X>=0) & (Y>=0)); % apply Heaviside implicitly and resolve tan(90)=inf
+if any(f),
+    A(f) = costheta(f).*X(f).*Y(f); % eq 13 w/o Heaviside functions
 end
 
 function [hAthetaphi,result_code] = make_hAthetaphi(inst_info,thetagrid,phigrid,options)
@@ -102,7 +135,7 @@ else
     hA0 = nan;
 end
 
-function [hAalphabeta,result_code] = make_hAalphabeta(inst_info,alphagrid,betagrid,alpha0,beta0,phib,options)
+function [hAalphabeta,result_code] = make_hAalphabeta(inst_info,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options)
 if isfield(options,'acute'),
     acute = options.acute;
 else
@@ -136,7 +169,7 @@ end
 h = h.*dcosa.*db;
 hAalphabeta = h; % success, returns h
 
-function [hAalpha,result_code] = make_hAalpha(inst_info,alphagrid,alpha0,beta0,phib,options)
+function [hAalpha,result_code] = make_hAalpha(inst_info,alphagrid,tgrid,alpha0,beta0,phib,options)
 betagrid = rfl_make_grid(0,360,options,'beta');
 [hAalphabeta,result_code] = inseparable_hAalphabeta(inst_info,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options);
 if result_code == 1,
@@ -161,21 +194,20 @@ hAtheta = inst_info.internal.hAtheta(inst_info,thetagrid,options);
 hEthetaphi = merge_hE_hangles(hE,hAtheta);
 
 function [hE,result_code] = make_hE_Eseparable(inst_info,Egrid,options)
-hE = inst_info.internal.hA0;
-result_code = 1; % success
+[hE,result_code] = inst_info.hE(inst_info,Egrid,options);
 
-function [hEalphabeta,result_code] = make_hEalphabeta_Eseparable(inst_info,Egrid,alphagrid,betagrid,alpha0,beta0,phib,options)
+function [hEalphabeta,result_code] = make_hEalphabeta_Eseparable(inst_info,Egrid,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options)
 % combines results of make_hE and make_alphabeta
 result_code = 1;
 hE = inst_info.internal.hE(inst_info,Egrid,options);
-hAalphabeta = inst_info.internal.hAalphabeta(inst_info,alphagrid,betagrid,alpha0,beta0,phib,options);
+hAalphabeta = inst_info.internal.hAalphabeta(inst_info,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options);
 hEalphabeta = merge_hE_hangles(hE,hAalphabeta);
 
-function [hEalpha,result_code] = make_hEalpha_Eseparable(inst_info,Egrid,alphagrid,alpha0,beta0,phib,options)
+function [hEalpha,result_code] = make_hEalpha_Eseparable(inst_info,Egrid,alphagrid,tgrid,alpha0,beta0,phib,options)
 % combines results of make_hE and make_alpha
 result_code = 1;
 hE = inst_info.internal.hE(inst_info,Egrid,options);
-hAalpha = inst_info.internal.hAalpha(inst_info,alphagrid,alpha0,beta0,phib,options);
+hAalpha = inst_info.internal.hAalpha(inst_info,alphagrid,tgrid,alpha0,beta0,phib,options);
 hEalpha = merge_hE_hangles(hE,hAalpha);
 
 function [hEiso,result_code] = make_hEiso_Eseparable(inst_info,Egrid,tgrid,options)
@@ -205,7 +237,7 @@ hEthetaphi = repmat(hE,[1 N1 N2]).*repmat(hangles,[NE,1,1]);
 function inst_info = rfl_init_DIFF(inst_info)
 % idealized differential energy channel
 
-inst_info.internal.RE = @(inst_info,E)(E==inst_info.E0)*inst_info.EPS/inst_info.XCAL; % DE gets ignored, which is bad, but unaviodable
+inst_info.internal.RE = @(inst_info,E)(E==inst_info.E0)*inst_info.EPS; % DE gets ignored, which is bad, but unaviodable
 inst_info.internal.hE = @rfl_hE_diff;
 inst_info.internal.hE0 = inst_info.DE*inst_info.EPS/inst_info.XCAL; % hE for flat spectrum
 
@@ -220,7 +252,7 @@ I = rfl_get_list_neighbors(Egrid,inst_info.E0);
 
 i = I(1);
 if (i>=1) && (i < NE), % E(i) <= E0 < E(i+1)
-    hE = inst_info.DE*inst_info.EPS*(Egrid(i+1) - inst_info.E0) / (Egrid(i+1)-Egrid(i));
+    hE = inst_info.DE*inst_info.EPS*(Egrid(i+1) - inst_info.E0) / (Egrid(i+1)-Egrid(i)) ;
 end
 
 i = I(2);
@@ -228,10 +260,12 @@ if (i>=2) && (i <= NE), % E(i-1) < E0 < E(i)
     hE = inst_info.DE*inst_info.EPS*(inst_info.E0-Egrid(i-1)) / (Egrid(i)-Egrid(i-1));
 end
 
+hE = hE / inst_info.XCAL;
+
 function inst_info = rfl_init_INT(inst_info)
 % idealized integral energy channel
 
-inst_info.internal.RE = @(inst_info,E)(E>=inst_info.E0)*inst_info.EPS/inst_info.XCAL;
+inst_info.internal.RE = @(inst_info,E)(E>=inst_info.E0)*inst_info.EPS;
 inst_info.internal.hE = @rfl_hE_int;
 inst_info.internal.hE0 = inf; % hE for flat spectrum
 
@@ -256,13 +290,13 @@ i = I(2);
 if (i>=2) && (i <= NE), % E(i-1) < E0 < E(i)
     hE = dE(i) - (inst_info.E0-Egrid(E(i-1)))^2/(2*(Egrid(i)-Egrid(i-1)));
 end
-hE = hE./inst_info.XCAL;
+hE = hE * inst_info.EPS / inst_info.XCAL;
 
 
 function inst_info = rfl_init_WIDE(inst_info)
 % idealized wide differential energy channel
 
-inst_info.internal.RE = @(inst_info,E)((E>=inst_info.E0)&(E<=inst_info.E1))*inst_info.EPS/inst_info.XCAL;
+inst_info.internal.RE = @(inst_info,E)((E>=inst_info.E0)&(E<=inst_info.E1))*inst_info.EPS;
 inst_info.internal.hE = @rfl_hE_wide;
 inst_info.internal.hE0 = (inst_info.E1-inst_info.E0)*inst_info.EPS/inst_info.XCAL; % hE for flat spectrum
 
@@ -277,6 +311,12 @@ hE = rfl_hE_int(inst_info,Egrid,options)-rfl_hE_int(resptmp,Egrid,options);
 function inst_info = rfl_init_TBL(inst_info)
 % idealized wide differential energy channel
 
-inst_info.internal.RE = @(inst_info,E)interp1(inst_info.E_GRID,inst_info.EPS,E,'linear',0)/inst_info.XCAL; % zero outside grid
+inst_info.internal.RE = @(inst_info,E)interp1(inst_info.E_GRID,inst_info.EPS,E,'linear',0); % zero outside grid
 inst_info.internal.hE = @rfl_hE_tbl;
 inst_info.internal.hE0 = sum(inst_info.E_GRID(:).*inst_info.EPS(:).*rfl_make_deltas(inst_info.E_GRID(:),options))/inst_info.XCAL; % hE for flat spectrum
+
+function [hE,result_code] = rfl_hE_tbl(inst_info,Egrid,options)
+result_code = 1;
+dE = rfl_make_deltas(Egrid,options);
+hE = interp1(inst_info.E_GRID,inst_info.EPS,Egrid,'linear',0).*dE/inst_info.XCAL;
+

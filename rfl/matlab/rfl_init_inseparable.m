@@ -3,7 +3,7 @@ function inst_info = rfl_init_inseparable(inst_info)
 % initialize sensor with inseparable E,theta,phi response
 % RESP_TYPE = '[E,TH,PH]';
 % generic response function in E, theta, phi coordinates
-inst_info.R = @(inst_info,E,theta,phi)interpn(inst_info.E_GRID,inst_info.TH_GRID,inst_info.PH_GRID,inst_info.R,E,theta,phi,'linear',0)/inst_info.XCAL; % set to zero outside grid
+inst_info.R = @(inst_info,E,theta,phi)interpn(inst_info.E_GRID,inst_info.TH_GRID,inst_info.PH_GRID,inst_info.R,E,theta,phi,'linear',0); % set to zero outside grid
 % make_h for grids in instrument coordinates
 inst_info.make_hEthetaphi = @inseparable_hEthetaphi; % on grid in E,theta,phi
 inst_info.make_hEtheta = @inseparable_hEtheta; % on grid in E,theta
@@ -12,6 +12,9 @@ inst_info.make_hE = @inseparable_hE; % on grid in E
 inst_info.make_hEalphabeta = @inseparable_hEalphabeta; % on grid in E,alpha,beta
 inst_info.make_hEalpha = @inseparable_hEalpha; % on grid in E,alpha
 inst_info.make_hEiso = @inseparable_hEiso; % on grid in E
+
+% one private variable
+inst_info.internal.bidirectional = strcmpi(inst_info.BIDIRECTIONAL,'TRUE'); % convert to logical for faster execution
 
 function [hEthetaphi,result_code] = inseparable_hEthetaphi(inst_info,Egrid,thetagrid,phigrid,options)
 dE = rfl_make_deltas(Egrid,options);
@@ -22,7 +25,7 @@ dp = rfl_make_deltas(phigrid,options)*pi/180;
 
 result_code = 1; % success
 R = inst_info.R(inst_info,E,theta,phi);
-h = R.*dE.*dcost.*dp;
+h = R.*dE.*dcost.*dp/inst_info.XCAL;
 hEthetaphi = h; % success, returns h
 
 function [hEtheta,result_code] = inseparable_hEtheta(inst_info,Egrid,thetagrid,options)
@@ -78,7 +81,7 @@ for it = 1:length(tgrid),
         h = h+inst_info.R(inst_info,E,repmat(theta,[NE,1,1]),repmat(phi,[NE,1,1]))*dt(it);
     end
 end
-h = h.*dE.*dcosa.*db;
+h = h.*dE.*dcosa.*db/inst_info.XCAL;
 hEalphabeta = h; % success, returns h
 
 function [hEalpha,result_code] = inseparable_hEalpha(inst_info,Egrid,alphagrid,tgrid,alpha0,beta0,phib,options)
