@@ -101,7 +101,7 @@ if inst_info.internal.bidirectional,
 else
     costheta = cosd(min(90,theta));
 end
-f = find((costheta>0) & (X>=0) & (Y>=0)); % apply Heaviside implicitly and resolve tan(90)=inf
+f = find((costheta>0) & (X>0) & (Y>0)); % apply Heaviside implicitly and resolve tan(90)=inf
 if any(f),
     A(f) = costheta(f).*X(f).*Y(f); % eq 13 w/o Heaviside functions
 end

@@ -21,7 +21,7 @@ h = zeros(length(thetagrid),length(phigrid));
 h(i0,:) = dp;
 if inst_info.internal.bidirectional,
     [dtheta,i0] = min(abs(thetagrid-180)); % find theta nearest 180
-    if dtheta < 90,
+    if dtheta < 90,  % just in case user is implicitly assuming not bidirectional
         h(i0,:) = dp;
     end
 end
@@ -32,11 +32,11 @@ function [hAtheta,result_code] = make_hAtheta_pinhole(inst_info,thetagrid,option
 result_code = 1; % success
 h = zeros(length(thetagrid),1);
 [dtheta,i0] = min(abs(thetagrid)); % find theta nearest 0
-h(i0) = inst_info.G; % sum(h) = G
+h(i0) = 1;
 if inst_info.internal.bidirectional,
     [dtheta,i0] = min(abs(thetagrid-180)); % find theta nearest 180
-    if dtheta < 90,
-        h(i0) = inst_info.G; % sum(h) = G
+    if dtheta < 90, % just in case user is implicitly assuming not bidirectional
+        h(i0) = 1;
     end
 end
 h = inst_info.G/sum(h)*h; % force sum(h) = G
@@ -47,12 +47,16 @@ function [hAalphabeta,result_code] = make_hAalphabeta_pinhole(inst_info,alphagri
 if inst_info.internal.bidirectional,
     tmpinst_info = inst_info;
     tmpinst_info.internal.bidirectional=false;
-    [hAalphabeta,result_code] = make_hAalphabeta_pinhole(tmpinst_info,alphagrid,betagrid,tgrid,180-alpha0,beta0,phib,options);
+    [hAalphabeta1,result_code] = make_hAalphabeta_pinhole(tmpinst_info,alphagrid,betagrid,tgrid,180-alpha0,beta0,phib,options);
     if result_code ~= 1,
         return
     end
-else
-    hAalphabeta = 0;
+    [hAalphabeta,result_code] = make_hAalphabeta_pinhole(inst_info,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options);
+    if result_code ~= 1,
+        return
+    end
+    hAalphabeta = (hAalphabeta1+hAalphabeta)/2;
+    return
 end
 
 if isfield(options,'acute'),
@@ -106,19 +110,23 @@ for it = 1:length(tgrid),
 end
 h = h*inst_info.G*sum(dt)/sum(h); % force sum(h) = G*sum(dt)
 result_code = 1; % success
-hAalphabeta = hAalphabeta+h; % success, returns h
+hAalphabeta = h; % success, returns h
 
 function [hAalpha,result_code] = make_hAalpha_pinhole(inst_info,alphagrid,tgrid,alpha0,beta0,phib,options)
 
 if inst_info.internal.bidirectional,
     tmpinst_info = inst_info;
     tmpinst_info.internal.bidirectional=false;
+    [hAalpha1,result_code] = make_hAalpha_pinhole(tmpinst_info,alphagrid,tgrid,180-alpha0,beta0,phib,options);
+    if result_code ~= 1,
+        return
+    end
     [hAalpha,result_code] = make_hAalpha_pinhole(tmpinst_info,alphagrid,tgrid,180-alpha0,beta0,phib,options);
     if result_code ~= 1,
         return
     end
-else
-    hAalpha = 0;
+    hAalpha = (hAalpha+hAlpha1)/2;
+    return
 end
 
 if isfield(options,'acute'),
