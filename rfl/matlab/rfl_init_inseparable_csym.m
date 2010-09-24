@@ -7,6 +7,8 @@ function inst_info = rfl_init_inseparable_csym(inst_info)
 
 % overload
 % generic response function in E, theta coordinates, ignores phi input
-inst_info.R = @(inst_info,E,theta,phi)interpn(inst_info.E_GRID,inst_info.TH_GRID,inst_info.R,E,theta,'linear',0); % set to zero outside grid
+
+% min/max forces plateau extrapolation in E
+inst_info.R = @(inst_info,E,theta,phi)interpn(inst_info.E_GRID,inst_info.TH_GRID,inst_info.R,min(max(E,inst_info.E_GRID(1)),inst_info.E_GRID(end)),theta,'linear',0); % set to zero outside grid
 
 % All other methods are the same as in the R(E,theta,phi) inseparable case.

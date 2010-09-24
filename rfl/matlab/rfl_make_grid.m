@@ -1,9 +1,13 @@
-function Xgrid = rfl_make_grid(xmin,xmax,options,var)
-% Xgrid = rfl_make_grid(xmin,xmax,options,var)
+function Xgrid = rfl_make_grid(xmin,xmax,var,options)
+% Xgrid = rfl_make_grid(xmin,xmax,var,options)
 % creates column vector of evenly spaced points
 % from xmin to xmax based on options.int_method
 % and options.(['d',var]) (e.g., options.dbeta)
 % for trapz int_method, includes xmin and xmax
+
+if nargin < 4,
+    options = [];
+end
 
 if isfield(options,'int_method'),
     int_method = options.int_method;

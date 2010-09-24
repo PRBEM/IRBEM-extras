@@ -3,7 +3,10 @@ function inst_info = rfl_init_inseparable(inst_info)
 % initialize sensor with inseparable E,theta,phi response
 % RESP_TYPE = '[E,TH,PH]';
 % generic response function in E, theta, phi coordinates
-inst_info.R = @(inst_info,E,theta,phi)interpn(inst_info.E_GRID,inst_info.TH_GRID,inst_info.PH_GRID,inst_info.R,E,theta,phi,'linear',0); % set to zero outside grid
+
+% min/max forces plateau extrapolation in E
+inst_info.R = @(inst_info,E,theta,phi)interpn(inst_info.E_GRID,inst_info.TH_GRID,inst_info.PH_GRID,inst_info.R,min(max(E,inst_info.E_GRID(1)),inst_info.E_GRID(end)),theta,phi,'linear',0); % set to zero outside grid
+
 % make_h for grids in instrument coordinates
 inst_info.make_hEthetaphi = @inseparable_hEthetaphi; % on grid in E,theta,phi
 inst_info.make_hEtheta = @inseparable_hEtheta; % on grid in E,theta
@@ -29,7 +32,7 @@ h = R.*dE.*dcost.*dp/inst_info.XCAL;
 hEthetaphi = h; % success, returns h
 
 function [hEtheta,result_code] = inseparable_hEtheta(inst_info,Egrid,thetagrid,options)
-phigrid = rfl_make_grid(0,360,options,'phi');
+phigrid = rfl_make_grid(0,360,'phi',options);
 [hEthetaphi,result_code] = inseparable_hEthetaphi(inst_info,Egrid,thetagrid,phigrid,options);
 if result_code == 1,
     hEtheta = sum(hEthetaphi,3);
@@ -38,7 +41,7 @@ else
 end
 
 function [hE,result_code] = inseparable_hE(inst_info,Egrid,options)
-thetagrid = rfl_make_grid(0,180,options,'theta');
+thetagrid = rfl_make_grid(0,180,'theta',options);
 [hEtheta,result_code] = inseparable_hEtheta(inst_info,Egrid,thetagrid,options);
 if result_code == 1,
     hE = sum(hEtheta,2);
@@ -85,7 +88,7 @@ h = h.*dE.*dcosa.*db/inst_info.XCAL;
 hEalphabeta = h; % success, returns h
 
 function [hEalpha,result_code] = inseparable_hEalpha(inst_info,Egrid,alphagrid,tgrid,alpha0,beta0,phib,options)
-betagrid = rfl_make_grid(0,360,options,'beta');
+betagrid = rfl_make_grid(0,360,'beta',options);
 [hEalphabeta,result_code] = inseparable_hEalphabeta(inst_info,Egrid,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options);
 if result_code == 1,
     hEalpha = sum(hEalphabeta,3);

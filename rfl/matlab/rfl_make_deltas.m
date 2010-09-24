@@ -2,6 +2,10 @@ function d = rfl_make_deltas(grid,options)
 % d = rfl_make_deltas(grid,options)
 % d are the default weights for a given 1-d grid
 
+if nargin < 2,
+    options = [];
+end
+
 if isfield(options,'int_method'),
     int_method = options.int_method;
 else

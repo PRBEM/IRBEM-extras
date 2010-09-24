@@ -10,6 +10,7 @@ function inst_info = rfl_init_Eseparable(inst_info)
 % can be done much faster when integrals are separated
 
 inst_info.R = @(inst_info,E,theta,phi)inst_info.internal.RE(inst_info,E).*inst_info.internal.A(inst_info,theta,phi);
+
 inst_info.make_hEthetaphi = @make_hEthetaphi_Eseparable;
 inst_info.make_hEtheta = @make_hEtheta_Eseparable;
 inst_info.make_hE = @make_hE_Eseparable;
@@ -32,7 +33,7 @@ inst_info.internal.hA0 = @make_hA0; % - will become a constant of type double be
 inst_info.internal.merge_hE_hangles = @merge_hE_hAngles; % useful for derived classes to call, too
 % sensor-specific protected functions/methods:
 % inst_info.internal.A(inst_info,theta,phi) - area function, used for R
-% inst_info.internal.RE(E) - eps(E), used for R
+% inst_info.internal.RE(inst_info,E) - eps(E), used for R
 % inst_info.internal.hE0 - hE for flat spectrum
 % inst_info.internal.hE(inst_info,Egrid,options), used for hE*hA
 
@@ -118,7 +119,7 @@ h = A.*dcost.*dp;
 hAthetaphi = h; % success, returns h
 
 function [hAtheta,result_code] = make_hAtheta(inst_info,thetagrid,options)
-phigrid = rfl_make_grid(0,360,options,'phi');
+phigrid = rfl_make_grid(0,360,'phi',options);
 [hAthetaphi,result_code] = make_hAthetaphi(inst_info,thetagrid,phigrid,options);
 if result_code == 1,
     hAtheta = sum(hAthetaphi,3);
@@ -126,9 +127,9 @@ else
     hAtheta = nan;
 end
 
-function [hA0,result_code] = make_hA0(inst_info,Egrid,options)
-thetagrid = rfl_make_grid(0,180,options,'theta');
-[hAtheta,result_code] = make_hAtheta(inst_info,thetagrid,options);
+function [hA0,result_code] = make_hA0(inst_info)
+thetagrid = rfl_make_grid(0,180,'theta',options);
+[hAtheta,result_code] = make_hAtheta(inst_info,thetagrid,[]);
 if result_code == 1,
     hA0 = sum(hAtheta,2);
 else
@@ -170,7 +171,7 @@ h = h.*dcosa.*db;
 hAalphabeta = h; % success, returns h
 
 function [hAalpha,result_code] = make_hAalpha(inst_info,alphagrid,tgrid,alpha0,beta0,phib,options)
-betagrid = rfl_make_grid(0,360,options,'beta');
+betagrid = rfl_make_grid(0,360,'beta',options);
 [hAalphabeta,result_code] = inseparable_hAalphabeta(inst_info,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options);
 if result_code == 1,
     hAalpha = sum(hAalphabeta,2);
@@ -191,10 +192,11 @@ function [hEtheta,result_code] = make_hEtheta_Eseparable(inst_info,Egrid,thetagr
 result_code = 1;
 hE = inst_info.internal.hE(inst_info,Egrid,options);
 hAtheta = inst_info.internal.hAtheta(inst_info,thetagrid,options);
-hEthetaphi = merge_hE_hangles(hE,hAtheta);
+hEtheta = merge_hE_hangles(hE,hAtheta);
 
 function [hE,result_code] = make_hE_Eseparable(inst_info,Egrid,options)
-[hE,result_code] = inst_info.hE(inst_info,Egrid,options);
+[hE,result_code] = inst_info.internal.hE(inst_info,Egrid,options);
+hE = hE*inst_info.internal.hA0;
 
 function [hEalphabeta,result_code] = make_hEalphabeta_Eseparable(inst_info,Egrid,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options)
 % combines results of make_hE and make_alphabeta
@@ -242,6 +244,7 @@ inst_info.internal.hE = @rfl_hE_diff;
 inst_info.internal.hE0 = inst_info.DE*inst_info.EPS/inst_info.XCAL; % hE for flat spectrum
 
 function [hE,result_code] = rfl_hE_diff(inst_info,Egrid,options)
+% options is ignored
 result_code = 1;
 NE = length(Egrid);
 hE = zeros(size(Egrid));
@@ -311,12 +314,14 @@ hE = rfl_hE_int(inst_info,Egrid,options)-rfl_hE_int(resptmp,Egrid,options);
 function inst_info = rfl_init_TBL(inst_info)
 % idealized wide differential energy channel
 
-inst_info.internal.RE = @(inst_info,E)interp1(inst_info.E_GRID,inst_info.EPS,E,'linear',0); % zero outside grid
+% min/max forces plateau extrapolation in E
+inst_info.internal.RE = @(inst_info,E)interp1(inst_info.E_GRID,inst_info.EPS,min(max(E,inst_info.E_GRID(1)),inst_info.E_GRID(end)),'linear',0); % set to zero outside grid
+
 inst_info.internal.hE = @rfl_hE_tbl;
-inst_info.internal.hE0 = sum(inst_info.E_GRID(:).*inst_info.EPS(:).*rfl_make_deltas(inst_info.E_GRID(:),options))/inst_info.XCAL; % hE for flat spectrum
+inst_info.internal.hE0 = sum(inst_info.E_GRID(:).*inst_info.EPS(:).*rfl_make_deltas(inst_info.E_GRID(:)))/inst_info.XCAL; % hE for flat spectrum
 
 function [hE,result_code] = rfl_hE_tbl(inst_info,Egrid,options)
 result_code = 1;
 dE = rfl_make_deltas(Egrid,options);
-hE = interp1(inst_info.E_GRID,inst_info.EPS,Egrid,'linear',0).*dE/inst_info.XCAL;
+hE = inst_info.internal.RE(inst_info,Egrid).*dE/inst_info.XCAL;
 

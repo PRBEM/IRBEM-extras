@@ -17,12 +17,7 @@ else
 end
 
 if ~isfield(inst_info,'CHANNEL_NAMES'),
-    if nargout >= 2,
-        result_code = -3;
-        return;
-    else
-        error('Missing global property: CHANNEL_NAMES');
-    end
+    error('Missing global property: CHANNEL_NAMES');
 end
 
 % define fields that can propagate down to channel/species  responses
@@ -37,12 +32,7 @@ for ichan = 1:length(inst_info.CHANNEL_NAMES),
         inst_info.(chan).SPECIES = inst_info.SPECIES;
     end
     if ~isfield(inst_info,'SPECIES'),
-        if nargout >= 2,
-            result_code = -4;
-            return;
-        else
-            error('Missing channel property: SPECIES');
-        end
+        error('Missing channel property: SPECIES');
     end
     for ifld = 1:length(prop_flds),
         fld = prop_flds{ifld};
@@ -66,38 +56,24 @@ for ichan = 1:length(inst_info.CHANNEL_NAMES),
     end
 end
 
-try
-    for ichan = 1:length(inst_info.CHANNEL_NAMES),
-        chan = inst_info.CHANNEL_NAMES{ichan};
-        for isp = 1:length(inst_info.(chan).SPECIES),
-            sp = inst_info.(chan).SPECIES{isp};
-            if ~isfield(inst_info.(chan).(sp),'RESP_TYPE'),
-                error('rfl_load_inst_info:Error5','Missing channel property: RESP_TYPE');
-            end
-            % initialize to inseparable, then let other initializations overload methods
-            inst_info.(chan).(sp) = rfl_init_inseparable(inst_info.(chan).(sp));
-            switch(inst_info.(chan).(sp).RESP_TYPE),
-                case {'[E,TH,PH]'},
-                    % do nothing, already fully initialized
-                case {'[E,TH]'},
-                    inst_info.(chan).(sp) = rfl_init_inseparable_csym(inst_info.(chan).(sp));
-                case {'[E]','[E],[TH]','[E],[TH,PH]'}
-                    inst_info.(chan).(sp) = rfl_init_Eseparable(inst_info.(chan).(sp));
-                otherwise
-                    error('rfl_load_inst_info:Error6','Unknown RESP_TYPE: %s',inst_info.(chan).(sp).RESP_TYPE);
-            end
+for ichan = 1:length(inst_info.CHANNEL_NAMES),
+    chan = inst_info.CHANNEL_NAMES{ichan};
+    for isp = 1:length(inst_info.(chan).SPECIES),
+        sp = inst_info.(chan).SPECIES{isp};
+        if ~isfield(inst_info.(chan).(sp),'RESP_TYPE'),
+            error('rfl_load_inst_info:Error5','Missing channel property: RESP_TYPE');
         end
-    end
-catch err
-    if nargout >= 2,
-        warning(err); % display error info as warning
-        result_code = -sscanf(err.identifier,'rfl_load_inst_info:Error%d'); % extract error code
-        if isempty(result_code), % extract didn't work
-            result_code = 0; % unknown error
+        % initialize to inseparable, then let other initializations overload methods
+        inst_info.(chan).(sp) = rfl_init_inseparable(inst_info.(chan).(sp));
+        switch(inst_info.(chan).(sp).RESP_TYPE),
+            case {'[E,TH,PH]'},
+                % do nothing, already fully initialized
+            case {'[E,TH]'},
+                inst_info.(chan).(sp) = rfl_init_inseparable_csym(inst_info.(chan).(sp));
+            case {'[E]','[E],[TH]','[E],[TH,PH]'}
+                inst_info.(chan).(sp) = rfl_init_Eseparable(inst_info.(chan).(sp));
+            otherwise
+                error('rfl_load_inst_info:Error6','Unknown RESP_TYPE: %s',inst_info.(chan).(sp).RESP_TYPE);
         end
-        return
-    else
-        error(err); % rethrow
     end
 end
-

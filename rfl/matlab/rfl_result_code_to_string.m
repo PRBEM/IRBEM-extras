@@ -25,16 +25,6 @@ switch(rc),
         str = 'Unknown Error';
     case -1,
         str = 'Incorrect/Inconsistent Argument Size';
-    case -2,
-        str = 'Missing channel property: G';
-    case -3,
-        str = 'Missing global property: CHANNEL_NAMES';
-    case -4,
-        str = 'Missing channel property: SPECIES';
-    case -5,
-        str = 'Missing property: RESP_TYPE';
-    case -6,
-        str = 'Unknown RESP_TYPE';
     otherwise
         error('Unknown Result Code %d',rc);
 end
