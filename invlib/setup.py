@@ -11,10 +11,11 @@ import os, sys, shutil
 #test for python version 2.x where x>=5
 try:
     dum = sys.version_info
-    assert dum[0]==2
-    assert dum[1]>=5
+    assert dum[0]>=2
+    if dum[0]==2:
+        assert dum[1]>=5
 except:
-    raise Exception("""PyInvlib requires Python 2.X, where X>=5.""")
+    raise Exception("""PyInvlib requires Python version >2.5""")
 
 try:
     shutil.copy('invlib.so','pyinvlib/invlib.so')

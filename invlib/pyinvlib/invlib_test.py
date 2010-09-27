@@ -9,7 +9,19 @@ Date Created: 23 Sept. 2010
 
 import unittest
 import pyinvlib as pinv
-import numpy as np
+
+def ravel(mylist):
+    newlist = []
+    for row in mylist:
+        # may have nested tuples or lists
+        if type(row) in (list, tuple):
+            newlist.extend(ravel(row))
+        else:
+            newlist.append(row)
+    return newlist
+
+def transpose(arr):
+    return [[r[col] for r in arr] for col in range(len(arr[0]))]
 
 class SpecInvTests(unittest.TestCase):
 
@@ -29,9 +41,9 @@ class SpecInvTests(unittest.TestCase):
         Eout = list(dum._params[-5])
         flux = list(dum._params[-4])
         dlogflux = list(dum._params[-3])
-        pyoutput = np.array([Eout,flux,dlogflux]).transpose()
+        pyoutput = transpose([Eout,flux,dlogflux])
         
-        coutput = np.array([[0.01,419526,0.849366],
+        coutput = [[0.01,419526,0.849366],
             [0.615859,208717,0.373893],
             [1.22172,105992,0.311219],
             [1.82758,53916,0.266113],
@@ -80,13 +92,13 @@ class SpecInvTests(unittest.TestCase):
             [27.8795,1.40205e-08,2.10051],
             [28.4854,7.14826e-09,2.15596],
             [29.0912,3.64449e-09,2.21145],
-            [29.6971,1.85812e-09,2.26698]])
-        
+            [29.6971,1.85812e-09,2.26698]]
+            
         self.assertEqual(result,1)
         
-        for pel, cel in zip(pyoutput.ravel(),coutput.ravel()):
+        for pel, cel in zip(ravel(pyoutput),ravel(coutput)):
             pel = '%6g' % pel
-            self.assertAlmostEqual(float(pel), cel, 6)
+            self.assertAlmostEqual(float(pel), cel, places=6)
             
     def testSpecInvErrors(self):
         """running ana_spec_inv with bad test inputs should fail"""
@@ -104,11 +116,12 @@ class SpecInvTests(unittest.TestCase):
         result = dum.anaSpecInv()
         self.assertEqual(result, -401)
     
-    #def testSpecInvNoInput(self):
-        #"""should raise errors if no inputs given"""
+    def testSpecInvNoInput(self):
+        """should raise errors if no inputs given"""
         
-        #dum = pinv.SpecInv()
-        #self.assertRaises(TypeError, dum.anaSpecInv())
+        dum = pinv.SpecInv()
+        self.assertRaises(TypeError, lambda _:dum.anaSpecInv())
+
         
 
 if __name__ == "__main__":

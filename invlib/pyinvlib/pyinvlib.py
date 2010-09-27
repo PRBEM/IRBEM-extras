@@ -64,7 +64,7 @@ class SpecInv(object):
         
         #read file
         deflen = infile.readline().rstrip().split() #1st line, newline removed, split on whitespace
-        NC, NE, NEout = long(deflen[0]), long(deflen[1]), long(deflen[2])
+        NC, NE, NEout = int(deflen[0]), int(deflen[1]), int(deflen[2])
         
         #define vars
         c, dc = NC*ctypes.c_double, NC*ctypes.c_double
@@ -101,32 +101,35 @@ class SpecInv(object):
         
         return None
     
-    def readRespFunc(self):
+    def readRespFunc(self, fname=None):
         #method stub for reading PRBEM format response functions
-        pass
+        try:
+            from spacepy import pycdf
+            rfun = pycdf.CDF(fname)
+        except ImportError:
+            pass
         
     def setParams(self, func=1+2, minim=0, niter=10000, fittype='ana', NEout=20):
         """Generic method for setting parameter inputs to either ana_spec* or pc_spec*"""
         try:
             assert self.counts
             assert len(self.dcounts)==len(self.counts)
-            assert len(self.Egrid)==len(self.counts)
-            NC = 1 #how to calc number of channels?
-            NE = long(len(self.counts))
+            #NC = 1 #how to calc number of channels?
+            NE = int(len(self.Egrid))
         except (AssertionError, AttributeError):
             raise TypeError('Counts, Relative Error on Counts and Energy grid must be defined')
         
         try:
-            assert H
+            assert self.H
         except:
             raise AttributeError('Response functions must be specified')
         
         #define outputs
         try:
             Eout = self.Eout
-            NEout = long(len(Eout))
+            NEout = int(len(Eout))
         except AttributeError:
-            NEout = long(NEout)
+            NEout = int(NEout)
             
             Eout = NEout*ctypes.c_double
             Eout = Eout(*self._default_Eout)  ##set default log grid of 20 energies
@@ -137,11 +140,14 @@ class SpecInv(object):
         intp = ctypes.c_long*10
         realp = ctypes.c_double*10
         if fittype=='ana':
-            intp = intp(*[NC, NE, NEout, func, minim, niter, self._verb, 0, 0, 0])
+            intp = intp(*[self.NC, NE, NEout, func, minim, niter, 
+                self._verb, 0, 0, 0])
             realp = realp(*[self.rme, 100, 345, 0, 0, 0, 0, 0, 0, 0])
+        elif fittype=='pc':
+            pass
         
         self._params = (self.counts, self.dcounts, self.Egrid, 
-            H, b, intp, realp, None, Eout, flux, dlogflux, None, None)
+            self.H, self.b, intp, realp, None, Eout, flux, dlogflux, None, None)
         
         return None
 
@@ -191,6 +197,17 @@ class SpecInv(object):
         csv.writer(open(fnameout,'w'), delimiter=',').writerows(outlist)
         print('Output written to file: %s' % fnameout)
 
+
+class AngInv(object):
+    def __init__(self):
+        pass
+    
+    def omni2uni(self):
+        pass
+    
+    def wide2uni(self):
+        pass
+    
 
 if __name__=='__main__':
     execfile('invlib_test.py')
