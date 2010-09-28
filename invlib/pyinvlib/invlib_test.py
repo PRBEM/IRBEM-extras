@@ -108,9 +108,26 @@ class SpecInvTests(unittest.TestCase):
         """should raise errors if no inputs given"""
         
         dum = pinv.SpecInv()
-        self.assertRaises(TypeError, lambda _:dum.anaSpecInv())
+        foo = lambda:dum.anaSpecInv()
+        self.assertRaises(TypeError, foo)
 
+
+class AngInvTests(unittest.TestCase):
+
+    def setUp(self):
+        super(AngInvTests, self).setUp()        
+
+    def tearDown(self):
+        super(AngInvTests, self).tearDown()
         
+    def testAngInvMethod(self):
+        """should raise errors if bad method given"""
+        
+        dum = pinv.AngInv()
+        foo = lambda:dum.omni2uni(method='bad')
+        self.assertRaises(ValueError, foo)
+        foo = lambda:dum.wide2uni(method='bad')
+        self.assertRaises(ValueError, foo)
 
 if __name__ == "__main__":
     unittest.main()

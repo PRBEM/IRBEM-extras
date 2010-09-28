@@ -11,7 +11,7 @@ where the setup and function call are from within Python
 
 To Do:
 Enable read support for PRBEM response files
-Enable read support for LANL standard response files
+Finalize read support for LANL standard response files
 Generalize calling of ana_spec_inv
 Add support for calling of ana_spec_inv_multi (within extant functions)
 Add support for calling pc_spec_inv (and _multi)
@@ -29,8 +29,10 @@ else:
     raise NotImplementedError('Your platform is not currently supported')
 
 floc = locals()['__file__'].split('/')
-libpath = '/'.join(floc[:-1])+'/'
+libpath = '/'.join(floc[:-1])+'/' #should use os funcs for this to maintain platform independence
 
+
+##following two functions can be removed when numpy1.5 compatibility in Python3 is tested
 def ravel(mylist):
     newlist = []
     for row in mylist:
@@ -43,7 +45,7 @@ def ravel(mylist):
 
 def transpose(arr):
     return [[r[col] for r in arr] for col in range(len(arr[0]))]
-    
+#----------------------
 
 class SpecInv(object):
     """Spectral Inversion class using INVLIB
@@ -78,7 +80,7 @@ class SpecInv(object):
         #this should be put into numpy arrays (ensuring Py3k compliance)
 
         fobj = open(fname, 'r')
-        header, data = [], []
+        header, data, Earray = [], [], []
         
         c_symb = ';'
         for line in fobj:
@@ -86,13 +88,30 @@ class SpecInv(object):
                 header.append(line.rstrip())
             else:
                 if line.rstrip()!='': #skip blank lines
-                    data.append(line.rstrip().split())
+                    dum = line.rstrip().split()
+                    data.append(dum[1:])
+                    Earray.extend(dum[0]) #get energies from first column
         
         #move first line to column header list
         col_hdr = data.pop(0)
+        
+        #set attributes
+        #probably need to interpolate response function onto same energy grid as Egrid
+        #which corresponds to the data
+        self.H = data
+        self.Hgrid = Earray
+        self.Hcols = col_hdr
 
-        return {'data': data, 'columns': col_hdr, 'header': header}
+        if self._verb: print('LANL response file read:\n%s' % header[:2])
+        
+        try:
+            assert self.Hgrid==self.Egrid
+        except AttributeError:
+            raise UserWarning('Energy grid (Egrid) for data not specified')
+        except AssertionError:
+            raise UserWarning('Response function not on same energy grid as data')
 
+        return None
 
     def readTestInput(self, verbose=True, func=1+2, minim=0, niter=1000):
         #port of specinv_test.c
@@ -155,16 +174,18 @@ class SpecInv(object):
         if std.upper()=='LANL':
             rfun = self.readLANLResp(fname)
             #need to work out how to get this into format required by *_spec_inv
+            #currently hacked into readLANLResp - good spot??
         elif std.upper()=='PRBEM':
             try:
                 from spacepy import pycdf
                 rfun = pycdf.CDF(fname)
                 #now get appropriate numbers from CDF to pass to *_spec_inv
+                #then set self.H
             except ImportError:
                 raise ImportError('''SpacePy is not installed; CDF support is unavailable without SpacePy\n
                 Please get SpacePy from http://spacepy.lanl.gov''')
         
-        return rfun
+        return None
         
     def setParams(self, func=1+2, minim=0, niter=10000, fittype='ana', NEout=20):
         """Generic method for setting parameter inputs to either ana_spec* or pc_spec*"""
@@ -209,7 +230,7 @@ class SpecInv(object):
         return None
 
     def retCodeAna(self, retval):
-        #replace this with defined exceptions
+        #maybe replace this with defined exceptions
         err_codes = {1: 'Success', 0: 'Unknown Error (BUG)',
             -101: 'Null passed where pointer expected',
             -102: 'One or fewer valid data points',
@@ -257,16 +278,41 @@ class SpecInv(object):
 
 
 class AngInv(object):
-    def __init__(self):
-        pass
+    #interface to omni2uni and wide2uni functions from invlib
+    def __init__(self, verbose=True):
+        try:
+            self._invlib = ctypes.CDLL(libpath+'invlib.'+ext)
+        except: #case for testing in IRBEM dist
+            self._invlib = ctypes.CDLL('../invlib.'+ext)
+        if verbose==True:
+            self._verb = 1
+        elif verbose==False:
+            self._verb = 0
+        else:
+            self._verb = verbose
     
-    def omni2uni(self):
-        pass
+    def retCodes(self, retval):
+        #maybe replace this with defined exceptions
+        err_codes = {1: 'Success', 0: 'Unknown Error (BUG)',
+            -101: 'Null passed where pointer expected',
+            -102: 'One or fewer valid data points',
+            -103: 'One or more invalid (NaN or Inf) in input arrays, or unphysical flux/energy input',
+            -104: 'Negative or zero input [omniflux, wideflux] or their error estimates',
+            -401: 'Invalid minimizer or root-finder selected',
+            -402: 'Invalid iterations requested (N<=0)',
+            -501: 'Invalid verbose flag or NULL outfile',
+            -502: 'User-requested output file could not be opened',
+            -601: 'Output pitch angle requested out of range'}
     
-    def wide2uni(self):
-        pass
+    def omni2uni(self, method='TEM1'):
+        if method.upper() not in ['TEM1', 'VAM']:
+            raise ValueError('Invalid angular inversion method requested')
+    
+    def wide2uni(self, method='TEM1'):
+        if method.upper() not in ['TEM1', 'VAM']:
+            raise ValueError('Invalid angular inversion method requested')
     
 
 if __name__=='__main__':
-    execfile('invlib_test.py')
-    
+    #run test suite if called from command line
+    exec(compile(open('invlib_test.py').read(), 'invlib_test.py', 'exec'))
