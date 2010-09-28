@@ -31,6 +31,20 @@ else:
 floc = locals()['__file__'].split('/')
 libpath = '/'.join(floc[:-1])+'/'
 
+def ravel(mylist):
+    newlist = []
+    for row in mylist:
+        # may have nested tuples or lists
+        if type(row) in (list, tuple):
+            newlist.extend(ravel(row))
+        else:
+            newlist.append(row)
+    return newlist
+
+def transpose(arr):
+    return [[r[col] for r in arr] for col in range(len(arr[0]))]
+    
+
 class SpecInv(object):
     """Spectral Inversion class using INVLIB
     """
