@@ -8,6 +8,15 @@ Date Created: 23 Sept. 2010
 
 Running this wrapper from the command line calls a test to reproduce the specinv_test
 where the setup and function call are from within Python
+
+To Do:
+Enable read support for PRBEM response files
+Enable read support for LANL standard response files
+Generalize calling of ana_spec_inv
+Add support for calling of ana_spec_inv_multi (within extant functions)
+Add support for calling pc_spec_inv (and _multi)
+Update unit tests for additional code
+Documentation
 """
 
 import ctypes, ctypes.util, os, sys, csv, math
@@ -46,6 +55,30 @@ class SpecInv(object):
          4.83293024,   6.15848211,   7.8475997 ,  10.        ]
         
         return None
+    
+    def readLANLResp(self, fname):
+        #read 'standard' LANL format response function files
+        #modified port of r_sdtfrmt_resp in papco
+        
+        #currently data is nested lists (row major)
+        #this should be put into numpy arrays (ensuring Py3k compliance)
+
+        fobj = open(fname, 'r')
+        header, data = [], []
+        
+        c_symb = ';'
+        for line in fobj:
+            if c_symb in line: #if prefixed by ';' comment symbol it's header
+                header.append(line.rstrip())
+            else:
+                if line.rstrip()!='': #skip blank lines
+                    data.append(line.rstrip().split())
+        
+        #move first line to column header list
+        col_hdr = data.pop(0)
+
+        return {'data': data, 'columns': col_hdr, 'header': header}
+
 
     def readTestInput(self, verbose=True, func=1+2, minim=0, niter=1000):
         #port of specinv_test.c
@@ -90,9 +123,6 @@ class SpecInv(object):
         
         intp = ctypes.c_long*10
         intp = intp(*[NC, NE, NEout, func, minim, niter, self._verb, 0, 0, 0])
-        #NC=Num.en.chan;NE=num.en.grid.pts;NEout=num.output.en.grid.pts;
-        #[3]=spectral.fn(bitmask-see.docs);[4]=minimizer(see.docs);[5]=Max.num.iterations;
-        #[6]=verbose.setting;[7]=en.integral.weight.setting;[8]/[9]=reserved
         
         realp = ctypes.c_double*10
         realp = realp(*[0.511, 100, 345, 0, 0, 0, 0, 0, 0, 0])
@@ -101,13 +131,26 @@ class SpecInv(object):
         
         return None
     
-    def readRespFunc(self, fname=None):
-        #method stub for reading PRBEM format response functions
-        try:
-            from spacepy import pycdf
-            rfun = pycdf.CDF(fname)
-        except ImportError:
-            pass
+    def readRespFunc(self, fname=None, std='LANL'):
+        #method stub for reading PRBEM and LANL format response functions
+        if std.upper() not in ['LANL','PRBEM']:
+            raise ValueError('Unknown response file format specified')
+        if fname == None or not os.path.exists(fname):
+            raise IOError('Requested file %s does not exist' % (fname))
+
+        if std.upper()=='LANL':
+            rfun = self.readLANLResp(fname)
+            #need to work out how to get this into format required by *_spec_inv
+        elif std.upper()=='PRBEM':
+            try:
+                from spacepy import pycdf
+                rfun = pycdf.CDF(fname)
+                #now get appropriate numbers from CDF to pass to *_spec_inv
+            except ImportError:
+                raise ImportError('''SpacePy is not installed; CDF support is unavailable without SpacePy\n
+                Please get SpacePy from http://spacepy.lanl.gov''')
+        
+        return rfun
         
     def setParams(self, func=1+2, minim=0, niter=10000, fittype='ana', NEout=20):
         """Generic method for setting parameter inputs to either ana_spec* or pc_spec*"""
@@ -184,6 +227,7 @@ class SpecInv(object):
         return retval
     
     def _writeAnaSpec(self, retval, fnameout="specinv_test_py.out1"):
+        #currently not called
         if retval == 1:
             Eout = list(self._params[-5])
             flux = list(self._params[-4])
