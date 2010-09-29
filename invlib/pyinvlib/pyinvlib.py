@@ -17,7 +17,7 @@ Add support for calling of ana_spec_inv_multi (within extant functions)
 Add support for calling pc_spec_inv (and _multi)
 Update unit tests for additional code
 Documentation
-Angular Inversion code
+Angular Inversion code (add wide2uni)
 """
 
 import ctypes, ctypes.util, os, sys, csv, math, numbers
@@ -29,8 +29,8 @@ elif sys.platform == 'darwin':
 else:
     raise NotImplementedError('Your platform is not currently supported')
 
-floc = locals()['__file__'].split('/')
-libpath = '/'.join(floc[:-1])+'/' #should use os funcs for this to maintain platform independence
+floc = os.path.split(locals()['__file__'])
+libpath = floc[0]
 
 
 ##following two functions can be removed when numpy1.5 compatibility in Python3 is tested
@@ -54,7 +54,7 @@ class SpecInv(object):
     """
     def __init__(self, verbose=True, rme=0.511):
         try:
-            self._invlib = ctypes.CDLL(libpath+'invlib.'+ext)
+            self._invlib = ctypes.CDLL(os.path.join(libpath,'invlib.'+ext))
         except: #case for testing in IRBEM dist
             self._invlib = ctypes.CDLL('../invlib.'+ext)
         if verbose==True:
@@ -121,11 +121,11 @@ class SpecInv(object):
         #port of specinv_test.c
         self._verb = verbose
         try:
-            fnamein = libpath+"specinv_test.in1"
+            fnamein = os.path.join(libpath,"specinv_test.in1")
             assert os.path.exists(fnamein)
         except AssertionError:
             try: #case for testing in IRBEM dist
-                fnamein = "../specinv_test.in1"
+                fnamein = os.path.join("..","specinv_test.in1")
                 print('Trying %s' % fnamein)
                 assert os.path.exists(fnamein)
             except:
@@ -185,7 +185,7 @@ class SpecInv(object):
         
         return None
         
-    def setParams(self, niter=10000, fittype='ana', NEout=20):
+    def setParams(self, fittype='ana', NEout=20):
         """Generic method for setting parameter inputs to either ana_spec* or pc_spec*"""
         try:
             assert self.counts
@@ -231,8 +231,6 @@ class SpecInv(object):
         realp = ctypes.c_double*10
         if fittype=='ana':
             intp = intp(*self._int_params)
-            #intp = intp(*[self.NC, NE, NEout, func, minim, niter, 
-                #self._verb, 0, 0, 0])
             realp = realp(*[self.rme, 100, 345, 0, 0, 0, 0, 0, 0, 0])
         elif fittype=='pc':
             raise NotImplementedError
@@ -296,7 +294,7 @@ class AngInv(object):
     #interface to omni2uni and wide2uni functions from invlib
     def __init__(self, verbose=True):
         try:
-            self._invlib = ctypes.CDLL(libpath+'invlib.'+ext)
+            self._invlib = ctypes.CDLL(os.path.join(libpath,'invlib.'+ext))
         except: #case for testing in IRBEM dist
             self._invlib = ctypes.CDLL('../invlib.'+ext)
         if verbose==True:
@@ -351,12 +349,12 @@ class AngInv(object):
         
         #run case 1
         self.setParams()
-        self.omni2uni('TEM1')
+        ret1 = self.omni2uni('TEM1')
         #run case 2
         self.setParams(method='VAM')
-        self.omni2uni()
+        ret2 = self.omni2uni()
         
-        return None        
+        return ret1+ret2         
         
     def setParams(self, method='TEM1', alpha=5):
         if method.upper() not in ['TEM1', 'VAM']:
@@ -408,7 +406,7 @@ class AngInv(object):
         
         retval = self._invlib.omni2uni(*self._paramsO)
         print('omni2uni Angular Inversion: %s\n' % self.retCodes(retval))
-        return None
+        return retval
 
     def wide2uni(self, method=None):
         try:
@@ -421,7 +419,7 @@ class AngInv(object):
         
         retval = self._invlib.wide2uni(*self._paramsW)
         print('wide2uni Angular Inversion: %s\n' % self.retCodes(retval))
-        return None
+        return retval
     
 
 if __name__=='__main__':

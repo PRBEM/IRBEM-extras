@@ -126,8 +126,15 @@ class AngInvTests(unittest.TestCase):
         dum = pinv.AngInv()
         foo = lambda:dum.omni2uni(method='bad')
         self.assertRaises(ValueError, foo)
-        #foo = lambda:dum.wide2uni(method='bad')
-        #self.assertRaises(ValueError, foo)
+        foo = lambda:dum.wide2uni(method='bad')
+        self.assertRaises(ValueError, foo)
+        
+    def testAngInvOmni(self):
+        """test that running the test routine returns successes"""
+        
+        dum = pinv.AngInv()
+        ret = dum.testOmni2Uni()
+        self.assertEquals(ret, 2)
 
 if __name__ == "__main__":
     unittest.main()
