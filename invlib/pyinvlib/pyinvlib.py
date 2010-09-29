@@ -17,9 +17,10 @@ Add support for calling of ana_spec_inv_multi (within extant functions)
 Add support for calling pc_spec_inv (and _multi)
 Update unit tests for additional code
 Documentation
+Angular Inversion code
 """
 
-import ctypes, ctypes.util, os, sys, csv, math
+import ctypes, ctypes.util, os, sys, csv, math, numbers
 
 if sys.platform == 'linux2':
     ext = 'so'
@@ -47,6 +48,7 @@ def transpose(arr):
     return [[r[col] for r in arr] for col in range(len(arr[0]))]
 #----------------------
 
+
 class SpecInv(object):
     """Spectral Inversion class using INVLIB
     """
@@ -63,6 +65,8 @@ class SpecInv(object):
             self._verb = verbose
         
         #set some defaults
+        self._int_params = [None]*10
+        self._real_params = [None]*10 
         self.rme = rme #defaults to electron with all units in MeV
         self._default_Eout = [  0.1       ,   0.1274275 ,   0.16237767,   0.20691381,
          0.26366509,   0.33598183,   0.42813324,   0.54555948,
@@ -131,36 +135,30 @@ class SpecInv(object):
         #read file
         deflen = infile.readline().rstrip().split() #1st line, newline removed, split on whitespace
         NC, NE, NEout = int(deflen[0]), int(deflen[1]), int(deflen[2])
-        
-        #define vars
-        c, dc = NC*ctypes.c_double, NC*ctypes.c_double
-        Egrid = NE*ctypes.c_double
-        H = NE*NC*ctypes.c_double
-        Eout = NEout*ctypes.c_double
-        b = NC*ctypes.c_double
-        flux = (NEout * ctypes.c_double)(0)
-        dlogflux = (NEout * ctypes.c_double)(0)
 
         #populate vars
         datlist = [float(d.rstrip()) for d in infile if len(d)>2] #remove all trailing \n and store each non-empty line as a string in a list
-        c = c(*datlist[:NC])
-        dc = dc(*datlist[NC:NC*2])
-        Egrid = Egrid(*datlist[NC*2:(NC*2)+NE])
+        self.counts = datlist[:NC]
+        self.dcounts = datlist[NC:NC*2]
+        self.Egrid = datlist[NC*2:(NC*2)+NE]
         dum = ((NC*2)+NE) #set counter for readability
-        H = H(*datlist[dum:dum+(NE*NC)])
+        self.H = datlist[dum:dum+(NE*NC)]
         dum = dum+(NE*NC)
-        b = b(*datlist[dum:dum+NC])
-        Eout = Eout(*datlist[dum+NC:])
+        self.b = datlist[dum:dum+NC]
+        self.Eout = datlist[dum+NC:]
         
         print('Python Analytic Spectral Inversion test: NC=%d, NE=%d, NEout=%d' % (NC, NE, NEout))
         
-        intp = ctypes.c_long*10
-        intp = intp(*[NC, NE, NEout, func, minim, niter, self._verb, 0, 0, 0])
-        
-        realp = ctypes.c_double*10
-        realp = realp(*[0.511, 100, 345, 0, 0, 0, 0, 0, 0, 0])
+        self._int_params[0] = NC
+        self._int_params[1] = NE
+        self._int_params[2] = NEout
+        self._int_params[3] = func
+        self._int_params[4] = minim
+        self._int_params[5] = niter
+        self._int_params[6] = self._verb
+        self._int_params[7:] = [0,0,0]
 
-        self._params = (c, dc, Egrid, H, b, intp, realp, None, Eout, flux, dlogflux, None, None)
+        self.setParams()
         
         return None
     
@@ -187,7 +185,7 @@ class SpecInv(object):
         
         return None
         
-    def setParams(self, func=1+2, minim=0, niter=10000, fittype='ana', NEout=20):
+    def setParams(self, niter=10000, fittype='ana', NEout=20):
         """Generic method for setting parameter inputs to either ana_spec* or pc_spec*"""
         try:
             assert self.counts
@@ -203,8 +201,17 @@ class SpecInv(object):
             raise AttributeError('Response functions must be specified')
         
         #define outputs
+        NC, NE = int(self._int_params[0]), int(self._int_params[1])
+        NEout = int(self._int_params[2])
+        c, dc = NC*ctypes.c_double, NC*ctypes.c_double
+        Egrid = NE*ctypes.c_double
+        H = NE*NC*ctypes.c_double
+        Eout = NEout*ctypes.c_double
+        b = NC*ctypes.c_double
+        flux = (NEout * ctypes.c_double)(0)
+        dlogflux = (NEout * ctypes.c_double)(0)
         try:
-            Eout = self.Eout
+            Eout = Eout(*self.Eout)
             NEout = int(len(Eout))
         except AttributeError:
             NEout = int(NEout)
@@ -215,18 +222,29 @@ class SpecInv(object):
         flux = (NEout * ctypes.c_double)(0)
         dlogflux = (NEout * ctypes.c_double)(0)
         
+        #check for absence of keywords and set defaults
+        if self._int_params[3]==None: self._int_params[3] = 1+2 #defaults to power law and exponential
+        if self._int_params[4]==None: self._int_params[4] = 0
+        if self._int_params[5]==None: self._int_params[5] = 10000
+        
         intp = ctypes.c_long*10
         realp = ctypes.c_double*10
         if fittype=='ana':
-            intp = intp(*[self.NC, NE, NEout, func, minim, niter, 
-                self._verb, 0, 0, 0])
+            intp = intp(*self._int_params)
+            #intp = intp(*[self.NC, NE, NEout, func, minim, niter, 
+                #self._verb, 0, 0, 0])
             realp = realp(*[self.rme, 100, 345, 0, 0, 0, 0, 0, 0, 0])
         elif fittype=='pc':
-            pass
+            raise NotImplementedError
         
-        self._params = (self.counts, self.dcounts, self.Egrid, 
-            self.H, self.b, intp, realp, None, Eout, flux, dlogflux, None, None)
+        counts = c(*self.counts)
+        dcounts = dc(*self.dcounts)
+        Egrid = Egrid(*self.Egrid)
+        H = H(*self.H)
+        b = b(*self.b)
         
+        self._params = (counts, dcounts, Egrid, 
+            H, b, intp, realp, None, Eout, flux, dlogflux, None, None)
         return None
 
     def retCodeAna(self, retval):
@@ -245,19 +263,14 @@ class SpecInv(object):
             -501: 'Invalid verbose flag or NULL outfile',
             -502: 'User-requested output file could not be opened'}
             
-        msg = err_codes[retval]
-        
-        return msg
+        return err_codes[retval]
     
     def anaSpecInv(self, restmass=0.511):
         '''Analytic spectral inversion'''
-        try:
-            params = self._params
-        except AttributeError:
-            self.setParams()
+        assert self._params
 
         retval = self._invlib.ana_spec_inv(*self._params)
-        print('Analytic Spectral Inversion: %s\n' % self.retCodeAna(retval))\
+        print('Analytic Spectral Inversion: %s\n' % self.retCodeAna(retval))
         
         return retval
     
@@ -275,6 +288,8 @@ class SpecInv(object):
             outlist.append(row)
         csv.writer(open(fnameout,'w'), delimiter=',').writerows(outlist)
         print('Output written to file: %s' % fnameout)
+        
+        return None
 
 
 class AngInv(object):
@@ -290,6 +305,19 @@ class AngInv(object):
             self._verb = 0
         else:
             self._verb = verbose
+            
+        self._int_params = [None]*5
+        self._real_params = [None]*3
+        
+        #set null params for later population
+        self.omniflux = None
+        self.domniflux = None
+        self.wideflux = None
+        self.dwideflux = None
+        self.PAgrid = None
+        self.H = None
+        
+        return None
     
     def retCodes(self, retval):
         #maybe replace this with defined exceptions
@@ -303,14 +331,97 @@ class AngInv(object):
             -501: 'Invalid verbose flag or NULL outfile',
             -502: 'User-requested output file could not be opened',
             -601: 'Output pitch angle requested out of range'}
-    
-    def omni2uni(self, method='TEM1'):
+        
+        return err_codes[retval]
+            
+    def testOmni2Uni(self):
+        #run the test case given in omni2uni     
+        
+        self._int_params[0] = 50#; /* NA - number of angular gridpoints */
+        self._int_params[2] = 1#; /* 1 = verbose to standard out */
+        self._int_params[3] = 3#; /* minimizer, 0=BFGS, 3=NM */
+        self._int_params[4] = 1000#; /* maximumn # of iterations */
+
+        self._real_params[0] = 300.0#; /* 300 keV */
+        self._real_params[1] = 40000.0/100.0#; /* B/B0 */
+        self._real_params[2] = 6.6#; /* Lm */
+
+        self.omniflux = 10000#; /* typical value 1E+4 */
+        self.domniflux = math.log(2)/2 #natural log
+        
+        #run case 1
+        self.setParams()
+        self.omni2uni('TEM1')
+        #run case 2
+        self.setParams(method='VAM')
+        self.omni2uni()
+        
+        return None        
+        
+    def setParams(self, method='TEM1', alpha=5):
         if method.upper() not in ['TEM1', 'VAM']:
             raise ValueError('Invalid angular inversion method requested')
+        
+        if method.upper()=='TEM1':
+            self._int_params[1]=-1
+        elif method.upper()=='VAM':
+            self._int_params[1]=-2
+            
+        intp = ctypes.c_long*5
+        self._int_params = [int(j) for j in self._int_params]
+        intp = intp(*self._int_params)
+        realp = ctypes.c_double*3
+        realp = realp(*self._real_params)
+        
+        stub = ctypes.c_double
+        if isinstance(self.omniflux,numbers.Real):
+            Lof = 1
+            self.omniflux = [self.omniflux]
+        else:
+            Lof = len(self.omniflux)
+        if isinstance(self.domniflux,numbers.Real):
+            Ldf = 1
+            self.domniflux = [self.domniflux]
+        else:
+            Ldf = len(self.domniflux)
+        omniflux = (stub*int(Lof))(*self.omniflux) #need to catch if unpopulated
+        domniflux = (stub*int(Ldf))(*self.domniflux)
+        
+        #initialize outputs
+        uflux = (Lof * ctypes.c_double)(0)
+        dloguflux = (Ldf * ctypes.c_double)(0)
+        
+        self._paramsO = (omniflux, domniflux, intp, realp, None, 
+            uflux, dloguflux)
+        #self._paramsW = (wideflux, dwideflux, PAgrid, H, 
+            #intp, realp, None, alpha, uflux, dloguflux)
+        return None
     
-    def wide2uni(self, method='TEM1'):
-        if method.upper() not in ['TEM1', 'VAM']:
-            raise ValueError('Invalid angular inversion method requested')
+    def omni2uni(self, method=None):
+        try:
+            assert self._paramsO
+        except:
+            if method != None:
+                self.setParams(method=method)
+            else:
+                self.setParams()
+        
+        retval = self._invlib.omni2uni(*self._paramsO)
+        print('omni2uni Angular Inversion: %s\n' % self.retCodes(retval))
+        return None
+
+    def wide2uni(self, method=None):
+        try:
+            assert self._paramsW
+        except:
+            if method != None:
+                self.setParams(method=method)
+            else:
+                self.setParams()
+        
+        retval = self._invlib.wide2uni(*self._paramsW)
+        print('wide2uni Angular Inversion: %s\n' % self.retCodes(retval))
+        return None
     
 
 if __name__=='__main__':
