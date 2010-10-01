@@ -13,7 +13,14 @@ function [inst_info,result_code] = rfl_load_inst_info(FileName,FileType)
 if isstruct(FileName),
     inst_info = FileName;
 else
-    error('%s not yet defined',mfilename);
+    f = find(FileName=='.');
+    ext = FileName((f(end)+1):end);
+    switch(lower(ext)),
+        case 'cdf',
+            inst_info = read_from_cdf(FileName);
+        otherwise
+            error('Extension "%s" not yet supported',ext);
+    end
 end
 
 if ~isfield(inst_info,'CHANNEL_NAMES'),
@@ -76,4 +83,18 @@ for ichan = 1:length(inst_info.CHANNEL_NAMES),
                 error('rfl_load_inst_info:Error6','Unknown RESP_TYPE: %s',inst_info.(chan).(sp).RESP_TYPE);
         end
     end
+end
+
+function inst_info = read_from_cdf(FileName)
+% inst_info = read_from_cdf(FileName)
+% load inst_info from a CDF
+inst_info = [];
+
+info = cdfinfo(FileName);
+data = cdfread(FileName);
+for i = 1:length(info.Variables),
+    if ismember(info.Variables{i,1},{'CHANNEL_NAMES','SPECIES','REFERENCES'}),
+        data{i} = cellstr(data{i}); % convert rows of strings to cell arrays of strings
+    end
+    eval(['inst_info.',info.Variables{i,1},'=data{i};']);
 end

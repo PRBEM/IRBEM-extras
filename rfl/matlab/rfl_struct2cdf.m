@@ -1,8 +1,12 @@
 function rfl_struct2cdf(cdfname,stru)
 % rfl_struct2cdf(cdfname,stru)
 % save an instrument response structure to a cdf
+% Note, cell arrays of strings will be converted to rows of strings
 
 varlist = break_down_struct('',stru);
+
+extras = {};
+
 cdfwrite(cdfname,varlist);
 
 function varlist = break_down_struct(base,stru)
