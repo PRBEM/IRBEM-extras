@@ -2,6 +2,10 @@ function d = rfl_make_deltas(grid,options)
 % d = rfl_make_deltas(grid,options)
 % d are the default weights for a given 1-d grid
 
+if length(grid)==1, % assume it's a tgrid: only one time means it's actually dt
+    d = grid;
+end
+
 if nargin < 2,
     options = [];
 end

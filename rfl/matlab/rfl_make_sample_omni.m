@@ -49,7 +49,13 @@ inst_info.CHAN5.ELE.XCAL = 1.01426;
 inst_info.CHAN5.ELE.XCAL_RMSE = 0.813318;
 inst_info.CHAN5.ELE.EPS = [0,0,0,0,0,0,0,0,0,0,0,0,9.07907e-005,9.07907e-005,0.000207515,0.000259394,0.000518806,0.000518806,0.0013489,0.00249022,0.0075227,0.0314532,0.0952006,0.180288,0.297011,0.400769,0.619449,0.813225,0.960434,0.940338,0.999995,0.993513,1.06615];
 
-inst_info = rfl_load_inst_info(inst_info)
+
+outpath = fileparts(which([mfilename,'.m']));
+cdfname = [outpath,filesep,'sample_omni_ico_resp.cdf'];
+
+rfl_struct2cdf(cdfname,inst_info);
+
+inst_info = rfl_load_inst_info(inst_info);
 
 % if 0, % this code block only works on my computers (TPO)
 %     db = read_HEOICO_EG('ICO');
