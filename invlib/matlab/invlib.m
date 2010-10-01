@@ -1,6 +1,6 @@
 function varargout = invlib(what,varargin)
 % invlib provides access to the irbem/invlib library
-% the following routines are supported: ana_spec_inv, omni2uni
+% the following routines are supported: ana_spec_inv, pc_spec_inv, omni2uni
 %
 % ana_spec_inv:
 % fit = invlib('ana_spec_inv',y,dy,Egrid,G,dt,b,Eout,...)
