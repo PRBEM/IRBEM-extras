@@ -13,9 +13,9 @@ try:
     dum = sys.version_info
     assert dum[0]>=2
     if dum[0]==2:
-        assert dum[1]>=5
+        assert dum[1]>5
 except:
-    raise Exception("""PyInvlib requires Python version >2.5""")
+    raise Exception("""PyInvlib requires Python version >=2.6""")
 
 try:
     shutil.copy('invlib.so','pyinvlib/invlib.so')

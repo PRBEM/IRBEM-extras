@@ -60,20 +60,42 @@ def transpose(arr):
 
 class InvBase(object):
     #base class for INVLIB calls
-    def __init__(self, verbose=True):
+    def __init__(self, *args, **kwargs):
         try:
             self._invlib = ctypes.CDLL(os.path.join(libpath,'invlib.'+ext))
         except: #case for testing in IRBEM dist
             self._invlib = ctypes.CDLL('../invlib.'+ext)
-        if verbose==True:
-            self._verb = 1
-        elif verbose==False:
-            self._verb = 0
+        if 'verbose' in kwargs:
+            if kwargs['verbose']==True:
+                self._verb = 1
+            elif kwargs['verbose']==False:
+                self._verb = 0
+            else:
+               self._verb = kwargs['verbose'] 
         else:
-            self._verb = verbose
+            self._verb = 1
             
         self.H = None
-    
+        
+        return None
+        
+    def __repr__(self):
+        attrs = [att for att in self.__dict__ if '_' not in att]
+        attrs.sort()
+        
+        clstr = str(self.__class__).split('.')[-1].split('\'')[0]
+        
+        outstr = clstr + ' instance: ' + '\n'
+        for ent in attrs:
+            try:
+                le = '[' + str(len(getattr(self, ent))) + ']\n'
+                outstr = outstr + str(ent) + ' :  ' + le
+            except TypeError:
+                le = str(type(getattr(self, ent))) + '\n'
+                outstr = outstr + str(ent) + ' :  ' + le
+                
+        return outstr
+            
     def readLANLResp(self, fname):
         """read 'standard' LANL format response function files"""
         #modified port of r_sdtfrmt_resp in papco
@@ -96,19 +118,19 @@ class InvBase(object):
         col_hdr = data.pop(0)
         
         #set attributes
-        #probably need to interpolate response function onto same energy grid as Egrid
-        #which corresponds to the data
+        #need to interpolate response function onto same energy grid as Eout
+        #which corresponds to the expected output data
         self.H = data
         self.Hgrid = Earray
         self.Hcols = col_hdr
         
         if self._verb: print('LANL response file read:\n%s' % header[:2])
         try:
-            assert self.Hgrid==self.Egrid
+            assert self.Hgrid==self.Eout
         except AttributeError:
-            raise UserWarning('Energy grid (Egrid) for data not specified')
+            raise UserWarning('Energy grid (Eout) for output not specified')
         except AssertionError:
-            raise UserWarning('Response function not on same energy grid as data')
+            raise UserWarning('Response function not on same energy grid as requested output')
 
         return None
         
@@ -139,12 +161,15 @@ class InvBase(object):
 class SpecInv(InvBase):
     """Spectral Inversion class using INVLIB
     """
-    def __init__(self, rme=0.511, **kwargs):
-        super(SpecInv, self).__init__(self, **kwargs)
+    def __init__(self, *args, **kwargs):
+        super(SpecInv, self).__init__(self, *args, **kwargs)
         #set some defaults
         self._int_params = [None]*10
-        self._real_params = [None]*10 
-        self.rme = rme #defaults to electron with all units in MeV
+        self._real_params = [None]*10
+        if 'rme' in kwargs:
+            self.rme = kwargs['rme'] 
+        else:
+            self.rme = 0.511 #defaults to electron with all units in MeV
         self._default_Eout = [  0.1       ,   0.1274275 ,   0.16237767,   0.20691381,
          0.26366509,   0.33598183,   0.42813324,   0.54555948,
          0.6951928 ,   0.88586679,   1.12883789,   1.43844989,
@@ -199,14 +224,23 @@ class SpecInv(InvBase):
         try:
             assert self.counts
             assert len(self.dcounts)==len(self.counts)
-            #NC = 1 #how to calc number of channels?
-            NE = int(len(self.Egrid))
+            if not self._int_params[0]:
+                self._int_params[0] = len(self.counts) #how to calc number of channels? NC
+            if not self._int_params[1]:
+                self._int_params[1] = len(self.Egrid)  #NE
+            if not self._int_params[2]:
+                self._int_params[2] = NEout
         except (AssertionError, AttributeError):
             raise TypeError('Counts, Relative Error on Counts and Energy grid must be defined') 
         try:
             assert self.H
         except:
             raise AttributeError('Response functions must be specified')
+        try:
+            assert self.b
+        except AttributeError:
+            print('Background not specified, defaulting to zero')
+            self.b = [0]*len(self.counts)
         
         #define outputs
         NC, NE = int(self._int_params[0]), int(self._int_params[1])
@@ -233,6 +267,10 @@ class SpecInv(InvBase):
         if self._int_params[3]==None: self._int_params[3] = 1+2 #defaults to power law and exponential
         if self._int_params[4]==None: self._int_params[4] = 0
         if self._int_params[5]==None: self._int_params[5] = 10000
+        if self._int_params[6]==None: self._int_params[6] = self._verb
+        if self._int_params[7]==None: self._int_params[7] = 0
+        if self._int_params[8]==None: self._int_params[8] = 0
+        if self._int_params[9]==None: self._int_params[9] = 0
         
         intp = ctypes.c_long*10
         realp = ctypes.c_double*10
