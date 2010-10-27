@@ -21,7 +21,6 @@ Date Created: 23 Sept. 2010
 To Do:
 Enable read support for PRBEM response files
 Finalize read support for LANL standard response files
-Generalize calling of ana_spec_inv
 Add support for calling of ana_spec_inv_multi (within extant functions)
 Add support for calling pc_spec_inv (and _multi)
 Improve error trapping
@@ -31,18 +30,21 @@ Angular Inversion code (add wide2uni)
 """
 
 import ctypes, os, sys, csv, math, numbers
+import numpy as np
 
 if sys.platform == 'linux2':
     ext = 'so'
 elif sys.platform == 'darwin':
-    ext = 'dylib'
+    ext = 'dylib' #although invlib doesn't currently compile on mac...
 else:
     raise NotImplementedError('Your platform is not currently supported')
 
 floc = os.path.split(locals()['__file__'])
 libpath = floc[0]
 
-##following two functions can be removed when numpy1.5 compatibility in Python3 is tested
+##following two functions can be removed when 
+##numpy1.5 compatibility in Python3 is tested
+##currently only used in invlib_test.py
 def ravel(mylist):
     newlist = []
     for row in mylist:
@@ -59,19 +61,26 @@ def transpose(arr):
 
 
 class InvBase(object):
-    #base class for INVLIB calls
+    """
+    Base class for INVLIB calls. Not to be used directly.
+    
+    This base class is here to provide shared functionality for the SpecInv
+    and AngInv classes, which do spectral inversion and angular inversion, 
+    respectively. For help on using these, please see the help for those 
+    classes.
+    """
     def __init__(self, *args, **kwargs):
         try:
-            self._invlib = ctypes.CDLL(os.path.join(libpath,'invlib.'+ext))
+            self._invlib = ctypes.CDLL(os.path.join(libpath, 'invlib.'+ext))
         except: #case for testing in IRBEM dist
             self._invlib = ctypes.CDLL('../invlib.'+ext)
         if 'verbose' in kwargs:
-            if kwargs['verbose']==True:
+            if kwargs['verbose'] == True:
                 self._verb = 1
-            elif kwargs['verbose']==False:
+            elif kwargs['verbose'] == False:
                 self._verb = 0
             else:
-               self._verb = kwargs['verbose'] 
+                self._verb = kwargs['verbose'] 
         else:
             self._verb = 1
             
@@ -96,56 +105,63 @@ class InvBase(object):
                 
         return outstr
             
-    def readLANLResp(self, fname):
+    def _readLANLResp(self, fname):
         """read 'standard' LANL format response function files"""
         #modified port of r_sdtfrmt_resp in papco
         #currently data is nested lists (row major)
-        #this should be put into numpy arrays (ensuring Py3k compliance)
-
+        #need to extract the columns and tag with energy channel names
+        #this could be put into numpy arrays (ensuring Py3k compliance)
         fobj = open(fname, 'r')
         header, data, Earray = [], [], []
         c_symb = ';'
         for line in fobj:
-            if c_symb in line: #if prefixed by ';' comment symbol it's header
+            if c_symb in line: #if prefixed by ';' it's header
                 header.append(line.rstrip())
             else:
                 if line.rstrip()!='': #skip blank lines
                     dum = line.rstrip().split()
                     data.append(dum[1:])
-                    Earray.extend(dum[0]) #get energies from first column
+                    try:
+                        Earray.append(float(dum[0])) #get energies from first column
+                    except ValueError:
+                        pass #skip text input
         
         #move first line to column header list
         col_hdr = data.pop(0)
         
         #set attributes
-        #need to interpolate response function onto same energy grid as Eout
-        #which corresponds to the expected output data
-        self.H = data
-        self.Hgrid = Earray
+        self.H = np.array(data, dtype=float).transpose().ravel().tolist()  ##need to select which energy channel... how to implement?
+        self.Egrid = Earray 
         self.Hcols = col_hdr
         
-        if self._verb: print('LANL response file read:\n%s' % header[:2])
+        if self._verb:
+            print('LANL response file read:\n%s' % header[:2])
         try:
-            assert self.Hgrid==self.Eout
+            assert self.Eout#==self.Egrid
         except AttributeError:
-            raise UserWarning('Energy grid (Eout) for output not specified')
-        except AssertionError:
-            raise UserWarning('Response function not on same energy grid as requested output')
+            raise AttributeError('Energy grid for output not set')
+        #except AssertionError:
+            #print('Response function not on same energy grid as desired output: interpolating')
+            ##automatically interpolate to a specified grid
+            #tmpH = np.zeros((self.H.shape[0],len(self.Eout)))
+            #for n in range(self.H.shape[0]):
+                #tmpH[n,:] = np.interp(self.Eout, self.Egrid, self.H[n,:])
+            #self.H = tmpH.ravel().tolist()
 
         return None
         
     def readRespFunc(self, fname=None, std='LANL'):
         #method stub for reading PRBEM and LANL format response functions
-        if std.upper() not in ['LANL','PRBEM']:
+        if std.upper() not in ['LANL', 'PRBEM']:
             raise ValueError('Unknown response file format specified')
         if fname == None or not os.path.exists(fname):
             raise IOError('Requested file %s does not exist' % (fname))
-        if std.upper()=='LANL':
-            rfun = self.readLANLResp(fname)
+        if std.upper() == 'LANL':
+            rfun = self._readLANLResp(fname)
             #need to work out how to get this into format required by *_spec_inv
             #and wide2uni
             #currently hacked into readLANLResp - good spot??
-        elif std.upper()=='PRBEM':
+        elif std.upper() == 'PRBEM':
             try:
                 from spacepy import pycdf
                 rfun = pycdf.CDF(fname)
@@ -160,6 +176,9 @@ class InvBase(object):
     
 class SpecInv(InvBase):
     """Spectral Inversion class using INVLIB
+    
+    Example use:
+    
     """
     def __init__(self, *args, **kwargs):
         super(SpecInv, self).__init__(self, *args, **kwargs)
@@ -177,7 +196,13 @@ class SpecInv(InvBase):
          4.83293024,   6.15848211,   7.8475997 ,  10.        ]
 
     def readTestInput(self, verbose=True, func=1+2, minim=0, niter=1000):
-        #port of specinv_test.c
+        """reads test data for specinv_test.c
+        
+        To perform the test carried out by specinv_test.c, instantiate a SpecInv object
+        and call this method. Then call the anaSpecInv method -- this is all done from
+        the testing suite as one of the unit tests as they have the expected output to 
+        compare against.
+        """
         self._verb = verbose
         try:
             fnamein = os.path.join(libpath,"specinv_test.in1")
@@ -214,22 +239,22 @@ class SpecInv(InvBase):
         self._int_params[4] = minim
         self._int_params[5] = niter
         self._int_params[6] = self._verb
-        self._int_params[7:] = [0,0,0]
+        self._int_params[7:] = [0, 0, 0]
         self.setParams()
         
         return None
         
-    def setParams(self, fittype='ana', NEout=20):
+    def setParams(self, fittype='ana', fnc=None):
         """Generic method for setting parameter inputs to either ana_spec* or pc_spec*"""
         try:
             assert self.counts
             assert len(self.dcounts)==len(self.counts)
             if not self._int_params[0]:
-                self._int_params[0] = len(self.counts) #how to calc number of channels? NC
+                self._int_params[0] = len(self.Hcols) #how to calc number of channels? NC
             if not self._int_params[1]:
                 self._int_params[1] = len(self.Egrid)  #NE
             if not self._int_params[2]:
-                self._int_params[2] = NEout
+                self._int_params[2] = len(self.Eout)
         except (AssertionError, AttributeError):
             raise TypeError('Counts, Relative Error on Counts and Energy grid must be defined') 
         try:
@@ -264,21 +289,24 @@ class SpecInv(InvBase):
         dlogflux = (NEout * ctypes.c_double)(0)
         
         #check for absence of keywords and set defaults
-        if self._int_params[3]==None: self._int_params[3] = 1+2 #defaults to power law and exponential
-        if self._int_params[4]==None: self._int_params[4] = 0
-        if self._int_params[5]==None: self._int_params[5] = 10000
-        if self._int_params[6]==None: self._int_params[6] = self._verb
-        if self._int_params[7]==None: self._int_params[7] = 0
-        if self._int_params[8]==None: self._int_params[8] = 0
-        if self._int_params[9]==None: self._int_params[9] = 0
+        if fnc == None:
+            self._int_params[3] = 1+2 #defaults to power law and exponential
+        else:
+            self._int_params[3] = fnc
+        if self._int_params[4] == None: self._int_params[4] = 0 #default to BFGS minimizer
+        if self._int_params[5] == None: self._int_params[5] = 10000
+        if self._int_params[6] == None: self._int_params[6] = self._verb
+        if self._int_params[7] == None: self._int_params[7] = 0
+        if self._int_params[8] == None: self._int_params[8] = 0
+        if self._int_params[9] == None: self._int_params[9] = 0
         
         intp = ctypes.c_long*10
         realp = ctypes.c_double*10
-        if fittype=='ana':
+        if fittype == 'ana':
             intp = intp(*self._int_params)
             realp = realp(*[self.rme, 100, 345, 0, 0, 0, 0, 0, 0, 0])
-        elif fittype=='pc':
-            raise NotImplementedError
+        elif fittype == 'pc':
+            raise NotImplementedError('Principal Component method not yet implemented')
         
         counts = c(*self.counts)
         dcounts = dc(*self.dcounts)
@@ -308,7 +336,7 @@ class SpecInv(InvBase):
             
         return err_codes[retval]
     
-    def anaSpecInv(self, restmass=0.511):
+    def anaSpecInv(self):
         '''Analytic spectral inversion'''
         assert self._params
         retval = self._invlib.ana_spec_inv(*self._params)
@@ -363,7 +391,9 @@ class AngInv(InvBase):
         return err_codes[retval]
             
     def testOmni2Uni(self):
-        #run the test case given in omni2uni     
+        """Runs the test case given in omni2uni
+        
+        """
         self._int_params[0] = 50 #; /* NA - number of angular gridpoints */
         self._int_params[2] = 1 #; /* 1 = verbose to standard out */
         self._int_params[3] = 3 #; /* minimizer, 0=BFGS, 3=NM */
@@ -453,6 +483,20 @@ class AngInv(InvBase):
         return retval
         
 
-if __name__=='__main__':
+if __name__ == '__main__':
     #run test suite if called from command line
     exec(compile(open('invlib_test.py').read(), 'invlib_test.py', 'exec'))
+    
+    #dum = pinv.SpecInv(verbose=1)
+    #dum.counts = [4.15524e+02, 3.70161e+02, 2.42137e+02, 2.12097e+02, 1.47379e+02, 1.40524e+02, 9.37500e+01, 5.08064e+01, 1.93548e+01, 3.22581e+00]
+    #dum.dcounts=[0.3466]*10
+    #dum.Eout = [1.00000000e-02, 1.31795546e-02, 1.73700659e-02, 2.28929731e-02, 3.01719189e-02, 3.97652452e-02, 5.24088219e-02, 6.90724929e-02, 9.10344690e-02, 1.19979375e-01,   1.58127472e-01,   2.08404965e-01, 2.74668462e-01,   3.62000798e-01,   4.77100928e-01, 6.28797771e-01,   8.28727455e-01,   1.09222587e+00, 1.43950505e+00,   1.89720354e+00,   2.50042976e+00, 3.29545504e+00,   4.34326296e+00,   5.72422712e+00, 7.54427638e+00, 9.94302023e+00, 1.31044578e+01, 1.72710917e+01, 2.27625295e+01, 3.00000000e+01]
+    #dum.readRespFunc(fname='../../projects/responses/sopa/mcp_output/version_1/electrons/sopa_1989-046_t2_HSP_elec.001')
+    #dum.setParams()
+    #dum.anaSpecInv()
+    #import matplotlib.pyplot as plt
+    #flux = list(dum._params[-4])
+    #dlogflux = list(dum._params[-3])
+    #plt.semilogy(dum.Eout[:30], dlogflux[:30], 'r-d')
+    #plt.semilogy(dum.Eout[:30], flux[:30], 'b-d')
+    #plt.show()

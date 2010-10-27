@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# 
-# setup.py to install invlib Python interface
+ 
+"""setup.py to install invlib Python interface"""
 
 __author__ = 'Steve Morley, Los Alamos National Lab (smorley@lanl.gov)'
 
@@ -11,11 +11,16 @@ import os, sys, shutil
 #test for python version 2.x where x>=5
 try:
     dum = sys.version_info
-    assert dum[0]>=2
-    if dum[0]==2:
-        assert dum[1]>5
+    assert dum[0] >= 2
+    if dum[0] == 2:
+        assert dum[1] > 5
 except:
-    raise Exception("""PyInvlib requires Python version >=2.6""")
+    raise RuntimeError("""PyInvlib requires Python version >=2.6""")
+
+try:
+    import numpy
+except ImportError:
+    raise RuntimeError("""PyInvlib requires Numpy""")
 
 try:
     shutil.copy('invlib.so','pyinvlib/invlib.so')

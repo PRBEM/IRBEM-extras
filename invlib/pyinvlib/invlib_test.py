@@ -26,10 +26,10 @@ class SpecInvTests(unittest.TestCase):
         dum.readTestInput(verbose=False)
         result = dum.anaSpecInv()
         
-        Eout = list(dum._params[-5])
+        eout = list(dum._params[-5])
         flux = list(dum._params[-4])
         dlogflux = list(dum._params[-3])
-        pyoutput = transpose([Eout,flux,dlogflux])
+        pyoutput = transpose([eout, flux, dlogflux])
         
         coutput = [[0.01,419526,0.849366],
             [0.615859,208717,0.373893],
@@ -82,9 +82,9 @@ class SpecInvTests(unittest.TestCase):
             [29.0912,3.64449e-09,2.21145],
             [29.6971,1.85812e-09,2.26698]]
             
-        self.assertEqual(result,1)
+        self.assertEqual(result, 1)
         
-        for pel, cel in zip(ravel(pyoutput),ravel(coutput)):
+        for pel, cel in zip(ravel(pyoutput), ravel(coutput)):
             pel = '%6g' % pel
             self.assertAlmostEqual(float(pel), cel, places=6)
             
@@ -124,10 +124,10 @@ class AngInvTests(unittest.TestCase):
         """should raise errors if bad method given"""
         
         dum = pinv.AngInv()
-        foo = lambda:dum.omni2uni(method='bad')
-        self.assertRaises(ValueError, foo)
-        foo = lambda:dum.wide2uni(method='bad')
-        self.assertRaises(ValueError, foo)
+        func = lambda:dum.omni2uni(method='bad')
+        self.assertRaises(ValueError, func)
+        func = lambda:dum.wide2uni(method='bad')
+        self.assertRaises(ValueError, func)
         
     def testAngInvOmni(self):
         """test that running the test routine returns successes"""
