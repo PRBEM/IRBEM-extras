@@ -915,7 +915,7 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
 	dbl_params[1] = E0;
 	ell_params.flux_func_params = (void *)dbl_params; /* two constant params */
 	if (verbose) {
-	  fprintf(ell_params.outFilePtr,"Trying Power-Law-Expnential\n");
+	  fprintf(ell_params.outFilePtr,"Trying Power-Law-Exponential\n");
 	}
 	break;
       }
