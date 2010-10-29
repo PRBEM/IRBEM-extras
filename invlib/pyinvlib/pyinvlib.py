@@ -21,11 +21,12 @@ Date Created: 23 Sept. 2010
 To Do:
 Enable read support for PRBEM response files
 Finalize read support for LANL standard response files
-Add support for calling of ana_spec_inv_multi (within extant functions)
-Add support for calling pc_spec_inv (and _multi)
+Generalize setting of _real_params
+Add support for calling pc_spec_inv
 Improve error trapping
 Update unit tests for additional code
 Documentation
+Add support for calling of *spec_inv_multi (within extant functions)
 Angular Inversion code (add wide2uni)
 """
 
@@ -42,10 +43,9 @@ else:
 floc = os.path.split(locals()['__file__'])
 libpath = floc[0]
 
-##following two functions can be removed when 
-##numpy1.5 compatibility in Python3 is tested
-##currently only used in invlib_test.py
+##following two functions only used in invlib_test.py
 def ravel(mylist):
+    """Pure Python implementation of numpy ravel method"""
     newlist = []
     for row in mylist:
         # may have nested tuples or lists
@@ -56,6 +56,7 @@ def ravel(mylist):
     return newlist
 
 def transpose(arr):
+    """Pure Python implementation of numpy transpose method"""
     return [[r[col] for r in arr] for col in range(len(arr[0]))]
 #----------------------
 
@@ -105,12 +106,21 @@ class InvBase(object):
                 
         return outstr
             
-    def _readLANLResp(self, fname):
-        """read 'standard' LANL format response function files"""
-        #modified port of r_sdtfrmt_resp in papco
-        #currently data is nested lists (row major)
-        #need to extract the columns and tag with energy channel names
-        #this could be put into numpy arrays (ensuring Py3k compliance)
+    def _readLANLResp(self, fname, **kwargs):
+        """read 'standard' LANL format response files
+        
+        The MCNP-derived response files contain G(E), that is, the geometric
+        factor as a function of energy. More specifically, this is the 
+        effective geometric factor (taking into account efficiencies, etc.)
+        from Monte Carlo N-Particle simulation (see e.g. Tuszewski et al., 
+        Nucl. Instrum. Methods Phys. Res. A, 2002) [cm^2 sr].
+        
+        To get H in the units required by *_spec_inv [cm^2 sr s keV] the 
+        response function must be multiplied by the accumulation interval,
+        assuming the counts are per accumulation. To include the energy units
+        the energy integral weighting setting in INVLIBs int_params array must 
+        be set. Here the trapezoidal integration (int_params[7]=1) should work
+        """
         fobj = open(fname, 'r')
         header, data, Earray = [], [], []
         c_symb = ';'
@@ -130,8 +140,15 @@ class InvBase(object):
         col_hdr = data.pop(0)
         
         #set attributes
-        self.H = np.array(data, dtype=float).transpose().ravel().tolist()  ##need to select which energy channel... how to implement?
-        self.Egrid = Earray 
+        if 'dt' in kwargs:
+            dt = kwargs['dt']
+        else:
+            #default to 1-sec for now
+            dt = 1
+        print('Using accumulation time %g' % dt)
+        Htmp = np.array(data, dtype=float).transpose().ravel()*dt
+        self.H = Htmp.tolist()
+        self.Egrid = [e*1000. for e in Earray] #temporary fix to get G(E) from LANL files into keV
         self.Hcols = col_hdr
         
         if self._verb:
@@ -139,28 +156,32 @@ class InvBase(object):
         try:
             assert self.Eout#==self.Egrid
         except AttributeError:
-            raise AttributeError('Energy grid for output not set')
-        #except AssertionError:
-            #print('Response function not on same energy grid as desired output: interpolating')
-            ##automatically interpolate to a specified grid
-            #tmpH = np.zeros((self.H.shape[0],len(self.Eout)))
-            #for n in range(self.H.shape[0]):
-                #tmpH[n,:] = np.interp(self.Eout, self.Egrid, self.H[n,:])
-            #self.H = tmpH.ravel().tolist()
+            print('Energy grid for output not set: Using grid from response function')
+            self.Eout = self.Egrid
 
         return None
         
-    def readRespFunc(self, fname=None, std='LANL'):
-        #method stub for reading PRBEM and LANL format response functions
+    def readRespFunc(self, fname=None, std='LANL', dt=1):
+        """method for reading PRBEM and LANL format response functions
+        
+        *_spec_inv requires that response is multiplied by the accumulation
+        time, dt. *_spec_inv_multi requires that response is unaltered but 
+        takes dt as a parameter and performs the multiplication itself
+        
+        As *spec_inv_multi is not yet implemented, for now dt is passed as a 
+        keyword to the response function read method.
+        """
+        #perhaps set as single or multi on object instantiation so only 
+        #appropriate method is available
+        
         if std.upper() not in ['LANL', 'PRBEM']:
             raise ValueError('Unknown response file format specified')
         if fname == None or not os.path.exists(fname):
             raise IOError('Requested file %s does not exist' % (fname))
         if std.upper() == 'LANL':
-            rfun = self._readLANLResp(fname)
-            #need to work out how to get this into format required by *_spec_inv
-            #and wide2uni
-            #currently hacked into readLANLResp - good spot??
+            #default dt is 1s; 10.24s is spin period of SOPA
+            self._readLANLResp(fname, dt=dt)
+            #formatting currently hacked into readLANLResp
         elif std.upper() == 'PRBEM':
             try:
                 from spacepy import pycdf
@@ -168,7 +189,8 @@ class InvBase(object):
                 #now get appropriate numbers from CDF to pass to *_spec_inv
                 #then set self.H
             except ImportError:
-                raise ImportError('''SpacePy is not installed; CDF support is unavailable without SpacePy\n
+                raise ImportError('''SpacePy is not installed;
+                CDF support is unavailable without SpacePy\n
                 Please get SpacePy from http://spacepy.lanl.gov''')
         
         return None
@@ -177,8 +199,38 @@ class InvBase(object):
 class SpecInv(InvBase):
     """Spectral Inversion class using INVLIB
     
-    Example use:
+    This class is designed to hold all necessary inputs to *_spec_inv* from
+    the INVLIB library. The calls to INVLIB routines are implemented as
+    object methods. 
     
+    Example use:
+    import necessary packages for this example
+    >>> import matplotlib.pyplot as plt
+    >>> import numpy as np
+    >>> import pyinvlib as pinv
+    instantiate and populate attributes
+    >>> dum = pinv.SpecInv(verbose=1)
+    >>> dum.counts = [4.15524e+02, 3.70161e+02, 2.42137e+02, 2.12097e+02, \
+        1.47379e+02, 1.40524e+02, 9.37500e+01, 5.08064e+01, 1.93548e+01, 3.22581e+00]
+    >>> dum.dcounts=[0.3466]*10
+    >>> dum.readRespFunc(fname='../../projects/responses/sopa/mcp_output/version_3/electrons/sopa_LANL-97A_t2_HSP_elec.001')
+    >>> dum.setParams(fnc=8)
+    >>> dum.anaSpecInv()
+    get the outputs and construct the errorbars (to be done automatically in future)
+    >>> flux = list(dum._params[-4])
+    >>> dlogflux = list(dum._params[-3])
+    >>> ciu_flux = [(f*np.exp(1.96*d))-f for f,d in zip(flux,dlogflux)]
+    >>> cil_flux = [f-(f*np.exp(-1.96*d)) for f,d in zip(flux,dlogflux)]
+    plot the output spectrum with errorbars using matplotlib
+    >>> fig = plt.figure()
+    >>> ax = fig.add_subplot(111)
+    >>> ax.set_xscale("log", nonposx='clip')
+    >>> ax.set_yscale("log", nonposy='clip')
+    >>> ax.errorbar(dum.Eout, flux, yerr=[ciu_flux, cil_flux])
+    >>> ax.set_ylabel('Flux [#/cm$^2$.s.sr.keV]')
+    >>> ax.set_xlabel('Energy [keV]')
+    >>> ax.set_ylim(ymin=min(flux))
+    >>> plt.show()
     """
     def __init__(self, *args, **kwargs):
         super(SpecInv, self).__init__(self, *args, **kwargs)
@@ -189,11 +241,6 @@ class SpecInv(InvBase):
             self.rme = kwargs['rme'] 
         else:
             self.rme = 0.511 #defaults to electron with all units in MeV
-        self._default_Eout = [  0.1       ,   0.1274275 ,   0.16237767,   0.20691381,
-         0.26366509,   0.33598183,   0.42813324,   0.54555948,
-         0.6951928 ,   0.88586679,   1.12883789,   1.43844989,
-         1.83298071,   2.33572147,   2.97635144,   3.79269019,
-         4.83293024,   6.15848211,   7.8475997 ,  10.        ]
 
     def readTestInput(self, verbose=True, func=1+2, minim=0, niter=1000):
         """reads test data for specinv_test.c
@@ -221,7 +268,8 @@ class SpecInv(InvBase):
         NC, NE, NEout = int(deflen[0]), int(deflen[1]), int(deflen[2])
 
         #populate vars
-        datlist = [float(d.rstrip()) for d in infile if len(d)>2] #remove all trailing \n and store each non-empty line as a string in a list
+        #remove all trailing \n and store each non-empty line as a string in a list
+        datlist = [float(d.rstrip()) for d in infile if len(d)>2]
         self.counts = datlist[:NC]
         self.dcounts = datlist[NC:NC*2]
         self.Egrid = datlist[NC*2:(NC*2)+NE]
@@ -235,17 +283,18 @@ class SpecInv(InvBase):
         self._int_params[0] = NC
         self._int_params[1] = NE
         self._int_params[2] = NEout
-        self._int_params[3] = func
-        self._int_params[4] = minim
         self._int_params[5] = niter
         self._int_params[6] = self._verb
-        self._int_params[7:] = [0, 0, 0]
-        self.setParams()
+        self.setParams(fnc=func, Hint=0, minim=minim)
         
         return None
         
-    def setParams(self, fittype='ana', fnc=None):
-        """Generic method for setting parameter inputs to either ana_spec* or pc_spec*"""
+    def setParams(self, fittype='ana', fnc=None, Hint=1, minim=0):
+        """Generic method for setting parameter inputs to *_spec*
+        
+        Checks that the object is populated with sufficient data and fills in 
+        default values where necessary.
+        """
         try:
             assert self.counts
             assert len(self.dcounts)==len(self.counts)
@@ -253,8 +302,8 @@ class SpecInv(InvBase):
                 self._int_params[0] = len(self.Hcols) #how to calc number of channels? NC
             if not self._int_params[1]:
                 self._int_params[1] = len(self.Egrid)  #NE
-            if not self._int_params[2]:
-                self._int_params[2] = len(self.Eout)
+            #if not self._int_params[2]:
+            self._int_params[2] = len(self.Eout)
         except (AssertionError, AttributeError):
             raise TypeError('Counts, Relative Error on Counts and Energy grid must be defined') 
         try:
@@ -262,8 +311,8 @@ class SpecInv(InvBase):
         except:
             raise AttributeError('Response functions must be specified')
         try:
-            assert self.b
-        except AttributeError:
+            assert len(self.b) == len(self.counts)
+        except:
             print('Background not specified, defaulting to zero')
             self.b = [0]*len(self.counts)
         
@@ -277,13 +326,8 @@ class SpecInv(InvBase):
         b = NC*ctypes.c_double
         flux = (NEout * ctypes.c_double)(0)
         dlogflux = (NEout * ctypes.c_double)(0)
-        try:
-            Eout = Eout(*self.Eout)
-            NEout = int(len(Eout))
-        except AttributeError:
-            NEout = int(NEout) 
-            Eout = NEout*ctypes.c_double
-            Eout = Eout(*self._default_Eout)  ##set default log grid of 20 energies
+        Eout = Eout(*self.Eout)
+        NEout = int(len(Eout))
         
         flux = (NEout * ctypes.c_double)(0)
         dlogflux = (NEout * ctypes.c_double)(0)
@@ -293,19 +337,19 @@ class SpecInv(InvBase):
             self._int_params[3] = 1+2 #defaults to power law and exponential
         else:
             self._int_params[3] = fnc
-        if self._int_params[4] == None: self._int_params[4] = 0 #default to BFGS minimizer
-        if self._int_params[5] == None: self._int_params[5] = 10000
+        if self._int_params[4] == None: self._int_params[4] = minim #default to BFGS minimizer
+        if self._int_params[5] == None: self._int_params[5] = 5000
         if self._int_params[6] == None: self._int_params[6] = self._verb
-        if self._int_params[7] == None: self._int_params[7] = 0
+        if self._int_params[7] == None: self._int_params[7] = Hint
         if self._int_params[8] == None: self._int_params[8] = 0
         if self._int_params[9] == None: self._int_params[9] = 0
         
         intp = ctypes.c_long*10
         realp = ctypes.c_double*10
-        if fittype == 'ana':
+        if fittype.lower() == 'ana':
             intp = intp(*self._int_params)
             realp = realp(*[self.rme, 100, 345, 0, 0, 0, 0, 0, 0, 0])
-        elif fittype == 'pc':
+        elif fittype.lower() == 'pc':
             raise NotImplementedError('Principal Component method not yet implemented')
         
         counts = c(*self.counts)
@@ -319,6 +363,7 @@ class SpecInv(InvBase):
         return None
 
     def retCodeAna(self, retval):
+        """Function to parse INVLIB return codes"""
         #maybe replace this with defined exceptions
         err_codes = {1: 'Success', 0: 'Unknown Error (BUG)',
             -101: 'Null passed where pointer expected',
@@ -337,21 +382,31 @@ class SpecInv(InvBase):
         return err_codes[retval]
     
     def anaSpecInv(self):
-        '''Analytic spectral inversion'''
-        assert self._params
+        """Analytic spectral inversion
+        
+        Calls ana_spec_inv from the INVLIB library.
+        
+        """
+        try:
+            assert self._params
+        except AttributeError:
+            warn = 'Warning: setup not completed'
+            mssg = 'Attempting to call setParams() with defaults'
+            raise AttributeError(warn+'\n'+mssg)
         retval = self._invlib.ana_spec_inv(*self._params)
         print('Analytic Spectral Inversion: %s\n' % self.retCodeAna(retval))
         
         return retval
     
     def _writeAnaSpec(self, retval, fnameout="specinv_test_py.out1"):
+        """Method (unfinished) to write output E, flux, dlogflux"""
         #currently not called
         if retval == 1:
             Eout = list(self._params[-5])
             flux = list(self._params[-4])
             dlogflux = list(self._params[-3])
             
-        outlist=[]
+        outlist = []
         for eo, fl, dlf in zip(Eout, flux, dlogflux):
             #add time to 1st position in nested list
             row = ['%6f' % eo, '%6g' % fl, '%6g' % dlf]
@@ -363,7 +418,7 @@ class SpecInv(InvBase):
 
 
 class AngInv(InvBase):
-    #interface to omni2uni and wide2uni functions from invlib
+    """interface to omni2uni and wide2uni functions from invlib"""
     def __init__(self, **kwargs):
         super(AngInv, self).__init__(self, **kwargs) 
         #set null params for later population
@@ -376,6 +431,7 @@ class AngInv(InvBase):
         self.PAgrid = None
     
     def retCodes(self, retval):
+        """Function to parse INVLIB return codes"""
         #maybe replace this with defined exceptions
         err_codes = {1: 'Success', 0: 'Unknown Error (BUG)',
             -101: 'Null passed where pointer expected',
@@ -391,9 +447,7 @@ class AngInv(InvBase):
         return err_codes[retval]
             
     def testOmni2Uni(self):
-        """Runs the test case given in omni2uni
-        
-        """
+        """Runs the test case given in omni2uni"""
         self._int_params[0] = 50 #; /* NA - number of angular gridpoints */
         self._int_params[2] = 1 #; /* 1 = verbose to standard out */
         self._int_params[3] = 3 #; /* minimizer, 0=BFGS, 3=NM */
@@ -414,11 +468,12 @@ class AngInv(InvBase):
         return ret1+ret2         
         
     def setParams(self, method='TEM1', alpha=5):
+        """Method called to set parameters to pass to INVLIB"""
         if method.upper() not in ['TEM1', 'VAM']:
             raise ValueError('Invalid angular inversion method requested')       
-        if method.upper()=='TEM1':
+        if method.upper() == 'TEM1':
             self._int_params[1]=-1
-        elif method.upper()=='VAM':
+        elif method.upper() == 'VAM':
             self._int_params[1]=-2
         #test for presence of inputs
         if self.omniflux is None or self.domniflux is None:
@@ -433,12 +488,12 @@ class AngInv(InvBase):
         realp = realp(*self._real_params)
         
         stub = ctypes.c_double
-        if isinstance(self.omniflux,numbers.Real):
+        if isinstance(self.omniflux, numbers.Real):
             Lof = 1
             self.omniflux = [self.omniflux]
         else:
             Lof = len(self.omniflux)
-        if isinstance(self.domniflux,numbers.Real):
+        if isinstance(self.domniflux, numbers.Real):
             Ldf = 1
             self.domniflux = [self.domniflux]
         else:
@@ -486,17 +541,3 @@ class AngInv(InvBase):
 if __name__ == '__main__':
     #run test suite if called from command line
     exec(compile(open('invlib_test.py').read(), 'invlib_test.py', 'exec'))
-    
-    #dum = pinv.SpecInv(verbose=1)
-    #dum.counts = [4.15524e+02, 3.70161e+02, 2.42137e+02, 2.12097e+02, 1.47379e+02, 1.40524e+02, 9.37500e+01, 5.08064e+01, 1.93548e+01, 3.22581e+00]
-    #dum.dcounts=[0.3466]*10
-    #dum.Eout = [1.00000000e-02, 1.31795546e-02, 1.73700659e-02, 2.28929731e-02, 3.01719189e-02, 3.97652452e-02, 5.24088219e-02, 6.90724929e-02, 9.10344690e-02, 1.19979375e-01,   1.58127472e-01,   2.08404965e-01, 2.74668462e-01,   3.62000798e-01,   4.77100928e-01, 6.28797771e-01,   8.28727455e-01,   1.09222587e+00, 1.43950505e+00,   1.89720354e+00,   2.50042976e+00, 3.29545504e+00,   4.34326296e+00,   5.72422712e+00, 7.54427638e+00, 9.94302023e+00, 1.31044578e+01, 1.72710917e+01, 2.27625295e+01, 3.00000000e+01]
-    #dum.readRespFunc(fname='../../projects/responses/sopa/mcp_output/version_1/electrons/sopa_1989-046_t2_HSP_elec.001')
-    #dum.setParams()
-    #dum.anaSpecInv()
-    #import matplotlib.pyplot as plt
-    #flux = list(dum._params[-4])
-    #dlogflux = list(dum._params[-3])
-    #plt.semilogy(dum.Eout[:30], dlogflux[:30], 'r-d')
-    #plt.semilogy(dum.Eout[:30], flux[:30], 'b-d')
-    #plt.show()

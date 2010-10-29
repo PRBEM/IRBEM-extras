@@ -96,10 +96,12 @@ class SpecInvTests(unittest.TestCase):
         result = dum.anaSpecInv()
         self.assertEqual(result, -402)
         
+        dum = pinv.SpecInv()
         dum.readTestInput(verbose=False, func=0)
         result = dum.anaSpecInv()
         self.assertEqual(result, -201)
         
+        dum = pinv.SpecInv()
         dum.readTestInput(verbose=False, minim=9)
         result = dum.anaSpecInv()
         self.assertEqual(result, -401)
