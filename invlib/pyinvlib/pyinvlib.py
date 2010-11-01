@@ -20,7 +20,6 @@ Date Created: 23 Sept. 2010
 
 To Do:
 Enable read support for PRBEM response files
-Finalize read support for LANL standard response files
 Generalize setting of _real_params
 Add support for calling pc_spec_inv
 Improve error trapping
@@ -148,7 +147,7 @@ class InvBase(object):
         print('Using accumulation time %g' % dt)
         Htmp = np.array(data, dtype=float).transpose().ravel()*dt
         self.H = Htmp.tolist()
-        self.Egrid = [e*1000. for e in Earray] #temporary fix to get G(E) from LANL files into keV
+        self.Egrid = Earray
         self.Hcols = col_hdr
         
         if self._verb:
@@ -204,9 +203,7 @@ class SpecInv(InvBase):
     object methods. 
     
     Example use:
-    import necessary packages for this example
-    >>> import matplotlib.pyplot as plt
-    >>> import numpy as np
+    import package (required)
     >>> import pyinvlib as pinv
     instantiate and populate attributes
     >>> dum = pinv.SpecInv(verbose=1)
@@ -216,21 +213,8 @@ class SpecInv(InvBase):
     >>> dum.readRespFunc(fname='../../projects/responses/sopa/mcp_output/version_3/electrons/sopa_LANL-97A_t2_HSP_elec.001')
     >>> dum.setParams(fnc=8)
     >>> dum.anaSpecInv()
-    get the outputs and construct the errorbars (to be done automatically in future)
-    >>> flux = list(dum._params[-4])
-    >>> dlogflux = list(dum._params[-3])
-    >>> ciu_flux = [(f*np.exp(1.96*d))-f for f,d in zip(flux,dlogflux)]
-    >>> cil_flux = [f-(f*np.exp(-1.96*d)) for f,d in zip(flux,dlogflux)]
-    plot the output spectrum with errorbars using matplotlib
-    >>> fig = plt.figure()
-    >>> ax = fig.add_subplot(111)
-    >>> ax.set_xscale("log", nonposx='clip')
-    >>> ax.set_yscale("log", nonposy='clip')
-    >>> ax.errorbar(dum.Eout, flux, yerr=[ciu_flux, cil_flux])
-    >>> ax.set_ylabel('Flux [#/cm$^2$.s.sr.keV]')
-    >>> ax.set_xlabel('Energy [keV]')
-    >>> ax.set_ylim(ymin=min(flux))
-    >>> plt.show()
+    plot the output spectrum with errorbars (using matplotlib)
+    >>> fig = dum.plot()
     """
     def __init__(self, *args, **kwargs):
         super(SpecInv, self).__init__(self, *args, **kwargs)
@@ -289,7 +273,7 @@ class SpecInv(InvBase):
         
         return None
         
-    def setParams(self, fittype='ana', fnc=None, Hint=1, minim=0):
+    def setParams(self, fittype='ana', fnc=None, Hint=1, minim=None):
         """Generic method for setting parameter inputs to *_spec*
         
         Checks that the object is populated with sufficient data and fills in 
@@ -319,14 +303,17 @@ class SpecInv(InvBase):
         #define outputs
         NC, NE = int(self._int_params[0]), int(self._int_params[1])
         NEout = int(self._int_params[2])
-        c, dc = NC*ctypes.c_double, NC*ctypes.c_double
-        Egrid = NE*ctypes.c_double
-        H = NE*NC*ctypes.c_double
-        Eout = NEout*ctypes.c_double
-        b = NC*ctypes.c_double
-        flux = (NEout * ctypes.c_double)(0)
-        dlogflux = (NEout * ctypes.c_double)(0)
-        Eout = Eout(*self.Eout)
+        try:
+            c, dc = NC*ctypes.c_double, NC*ctypes.c_double
+            Egrid = NE*ctypes.c_double
+            H = NE*NC*ctypes.c_double
+            Eout = NEout*ctypes.c_double
+            b = NC*ctypes.c_double
+            flux = (NEout * ctypes.c_double)(0)
+            dlogflux = (NEout * ctypes.c_double)(0)
+            Eout = Eout(*self.Eout)
+        except IndexError:
+            raise IndexError('Error: Mismatched counts/energy grid')
         NEout = int(len(Eout))
         
         flux = (NEout * ctypes.c_double)(0)
@@ -337,7 +324,10 @@ class SpecInv(InvBase):
             self._int_params[3] = 1+2 #defaults to power law and exponential
         else:
             self._int_params[3] = fnc
-        if self._int_params[4] == None: self._int_params[4] = minim #default to BFGS minimizer
+        if minim == None:
+            self._int_params[4] = 0 #default to BFGS minimizer
+        else:
+            self._int_params[4] = minim 
         if self._int_params[5] == None: self._int_params[5] = 5000
         if self._int_params[6] == None: self._int_params[6] = self._verb
         if self._int_params[7] == None: self._int_params[7] = Hint
@@ -396,6 +386,11 @@ class SpecInv(InvBase):
         retval = self._invlib.ana_spec_inv(*self._params)
         print('Analytic Spectral Inversion: %s\n' % self.retCodeAna(retval))
         
+        if retval == 1:
+            #if successful, save (flux, dlogflux)
+            self.flux = list(self._params[-4])
+            self.dlogflux = list(self._params[-3])
+        
         return retval
     
     def _writeAnaSpec(self, retval, fnameout="specinv_test_py.out1"):
@@ -415,6 +410,39 @@ class SpecInv(InvBase):
         print('Output written to file: %s' % fnameout)
         
         return None
+        
+    def plot(self, **kwargs):
+        """Method for quicklook plot of output (if extant in object)
+        
+        Accepts keyword args:
+        title - string containing plot title
+        """
+        
+        try:
+            #needs matplotlib for plotting
+            import matplotlib.pyplot as plt
+        except ImportError:
+            raise ImportError('Error: MatPlotLib import failed - please check install')
+        
+        try:
+            ciu_flux = [(f*np.exp(1.96*d))-f for f,d in zip(self.flux,self.dlogflux)]
+            cil_flux = [f-(f*np.exp(-1.96*d)) for f,d in zip(self.flux,self.dlogflux)]
+        except:
+            raise AttributeError('Error: Flux and dLogFlux must be successfully calculated')
+            
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.set_xscale("log", nonposx='clip')
+        ax.set_yscale("log", nonposy='clip')
+        ax.errorbar(self.Eout, self.flux, yerr=[ciu_flux, cil_flux])
+        ax.set_ylabel('Flux [#/cm$^2$.s.sr.keV]')
+        ax.set_xlabel('Energy [keV]')
+        ax.set_ylim(ymin=min(self.flux))
+        if 'title' in kwargs:
+            ax.set_title(kwargs['title'])
+        plt.show()
+            
+        return fig
 
 
 class AngInv(InvBase):
@@ -512,6 +540,7 @@ class AngInv(InvBase):
         return None
     
     def omni2uni(self, method=None):
+        '''Angular Inversion: Omnidirectional to unidirectional'''
         try:
             assert self._paramsO
         except:
@@ -525,6 +554,7 @@ class AngInv(InvBase):
         return retval
 
     def wide2uni(self, method=None):
+        '''Angular Inversion: Wide angle to unidirectional'''
         try:
             assert self._paramsW
         except:
