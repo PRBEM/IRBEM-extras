@@ -144,7 +144,8 @@ class InvBase(object):
         else:
             #default to 1-sec for now
             dt = 1
-        print('Using accumulation time %g' % dt)
+        if self._verb:
+            print('Using accumulation time %g' % dt)
         Htmp = np.array(data, dtype=float).transpose().ravel()*dt
         self.H = Htmp.tolist()
         self.Egrid = Earray
@@ -155,7 +156,8 @@ class InvBase(object):
         try:
             assert self.Eout#==self.Egrid
         except AttributeError:
-            print('Energy grid for output not set: Using grid from response function')
+            if self._verb:
+                print('Energy grid for output not set: Using grid from response function')
             self.Eout = self.Egrid
 
         return None
@@ -224,7 +226,7 @@ class SpecInv(InvBase):
         if 'rme' in kwargs:
             self.rme = kwargs['rme'] 
         else:
-            self.rme = 0.511 #defaults to electron with all units in MeV
+            self.rme = 511 #defaults to electron with all units in keV
 
     def readTestInput(self, verbose=True, func=1+2, minim=0, niter=1000):
         """reads test data for specinv_test.c
@@ -280,7 +282,7 @@ class SpecInv(InvBase):
         default values where necessary.
         """
         try:
-            assert self.counts
+            assert list(self.counts)
             assert len(self.dcounts)==len(self.counts)
             if not self._int_params[0]:
                 self._int_params[0] = len(self.Hcols) #how to calc number of channels? NC
@@ -305,6 +307,7 @@ class SpecInv(InvBase):
         NEout = int(self._int_params[2])
         try:
             c, dc = NC*ctypes.c_double, NC*ctypes.c_double
+            eval_counts = (NC*ctypes.c_double)(0)
             Egrid = NE*ctypes.c_double
             H = NE*NC*ctypes.c_double
             Eout = NEout*ctypes.c_double
@@ -349,7 +352,7 @@ class SpecInv(InvBase):
         b = b(*self.b)
         
         self._params = (counts, dcounts, Egrid, 
-            H, b, intp, realp, None, Eout, flux, dlogflux, None, None)
+            H, b, intp, realp, None, Eout, flux, dlogflux, eval_counts, None)
         return None
 
     def retCodeAna(self, retval):
@@ -384,12 +387,14 @@ class SpecInv(InvBase):
             mssg = 'Attempting to call setParams() with defaults'
             raise AttributeError(warn+'\n'+mssg)
         retval = self._invlib.ana_spec_inv(*self._params)
-        print('Analytic Spectral Inversion: %s\n' % self.retCodeAna(retval))
+        if self._verb:
+            print('Analytic Spectral Inversion: %s\n' % self.retCodeAna(retval))
         
         if retval == 1:
             #if successful, save (flux, dlogflux)
             self.flux = list(self._params[-4])
             self.dlogflux = list(self._params[-3])
+            self.eval_counts = list(self._params[-2])
         
         return retval
     
@@ -440,9 +445,17 @@ class SpecInv(InvBase):
         ax.set_ylim(ymin=min(self.flux))
         if 'title' in kwargs:
             ax.set_title(kwargs['title'])
-        plt.show()
+        if 'show' in kwargs:
+            if kwargs['show']:
+                plt.show()
+        if 'save' in kwargs:
+            if kwargs['save']:
+                if type(kwargs['save'])==str:
+                    plt.savefig(kwargs['save'])
+                else:
+                    plt.savefig('invlib_out.png')
             
-        return fig
+        return None
 
 
 class AngInv(InvBase):
