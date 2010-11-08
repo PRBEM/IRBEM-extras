@@ -252,6 +252,7 @@ if ~exist(filename,'file'),
     error('%s: load_net, file not found "%s"',mfilename,filename);
 end
 
+filename = which(filename);
 
 Nxptr = libpointer('ulongPtr',0);
 Nhptr = libpointer('ulongPtr',0);
