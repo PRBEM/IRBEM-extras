@@ -117,6 +117,11 @@ if ~exist(filename,'file'),
     error('%s: load_training_set, file not found "%s"',mfilename,filename);
 end
 
+tmp = which(filename);
+if ~isempty(tmp),
+    filename = tmp;
+end
+
 Ntptr = libpointer('ulongPtr',0);
 Nxptr = libpointer('ulongPtr',0);
 Nyptr = libpointer('ulongPtr',0);
@@ -252,7 +257,10 @@ if ~exist(filename,'file'),
     error('%s: load_net, file not found "%s"',mfilename,filename);
 end
 
-filename = which(filename);
+tmp = which(filename);
+if ~isempty(tmp),
+    filename = tmp;
+end
 
 Nxptr = libpointer('ulongPtr',0);
 Nhptr = libpointer('ulongPtr',0);
