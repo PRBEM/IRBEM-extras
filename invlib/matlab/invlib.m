@@ -184,6 +184,8 @@ while i <= length(varargin),
         case 'num_bases',
             options.num_bases = varargin{i+1};
             i = i+1;
+        otherwise
+            error('Unknown option "%s"',varargin{i});
     end
     i = i+1;
 end
@@ -213,10 +215,10 @@ fxns.exp = struct('bit',options.ASI_FXN_EXP,'Nq',2);
 fxns.exp.flux = @(q,E)exp(q(1)+q(2)*E);
 fxns.rm = struct('bit',options.ASI_FXN_RM,'Nq',2);
 fxns.rm.flux = @(q,E)E.*(1+E./options.rest_energy/2).*exp(q(1)+q(2)*E);
-fxns.rm2 = struct('bit',options.ASI_FXN_RM2,'Nq',4);
-fxns.rm2.flux = @(q,E)E.*(1+E./options.rest_energy/2).*(exp(q(1)+q(2)*E)+exp(q(3)+q(4)*E));
 fxns.ple = struct('bit',options.ASI_FXN_PLE,'Nq',2);
 fxns.ple.flux = @(q,E,Ebreak,E0)flux_ple;
+fxns.rm2 = struct('bit',options.ASI_FXN_RM2,'Nq',4);
+fxns.rm2.flux = @(q,E)E.*(1+E./options.rest_energy/2).*(exp(q(1)+q(2)*E)+exp(q(3)+q(4)*E));
 
 int_params = int32(zeros(10,1));
 real_params = nan(10,1);
@@ -253,7 +255,7 @@ fit.result_codes = resultsPtr.value;
 support_data = reshape(supportPtr.value,2+options.ASI_MAX_NQ+NY,options.ASI_MAX_POW2+1,NT);
 support_data = permute(support_data,[3,2,1]);
 
-functions = fieldnames(fxns);
+functions = {'pl','exp','rm','ple','rm2'}; % must match bit order in C
 
 for k = 1:length(functions),
     f = functions{k};
@@ -261,7 +263,7 @@ for k = 1:length(functions),
         fit.(f) = fxns.(f);
         fit.(f).ell = reshape(support_data(:,k,1),NT,1);
         fit.(f).weight = reshape(support_data(:,k,2),NT,1);
-        fit.(f).q = reshape(support_data(:,k,1:fxns.(f).Nq),NT,fxns.(f).Nq);
+        fit.(f).q = reshape(support_data(:,k,2+(1:fxns.(f).Nq)),NT,fxns.(f).Nq);
         fit.(f).lambda = reshape(support_data(:,k,2+options.ASI_MAX_NQ+(1:NY)),NT,NY);
     end
 end
