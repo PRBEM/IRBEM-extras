@@ -126,9 +126,9 @@ Yptr = libpointer('doublePtr',nan);
 sptr = libpointer('doublePtr',nan);
 % call first time with flag=99999 to get sizes
 calllib('nnlib','nnlib_load_training_set',filename,Ntptr,Nxptr,Xptr,Nyptr,Yptr,sptr,flagptr);
-Nx = Nxptr.value;
-Ny = Nyptr.value;
-Nt = Ntptr.value;
+Nx = double(Nxptr.value);
+Ny = double(Nyptr.value);
+Nt = double(Ntptr.value);
 flag = flagptr.value;
 Xptr = libpointer('doublePtr',nan(Nx,Nt));
 Yptr = libpointer('doublePtr',nan(Ny,Nt));
@@ -266,9 +266,9 @@ syptr = libpointer('doublePtr',nan);
 cov_thetaptr = libpointer('doublePtr',nan);
 % call first time with flag=99999 to get sizes
 calllib('nnlib','nnlib_load_net',filename,Nxptr,Nhptr,Nyptr,thetaptr,xbarptr,ybarptr,sxptr,syptr,flagptr,cov_thetaptr);
-Nx = Nxptr.value;
-Nh = Nhptr.value;
-Ny = Nyptr.value;
+Nx = double(Nxptr.value);
+Nh = double(Nhptr.value);
+Ny = double(Nyptr.value);
 Ntheta = Ny+Ny*Nh+Nh+Nh*Nx;
 if do_cov,
     flag = flagptr.value;
