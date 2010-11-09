@@ -69,7 +69,7 @@ xlabel('Energy, MeV');
 ylabel('Flux, #/cm^2/s/sr/MeV');
 
 % now, try it with the invlib version
-fit = invlib('ana_spec_inv',c(:)',dc(:)',Egrid,reshape(H,NE,NC)',1,b(:)',Eout,'pl','exp','dE_mode','G=GdE','outfile',[outfile,'2']);
+fit = invlib('ana_spec_inv',c(:)',dc(:)',Egrid,reshape(H,NE,NC)',1,b(:)',Eout,'pl','exp','trapz','G=GdE','outfile',[outfile,'2']);
 
 if any(fit.flux' ~= flux) || any(fit.dlogflux' ~= dlogflux),
     error('call to ana_spec_inv (via calllib) and ana_spec_inv_multi (via invlib) disagree');
