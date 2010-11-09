@@ -382,6 +382,7 @@ void make_lambda(const gsl_vector *q,const ell_paramsTy *ell_params,gsl_vector *
   }
   /* copy background into lambda: lambda = b */
   gsl_vector_memcpy(lambda,ell_params->b);  
+
   /* lambda = 1.0*H*flux+1.0*b (since lambda=b) */
   gsl_blas_dgemv(CblasNoTrans,1.0,ell_params->H,flux,1.0,lambda);
   gsl_vector_free(flux);
@@ -433,6 +434,7 @@ double ell_combine(const gsl_vector *q, void *params_void, gsl_vector *grad, gsl
   lambda = gsl_vector_alloc(ell_params->NY);
   /* copy background into lambda: lambda = b */
   gsl_vector_memcpy(lambda,ell_params->b);  
+
   /* lambda = 1.0*H*flux+1.0*b (since lambda=b) */
   gsl_blas_dgemv(CblasNoTrans,1.0,ell_params->H,flux,1.0,lambda);
 
@@ -828,6 +830,7 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
   gsl_vector_const_view Eoutgsl = gsl_vector_const_view_array(Eout,NEout);
 
   pen_funcs = setup_pen_funcs(NY,NE,dE_mode,y,dy,&(Hgsl.matrix),&(Egridgsl.vector),&(bgsl.vector),&ell_params,&Htmp);
+
   
   /* initialize other gsl views */
   fluxgsl = gsl_vector_view_array(flux,NEout);
@@ -932,6 +935,11 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
 	/* now do the optimization */
 	optfun.func = &ell_combine;
 	optfun.params = (void *)(&ell_params);
+
+	/* seed a bit with NM simplex */
+	optimize(q,&optfun, OPTIM_MIN_NM, 100,ell_params.outFilePtr);
+
+	/* now do the real, requested minimization */
 	optimize(q,&optfun, minimizer_flag, MaxIter,ell_params.outFilePtr);
 	if (verbose) {
 	  /* report fit coefficients */
