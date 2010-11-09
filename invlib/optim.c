@@ -85,14 +85,14 @@ double optimize(gsl_vector *q, optfunTy *optfun, const long int minimizer_flag, 
     my_fdf.df = &optim_df;
     my_fdf.fdf = &optim_fdf;
     my_fdf.params = (void *)optfun;
-    gsl_multimin_fdfminimizer_set (s_fdf, &my_fdf, q, 1e-6, 1e-6);
+    gsl_multimin_fdfminimizer_set (s_fdf, &my_fdf, q, 0.1, 1e-6); /* last two args are step size and tol (for line minimization) */
     if (fid) {
       fprintf(fid,"%s invoked with minimizer %s, MaxIter=%li\n",__func__,
 	      gsl_multimin_fdfminimizer_name(s_fdf),MaxIter);
     }
   } else {
     ss = gsl_vector_alloc(q->size); /* initial step size for simplex */
-    gsl_vector_set_all(ss,1.0);
+    gsl_vector_set_all(ss,0.1);
     s_f = gsl_multimin_fminimizer_alloc (Tf, q->size);
     my_f.n = q->size;
     my_f.f = &optim_f;
@@ -119,6 +119,10 @@ double optimize(gsl_vector *q, optfunTy *optfun, const long int minimizer_flag, 
       }
       
       if (status) { /* maybe we're done, but probably not for a happy reason */
+	if (fid) {
+	  fprintf(fid,"%s: Early break after %lu/%lu: %s\n",__func__,(unsigned long int)iter,(unsigned long int)MaxIter,gsl_strerror(status));
+	  fprintf(fid,"%s: fval = %lf\n",__func__,fval);
+	}
 	break;
       }
       
@@ -143,6 +147,11 @@ double optimize(gsl_vector *q, optfunTy *optfun, const long int minimizer_flag, 
   
   if (fid) {
     fprintf(fid,"%s: completed after %lu/%lu: %s\n",__func__,(unsigned long int)iter,(unsigned long int)MaxIter,gsl_strerror(status));
+    if (OPTIM_MIN_ISFDF(minimizer_flag)) {
+      fprintf(fid,"gradient:\n");
+      gsl_vector_fprintf(fid,s_fdf->gradient,"%lf");
+      fprintf(fid,"\n");
+    }
   }
 
   /* copy solution into q and fval */
