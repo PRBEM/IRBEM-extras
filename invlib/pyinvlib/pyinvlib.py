@@ -97,11 +97,11 @@ class InvBase(object):
         outstr = clstr + ' instance: ' + '\n'
         for ent in attrs:
             try:
-                le = '[' + str(len(getattr(self, ent))) + ']\n'
-                outstr = outstr + str(ent) + ' :  ' + le
+                leng = '[' + str(len(getattr(self, ent))) + ']\n'
+                outstr = outstr + str(ent) + ' :  ' + leng
             except TypeError:
-                le = str(type(getattr(self, ent))) + '\n'
-                outstr = outstr + str(ent) + ' :  ' + le
+                leng = str(type(getattr(self, ent))) + '\n'
+                outstr = outstr + str(ent) + ' :  ' + leng
                 
         return outstr
             
@@ -227,6 +227,7 @@ class SpecInv(InvBase):
             self.rme = kwargs['rme'] 
         else:
             self.rme = 511 #defaults to electron with all units in keV
+        self.fitparams = {'Ebreak': 100, 'E0': 345}
 
     def readTestInput(self, verbose=True, func=1+2, minim=0, niter=1000):
         """reads test data for specinv_test.c
@@ -337,11 +338,13 @@ class SpecInv(InvBase):
         if self._int_params[8] == None: self._int_params[8] = 0
         if self._int_params[9] == None: self._int_params[9] = 0
         
+        self._real_params = [self.rme, self.fitparams['Ebreak'], self.fitparams['E0'], 0, 0, 0, 0, 0, 0, 0]
+        
         intp = ctypes.c_long*10
         realp = ctypes.c_double*10
         if fittype.lower() == 'ana':
             intp = intp(*self._int_params)
-            realp = realp(*[self.rme, 100, 345, 0, 0, 0, 0, 0, 0, 0])
+            realp = realp(*self._real_params)
         elif fittype.lower() == 'pc':
             raise NotImplementedError('Principal Component method not yet implemented')
         
@@ -379,6 +382,14 @@ class SpecInv(InvBase):
         
         Calls ana_spec_inv from the INVLIB library.
         
+        Output:
+        -------
+        Returns a return code to report status of C call
+        Populates object attributes:
+         - flux: estimated isotropic unidirectional flux [#/cm^2/s/sr/keV]
+         - dlogflux: std error of flux [dimensionless]
+         - eval_counts: evaluated counts from fit
+         - fitresult: dictionary of goodness-of-fit descriptors
         """
         try:
             assert self._params
@@ -395,11 +406,13 @@ class SpecInv(InvBase):
             self.flux = list(self._params[-4])
             self.dlogflux = list(self._params[-3])
             self.eval_counts = list(self._params[-2])
+            rss = sum([(a-b)**2 for a, b in zip(self.counts, self.eval_counts)])
+            self.fitresult = {'ResidSumSq': rss}
         
         return retval
     
     def _writeAnaSpec(self, retval, fnameout="specinv_test_py.out1"):
-        """Method (unfinished) to write output E, flux, dlogflux"""
+        """Method to write output E, flux, dlogflux"""
         #currently not called
         if retval == 1:
             Eout = list(self._params[-5])
@@ -417,7 +430,7 @@ class SpecInv(InvBase):
         return None
         
     def plot(self, **kwargs):
-        """Method for quicklook plot of output (if extant in object)
+        """Method for quicklook plot of output --if extant in object--
         
         Accepts keyword args:
         title - string containing plot title
@@ -430,8 +443,8 @@ class SpecInv(InvBase):
             raise ImportError('Error: MatPlotLib import failed - please check install')
         
         try:
-            ciu_flux = [(f*np.exp(1.96*d))-f for f,d in zip(self.flux,self.dlogflux)]
-            cil_flux = [f-(f*np.exp(-1.96*d)) for f,d in zip(self.flux,self.dlogflux)]
+            ciu_flux = [(f*np.exp(1.96*d))-f for f, d in zip(self.flux, self.dlogflux)]
+            cil_flux = [f-(f*np.exp(-1.96*d)) for f, d in zip(self.flux, self.dlogflux)]
         except:
             raise AttributeError('Error: Flux and dLogFlux must be successfully calculated')
             
@@ -485,37 +498,16 @@ class AngInv(InvBase):
             -502: 'User-requested output file could not be opened',
             -601: 'Output pitch angle requested out of range'}
         
-        return err_codes[retval]
-            
-    def testOmni2Uni(self):
-        """Runs the test case given in omni2uni"""
-        self._int_params[0] = 50 #; /* NA - number of angular gridpoints */
-        self._int_params[2] = 1 #; /* 1 = verbose to standard out */
-        self._int_params[3] = 3 #; /* minimizer, 0=BFGS, 3=NM */
-        self._int_params[4] = 1000 #; /* maximumn # of iterations */
-        self._real_params[0] = 300.0 #; /* 300 keV */
-        self._real_params[1] = 40000.0/100.0 #; /* B/B0 */
-        self._real_params[2] = 6.6 #; /* Lm */
-        self.omniflux = 10000 #; /* typical value 1E+4 */
-        self.domniflux = math.log(2)/2 #natural log
-        
-        #run case 1
-        self.setParams()
-        ret1 = self.omni2uni('TEM1')
-        #run case 2
-        self.setParams(method='VAM')
-        ret2 = self.omni2uni()
-        
-        return ret1+ret2         
+        return err_codes[retval]    
         
     def setParams(self, method='TEM1', alpha=5):
         """Method called to set parameters to pass to INVLIB"""
         if method.upper() not in ['TEM1', 'VAM']:
             raise ValueError('Invalid angular inversion method requested')       
         if method.upper() == 'TEM1':
-            self._int_params[1]=-1
+            self._int_params[1] =- 1
         elif method.upper() == 'VAM':
-            self._int_params[1]=-2
+            self._int_params[1] =- 2
         #test for presence of inputs
         if self.omniflux is None or self.domniflux is None:
             raise ValueError('Flux or Error on flux undefined')
@@ -553,10 +545,29 @@ class AngInv(InvBase):
         return None
     
     def omni2uni(self, method=None):
-        '''Angular Inversion: Omnidirectional to unidirectional'''
+        '''Angular Inversion: Omnidirectional to unidirectional
+        
+        Parameters for call set up in setParams()
+        
+        Output:
+        -------
+        Returns a return code to report status of C call
+        Populates object attributes:
+         - uniflux: locally mirroring uni-dir flux [#/cm^2/s/sr/keV]
+         - dlogflux: std error of uniflux [dimensionless]
+        
+        Inputs to C routine:
+        -------
+        omniflux - estimated flux in [#/cm^2/sr/s/keV]
+        dlogomniflux - relative error on omniflux
+        NA - number of grid points for angular integral
+        Epart - Energy of particle flux [keV]
+        B_B0 - B/B0 of desired location
+        Lmac = MacIlwain L for locally mirroring particles (O-P quiet model)
+        '''
         try:
             assert self._paramsO
-        except:
+        except (AssertionError, AttributeError):
             if method != None:
                 self.setParams(method=method)
             else:
@@ -564,13 +575,18 @@ class AngInv(InvBase):
         retval = self._invlib.omni2uni(*self._paramsO)
         print('omni2uni Angular Inversion: %s\n' % self.retCodes(retval))
         
+        if retval == 1:
+            #if successful, save (uniflux, dlogflux)
+            self.uniflux = list(self._paramsO[-2])
+            self.dlogflux = list(self._paramsO[-1])
+        
         return retval
 
     def wide2uni(self, method=None):
         '''Angular Inversion: Wide angle to unidirectional'''
         try:
             assert self._paramsW
-        except:
+        except (AssertionError, AttributeError):
             if method != None:
                 self.setParams(method=method)
             else:
