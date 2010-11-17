@@ -29,7 +29,7 @@ Add support for calling of *spec_inv_multi (within extant functions)
 Angular Inversion code (add wide2uni)
 """
 
-import ctypes, os, sys, csv, math, numbers
+import ctypes, os, sys, csv, numbers
 import numpy as np
 
 if sys.platform == 'linux2':
@@ -500,14 +500,14 @@ class AngInv(InvBase):
         
         return err_codes[retval]    
         
-    def setParams(self, method='TEM1', alpha=5):
+    def setParams(self, method='TEM1', **kwargs):
         """Method called to set parameters to pass to INVLIB"""
         if method.upper() not in ['TEM1', 'VAM']:
             raise ValueError('Invalid angular inversion method requested')       
         if method.upper() == 'TEM1':
-            self._int_params[1] =- 1
+            self._int_params[1] = -1
         elif method.upper() == 'VAM':
-            self._int_params[1] =- 2
+            self._int_params[1] = -2
         #test for presence of inputs
         if self.omniflux is None or self.domniflux is None:
             raise ValueError('Flux or Error on flux undefined')

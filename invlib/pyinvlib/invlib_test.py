@@ -176,12 +176,12 @@ class AngInvTests(unittest.TestCase):
         dum.domniflux = math.log(2)/2 # natural log
         
         #run case 1
-        dum.setParams()
+        dum.setParams(alpha=5)
         ret1 = dum.omni2uni('TEM1')
         self.assertEqual(ret1, 1) #Test for convergence in omni2uni
         self.assertAlmostEqual(dum.uniflux[0], 28289.428111933394, places=6)
         #run case 2
-        dum.setParams(method='VAM')
+        dum.setParams(alpha=5, method='VAM')
         ret2 = dum.omni2uni()
         self.assertEqual(ret2, 1) #Test for convergence in omni2uni
         self.assertAlmostEqual(dum.uniflux[0], 29295.302704246446, places=6)
