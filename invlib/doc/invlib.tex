@@ -48,6 +48,7 @@ best-fit energy spectrum from a multi-channel measurement.
 \label{secChanges}
 
 \begin{itemize}
+\item{11/17/2010} Function descriptions expanded and new section added for Python interface and test suite (S. Morley)
 \item{5/28/2010} Updated discussion of principal components transform and maximum likelihood problem setup. Added figures showing example from CRRES p.c. model
 \item{5/27/2010} Created \verb|pc_spec_inv| and \verb|pc_spec_inv_multi| and associated documentation. Reorganized documentation a little.
 \item{1/6/2010} Created Matlab wrapper and fixed documentation for \verb|omni2uni|.
@@ -633,7 +634,7 @@ int ana_spec_inv(const double *y, const double *dy,
 		 double *lambda, double *support_data);
 \end{verbatim}
                   
-This function takes a set of counts \verb|y|, estimated relative error
+This function takes a set of counts \verb|y| (per accumulation interval), estimated relative error
 on those counts \verb|dy|, and measurement matrix \verb|H| defined on
 energy grid \verb|Egrid|, with estimated background counts \verb|b|,
 and returns \verb|flux| on output energy grid \verb|Eout|. The user
@@ -675,7 +676,8 @@ function bitmap value, and is defined in ``specinv.h'' for C users.
 The primary difference between \verb|ana_spec_inv| and
 \verb|ana_spec_inv_multi| is that the latter requires
 the aggregation time (\verb|dt|) be passed in separately from the
-instrument response function. For each call to \verb|ana_spec_inv|, a
+instrument response function, where for \verb|ana_spec_inv| the response 
+function must include the aggregation time. For each call to \verb|ana_spec_inv|, a
 temporary \verb|H| will be set to \verb|H0|$\times$\verb|dt[t]|, to
 reflect a possibly changing integration time. The other inputs
 are passed directly to \verb|ana_spec_inv|, without alteration.
@@ -889,10 +891,10 @@ power-law, exponential and relativistic Maxwellian spectra.
 
 \section{Angular Inversion Functions}
 
-This section planned angular inversion functions for
+This section describes the angular inversion functions for
 single-channel omnidirectional and wide-angle measurements.
 
-The following C prototypes will be added to ``invlib.h'':
+The following C prototypes can be found ``invlib.h'':
 \begin{verbatim}
 int omni2uni(const double *omniflux, const double *dlogomniflux,
              const long int *int_params, 
@@ -900,6 +902,7 @@ int omni2uni(const double *omniflux, const double *dlogomniflux,
              char *outFile, 
              double *uniflux, double *dloguniflux);
 \end{verbatim}
+Returns estimated locally-mirroring unidirectional flux.
 
 \begin{verbatim}
 int wide2uni(const double *wideflux, const double *dlogwideflux,
@@ -1244,6 +1247,77 @@ I have not figured out how to make a stand-alone DLL in cygwin, I
 think because GSL libraries depend on ``cygwin1.dll''. However, I have
 created a DLL with MSYS/MINGW, and the makefile has commands to do
 this.
+
+\section{High-level language interfaces to INVLIB}
+\subsection{Python}
+An interface to the C inversion library has been written in Python to allow rapid
+scripting and testing of the library. The package is compatible with Python 
+versions $\geq$2.6, including Py3k.
+
+To install the Python package, both Python and NumPy must be installed first. If
+MatPlotLib is installed additional visualization tools will be available. In the 
+directory containing the inversion library, type:\\
+\begin{verbatim}
+python setup.py install --home=<dir>
+\end{verbatim}
+where the \verb|--home| option defines a non-standard installation directory. To install
+in the default location (by omitting the flag) may require administrative privileges.
+To access the interface from within Python, import the package \verb|pyinvlib|.
+
+The unit-testing suite included with this interface, ``invlib\_test.py'', can be run
+either directly from the checked-out SVN repository or from the install directory. It
+includes tests for a number of methods within the interface, as well as basic regression
+tests for the underlying C library. Currently this represents the most comprehensive
+test suite for the C inversion library and it is recommended that the library 
+
+As usual, the documentation for \verb|pyinvlib| is contained in the source code in the'
+form of docstrings. From a Python environment, this can be accessed using the Python 
+built-in \verb|help()| function (within the iPython interpreter simply appending a 
+\verb|?| will do). e.g.,
+\begin{verbatim}
+>>> import pyinvlib as pinv
+>>> help(pinv.SpecInv)
+
+Help on class SpecInv in module pyinvlib:
+
+class SpecInv(InvBase)
+ |  Spectral Inversion class using INVLIB
+ |  
+ |  This class is designed to hold all necessary inputs to *_spec_inv* from
+ |  the INVLIB library. The calls to INVLIB routines are implemented as
+ |  object methods. 
+ |  
+ |  Example use:
+ |  import package (required)
+ |  >>> import pyinvlib as pinv
+ |  instantiate and populate attributes
+ |  >>> dum = pinv.SpecInv(verbose=True)
+ |  >>> dum.counts = [4.15524e+02, 3.70161e+02, 2.42137e+02, 2.12097e+02,
+ |  1.47379e+02, 1.40524e+02, 9.37500e+01, 5.08064e+01, 1.93548e+01, 3.22581e+00]
+ |  >>> dum.dcounts=[0.3466]*10
+ |  >>> dum.readRespFunc(fname='sopa_LANL-97A_t2_HSP_elec.001')
+ |  >>> dum.setParams(fnc=8)
+ |  >>> dum.anaSpecInv()
+ |  plot the output spectrum with errorbars (using matplotlib)
+ |  >>> fig = dum.plot()
+ |  
+ |  Method resolution order:
+ |      SpecInv
+ |      InvBase
+ |      __builtin__.object
+ |  
+ |  Methods defined here:
+ ...
+\end{verbatim}
+
+The package defines two new classes for the user, \verb|SpecInv| and \verb|AngInv|, for
+spectral inversion and angular inversion, respectively. (Note: these are sub-classed from
+the \verb|InvBase| class, which is not designed to be instantiated and provides jointly 
+inherited behavior).
+
+For comprehensive and up to date documentation on the Python interface, either read the
+help from the Python environment or use a package like ``epydoc'' to automatically generate
+comprehensive documentation in either HTML or PDF form.
 
 
 \appendix
