@@ -34,7 +34,7 @@ dy = repmat(0.3466,8,1);
 % 
 % If you need more info to attempt to reproduce what I'm doing, let me know.
 % 
-Case = 5;
+Case = 1;
 switch(Case),
     case 1,
         % Case 1 (ns41 at L~9):
@@ -55,9 +55,18 @@ switch(Case),
         % Counts = Background + dt*trapz(keV,epsG.*repmat(1e4*(keV/100).^-2,1,8));
         Counts = Background + dt*trapz(keV,epsG.*repmat(exp(10-3*log(keV)),1,8));
         fprintf('%10f, %10f, %10f\n',[Background', Counts', Counts'-Background']')
-    case 5, % fake rm2
+    case 5, % fake rm
         Background=[ 384.192,  408.36 ,  378.984,  390.768,  406.896,  413.568, 420.336,  391.416];
-        q = [2 -1/100 2 -1/300];
+        epsG = double([ keV > 100 , keV > 200 , keV > 400 , keV > 800 , keV > 1600 , keV > 3200, keV > 6400, keV > 12800]);
+        q = [1 -1];
+        rm = @(q,E)E.*(1+E/2/m0c2).*exp(q(1)+E*q(2));
+        % Counts = Background + dt*trapz(keV,epsG.*repmat(1e4*(keV/100).^-2,1,8));
+        Counts = Background + dt*trapz(keV,epsG.*repmat(rm(q,keV),1,8));
+        fprintf('%10f, %10f, %10f\n',[Background', Counts', Counts'-Background']')
+    case 6, % fake rm2
+        Background=[ 384.192,  408.36 ,  378.984,  390.768,  406.896,  413.568, 420.336,  391.416];
+        % q = [2 -1/100 2 -1/300];
+        q = [1 -1 2 -2];
         rm2 = @(q,E)E.*(1+E/2/m0c2).*exp(q(1)+E*q(2))+E.*(1+E/2/m0c2).*exp(q(3)+E*q(4));
         Counts = Background + dt*trapz(keV,epsG.*repmat(rm2(q,keV),1,8));
         fprintf('%10e, %10e, %10e\n',[Background', Counts', Counts'-Background']')
@@ -91,11 +100,38 @@ end
 % PS. Channel 3 is known to be intermittently dodgy at this time, so I've 
 % tried excluding that, but that still hasn't made things work for me.
 
+optimizer = 'NM';
 
 ii = [1:8]; % leave out first channel
-fit = invlib('ana_spec_inv',Counts(ii),dy(ii),keV,epsG(:,ii)',dt,Background(ii),keV,'trapz','RM2','outfile',outfile,'BFGS','rest_energy',m0c2);
+fit = invlib('ana_spec_inv',Counts(ii),dy(ii),keV/1e3,epsG(:,ii)',dt,Background(ii),keV/1e3,'trapz','RM2','outfile',outfile,optimizer,'MaxIter',10000,'rest_energy',m0c2/1e3);
+fit
+fit.rm2
+figure;
 subplot(2,1,1);
 loglog(keV,fit.flux);
+title('Fit in MeV');
+subplot(2,1,2);
+ax = [min(Counts(ii)) max(Counts(ii))];
+loglog(ax,ax,'k-',Counts(ii),fit.lambda,'bo',Background(ii),fit.lambda,'rs');
+
+fit = invlib('ana_spec_inv',Counts(ii),dy(ii),keV,epsG(:,ii)',dt,Background(ii),keV,'trapz','RM2','outfile',outfile,optimizer,'MaxIter',10000,'rest_energy',m0c2);
+figure;
+fit
+fit.rm2
+subplot(2,1,1);
+loglog(keV,fit.flux);
+title('Fit in keV');
+subplot(2,1,2);
+ax = [min(Counts(ii)) max(Counts(ii))];
+loglog(ax,ax,'k-',Counts(ii),fit.lambda,'bo',Background(ii),fit.lambda,'rs');
+
+fit = invlib('ana_spec_inv',Counts(ii),dy(ii),keV,epsG(:,ii)',dt,Background(ii),keV,'trapz','RM','outfile',outfile,optimizer,'MaxIter',10000,'rest_energy',m0c2);
+figure;
+fit
+fit.rm
+subplot(2,1,1);
+loglog(keV,fit.flux);
+title('RM Fit in keV');
 subplot(2,1,2);
 ax = [min(Counts(ii)) max(Counts(ii))];
 loglog(ax,ax,'k-',Counts(ii),fit.lambda,'bo',Background(ii),fit.lambda,'rs');

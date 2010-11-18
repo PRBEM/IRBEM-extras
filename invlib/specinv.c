@@ -516,6 +516,10 @@ double ell_combine(const gsl_vector *q, void *params_void, gsl_vector *grad, gsl
     }
   }
   /* have verified that ell, grad, and hess are right, compared to matlab */
+  if (ell_params->verbose && (! gsl_finite(ell))) {
+    fprintf(ell_params->outFilePtr,"WARNING: result ell=%g is not finite in %s\n for q = ",ell,__func__);
+    gsl_vector_fprintf(ell_params->outFilePtr,q,"%lf ");
+  }
   return(ell);
 }
 
@@ -732,7 +736,7 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
   long int Ny_valid=0;
   long int fxn_bit;
   long int i,j; /* loop control vars */
-  double m0c2=0,E0=0,E_break=0;
+  double m0c2=0,E0=0,E_break=0,Emid=1;
   double dbl_params[10]; /* holder for parameters to flux functions */
   gsl_vector_view fluxgsl,dlogfluxgsl,grad_matrix_row,lambda_view; 
   gsl_vector *fluxhat=0, *sigmahat=0;
@@ -817,6 +821,8 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
     E0 = real_params[2]; /* store it, if need be */
   }
 
+  Emid = sqrt(Egrid[0]*Egrid[NE-1]); /* middle energy, for nomalizing initial guesses */
+
   if (lambda || support_data) { /* prepare to compute lambda */
     for (i=0; i <= ASI_MAX_POW2; i++) {
       lambdak[i] = gsl_vector_alloc(NY);
@@ -871,7 +877,7 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
 	q = gsl_vector_alloc(2); /* two free parameters */
 	/* initialize with default params */
 	gsl_vector_set(q,0,1);
-	gsl_vector_set(q,1,-1);
+	gsl_vector_set(q,1,-1.0/Emid);
 	ell_params.flux_func = flux_exp; /* exponential flux spectrum */
 	ell_params.flux_func_params = (void *)NULL; /* no constant params */
 	if (verbose) {
@@ -883,12 +889,12 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
 	/* allocate, this'll get stored in qs[i] and freed at the end of the function */
 	q = gsl_vector_alloc(2); /* two free parameters */
 	/* initialize with default params */
-	gsl_vector_set(q,0,1);
-	gsl_vector_set(q,1,-1);
+	gsl_vector_set(q,0,1-log(Emid)); /* -log(Emid) cancels units of E in prefactor */
+	gsl_vector_set(q,1,-1.0/Emid); /* 1/Emid cancels units of E in exponent*/
 	ell_params.flux_func = flux_rm; /* relativistic Maxwellian */
 	ell_params.flux_func_params = (void *)(&m0c2); /* one constant param, E0=m0c2 */
 	if (verbose) {
-	  fprintf(ell_params.outFilePtr,"Trying Relativistic Maxwellian\n");
+	  fprintf(ell_params.outFilePtr,"Trying Relativistic Maxwellian, m0c2=%g\n",m0c2);
 	}
 	break;
       case ASI_FXN_RM2:
@@ -896,14 +902,14 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
 	/* allocate, this'll get stored in qs[i] and freed at the end of the function */
 	q = gsl_vector_alloc(4); /* four free parameters */
 	/* initialize with default params */
-	gsl_vector_set(q,0,1);
-	gsl_vector_set(q,1,-1);
-	gsl_vector_set(q,2,2);
-	gsl_vector_set(q,3,-2);
+	gsl_vector_set(q,0,1-log(Emid)); /* -log(Emid) cancels units of E in prefactor */
+	gsl_vector_set(q,1,-1.0/Emid); /* 1/Emid cancels units of E in exponent */
+	gsl_vector_set(q,2,-log(Emid)); /* -log(Emid) cancels units of E in prefactor */
+	gsl_vector_set(q,3,-2.0/Emid); /* 1/Emid cancels units of E in exponent */
 	ell_params.flux_func = flux_rm2; /* relativistic Maxwellian */
 	ell_params.flux_func_params = (void *)(&m0c2); /* one constant param, E0=m0c2 */
 	if (verbose) {
-	  fprintf(ell_params.outFilePtr,"Trying Double Relativistic Maxwellian\n");
+	  fprintf(ell_params.outFilePtr,"Trying Double Relativistic Maxwellian, m0c2=%g\n",m0c2);
 	}
 	break;
       case ASI_FXN_PLE:
@@ -936,11 +942,14 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
 	optfun.func = &ell_combine;
 	optfun.params = (void *)(&ell_params);
 
-	/* seed a bit with NM simplex */
-	optimize(q,&optfun, OPTIM_MIN_NM, 100,ell_params.outFilePtr);
+	if (minimizer_flag != OPTIM_MIN_NM) {
+	  /* seed a bit with NM simplex */
+	  optimize(q,&optfun, OPTIM_MIN_NM, 100,ell_params.outFilePtr);
+	}
 
 	/* now do the real, requested minimization */
 	optimize(q,&optfun, minimizer_flag, MaxIter,ell_params.outFilePtr);
+
 	if (verbose) {
 	  /* report fit coefficients */
 	  fprintf(ell_params.outFilePtr,"Fit results, q:\n");

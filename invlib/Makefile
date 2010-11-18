@@ -20,16 +20,17 @@ NULL=true
 MAKE=make
 SO=so
 CC=gcc
+DEBUG_FLAGS=
 
 ifeq ($(HOST),coto-ago1)
   IFLAGS= -I./ -I../nnlib/
   LFLAGS= -L./
-  CFLAGS= -Wall $(IFLAGS) $(LFLAGS) -DOLDGSL
+  CFLAGS= -Wall $(IFLAGS) $(LFLAGS) -DOLDGSL $(DEBUG_FLAGS)
   OMPCC = gcc
 else
   IFLAGS=-I/usr/local/include -I./ -I../nnlib/
   LFLAGS=-L/usr/local/lib -L./
-  CFLAGS= -Wall $(IFLAGS) $(LFLAGS)
+  CFLAGS= -Wall $(IFLAGS) $(LFLAGS) $(DEBUG_FLAGS)
   ifeq ($(HOST),fellowship)
 	OMPCC= gcc42
   else

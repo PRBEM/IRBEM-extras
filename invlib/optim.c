@@ -85,14 +85,14 @@ double optimize(gsl_vector *q, optfunTy *optfun, const long int minimizer_flag, 
     my_fdf.df = &optim_df;
     my_fdf.fdf = &optim_fdf;
     my_fdf.params = (void *)optfun;
-    gsl_multimin_fdfminimizer_set (s_fdf, &my_fdf, q, 0.1, 1e-6); /* last two args are step size and tol (for line minimization) */
+    gsl_multimin_fdfminimizer_set (s_fdf, &my_fdf, q, 1e-3, 1e-6); /* last two args are step size and tol (for line minimization) */
     if (fid) {
       fprintf(fid,"%s invoked with minimizer %s, MaxIter=%li\n",__func__,
 	      gsl_multimin_fdfminimizer_name(s_fdf),MaxIter);
     }
   } else {
     ss = gsl_vector_alloc(q->size); /* initial step size for simplex */
-    gsl_vector_set_all(ss,0.1);
+    gsl_vector_set_all(ss,1e-3);
     s_f = gsl_multimin_fminimizer_alloc (Tf, q->size);
     my_f.n = q->size;
     my_f.f = &optim_f;
