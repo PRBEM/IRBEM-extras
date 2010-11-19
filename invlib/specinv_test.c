@@ -96,7 +96,8 @@ int main (int argc, char *argv[]) {
   }
   
   for (j=0; j < NEout; j++) {
-    fprintf(fid,"%lg,%lg,%lg\n",Eout[j],flux[j],dlogflux[j]);
+//     fprintf(fid,"%lg,%lg,%lg\n",Eout[j],flux[j],dlogflux[j]);
+    fprintf(fid,"%6.4f,%6.4e,%6.4e\n",Eout[j],flux[j],dlogflux[j]);
   }
   fclose(fid);
 
