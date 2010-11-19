@@ -19,16 +19,17 @@ Author: Steve Morley, Los Alamos National Laboratory (smorley@lanl.gov)
 Date Created: 23 Sept. 2010
 
 To Do:
-Enable read support for PRBEM response files
-Generalize setting of _real_params
-Add support for calling pc_spec_inv
-Improve error trapping
-Update unit tests for additional code
-Documentation
-Add support for calling of *spec_inv_multi (within extant functions)
-Angular Inversion code (add wide2uni)
+- Enable read support for PRBEM response files
+- Generalize setting of _real_params
+- Add support for calling pc_spec_inv
+- Improve error trapping
+- Update unit tests for additional code
+- Documentation
+- Add support for calling of *spec_inv_multi (within extant functions)
+- Angular Inversion code (add wide2uni)
 """
 
+from __future__ import division
 import ctypes, os, sys, csv, numbers
 import numpy as np
 
@@ -205,6 +206,8 @@ class SpecInv(InvBase):
     object methods. 
     
     Example use:
+    ------------
+    
     import package (required)
     >>> import pyinvlib as pinv
     instantiate and populate attributes
@@ -384,12 +387,19 @@ class SpecInv(InvBase):
         
         Output:
         -------
+        
         Returns a return code to report status of C call
         Populates object attributes:
          - flux: estimated isotropic unidirectional flux [#/cm^2/s/sr/keV]
          - dlogflux: std error of flux [dimensionless]
          - eval_counts: evaluated counts from fit
          - fitresult: dictionary of goodness-of-fit descriptors
+         
+        Fit Descriptors:
+        ----------------
+        ResidSumSq: The residual sum of squares
+        CoeffDet: The coefficient of determination (1-(ResidSumSq/TotalSumOfSquares))
+        PercError: The percentage error (abs(X-Y)/X)*100
         """
         try:
             assert self._params
@@ -406,8 +416,12 @@ class SpecInv(InvBase):
             self.flux = list(self._params[-4])
             self.dlogflux = list(self._params[-3])
             self.eval_counts = list(self._params[-2])
-            rss = sum([(a-b)**2 for a, b in zip(self.counts, self.eval_counts)])
-            self.fitresult = {'ResidSumSq': rss}
+            rss = sum([(np.log10(a)-np.log10(b))**2 for a, b in zip(self.counts, self.eval_counts)])
+            a_mean = np.mean(np.array(self.counts))
+            rtot = sum([(np.log10(a)-a_mean)**2 for a in self.counts])
+            R2 = 1-np.array(rss)/np.array(rtot)
+            prc = [100*abs(x-y)/x for x, y in zip(self.counts, self.eval_counts)]
+            self.fitresult = {'ResidSumSq': rss, 'PercError': prc, 'CoeffDet': R2}
         
         return retval
     
@@ -551,6 +565,7 @@ class AngInv(InvBase):
         
         Output:
         -------
+        
         Returns a return code to report status of C call
         Populates object attributes:
          - uniflux: locally mirroring uni-dir flux [#/cm^2/s/sr/keV]
@@ -558,6 +573,7 @@ class AngInv(InvBase):
         
         Inputs to C routine:
         -------
+        
         omniflux - estimated flux in [#/cm^2/sr/s/keV]
         dlogomniflux - relative error on omniflux
         NA - number of grid points for angular integral
