@@ -394,7 +394,7 @@ class SpecInv(InvBase):
          - dlogflux: std error of flux [dimensionless]
          - eval_counts: evaluated counts from fit
          - fitresult: dictionary of goodness-of-fit descriptors
-         
+        
         Fit Descriptors:
         ----------------
         ResidSumSq: The residual sum of squares
@@ -412,14 +412,19 @@ class SpecInv(InvBase):
             print('Analytic Spectral Inversion: %s\n' % self.retCodeAna(retval))
         
         if retval == 1:
-            #if successful, save (flux, dlogflux)
+            # if successful, save (flux, dlogflux)
             self.flux = list(self._params[-4])
             self.dlogflux = list(self._params[-3])
             self.eval_counts = list(self._params[-2])
+            ## fit metrics
+            # residual sum of squares
             rss = sum([(np.log10(a)-np.log10(b))**2 for a, b in zip(self.counts, self.eval_counts)])
+            # total sum of squares
             a_mean = np.mean(np.array(self.counts))
             rtot = sum([(np.log10(a)-a_mean)**2 for a in self.counts])
+            # coefficient of determination
             R2 = 1-np.array(rss)/np.array(rtot)
+            # percentage error per channel
             prc = [100*abs(x-y)/x for x, y in zip(self.counts, self.eval_counts)]
             self.fitresult = {'ResidSumSq': rss, 'PercError': prc, 'CoeffDet': R2}
         
@@ -457,8 +462,8 @@ class SpecInv(InvBase):
             raise ImportError('Error: MatPlotLib import failed - please check install')
         
         try:
-            ciu_flux = [(f*np.exp(1.96*d))-f for f, d in zip(self.flux, self.dlogflux)]
-            cil_flux = [f-(f*np.exp(-1.96*d)) for f, d in zip(self.flux, self.dlogflux)]
+            ciu_flux = [f*np.exp(1.96*d) for f, d in zip(self.flux, self.dlogflux)]
+            cil_flux = [f*np.exp(-1.96*d) for f, d in zip(self.flux, self.dlogflux)]
         except:
             raise AttributeError('Error: Flux and dLogFlux must be successfully calculated')
             
@@ -466,7 +471,8 @@ class SpecInv(InvBase):
         ax = fig.add_subplot(111)
         ax.set_xscale("log", nonposx='clip')
         ax.set_yscale("log", nonposy='clip')
-        ax.errorbar(self.Eout, self.flux, yerr=[ciu_flux, cil_flux])
+        ax.plot(self.Eout, self.flux)
+        ax.fill_between(self.Eout, ciu_flux, cil_flux, alpha=0.5)
         ax.set_ylabel('Flux [#/cm$^2$.s.sr.keV]')
         ax.set_xlabel('Energy [keV]')
         ax.set_ylim(ymin=min(self.flux))
