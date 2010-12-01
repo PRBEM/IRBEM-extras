@@ -472,7 +472,7 @@ class SpecInv(InvBase):
         ax.set_xscale("log", nonposx='clip')
         ax.set_yscale("log", nonposy='clip')
         ax.plot(self.Eout, self.flux)
-        ax.fill_between(self.Eout, ciu_flux, cil_flux, alpha=0.5)
+        ax.fill_between(self.Eout, ciu_flux, cil_flux, alpha=0.25)
         ax.set_ylabel('Flux [#/cm$^2$.s.sr.keV]')
         ax.set_xlabel('Energy [keV]')
         ax.set_ylim(ymin=min(self.flux))
