@@ -1,0 +1,36 @@
+Open Diffusion Coefficients Library
+
+*************************************************************************
+By default, all files in this folder and its sub folders are part of
+IRBEM-LIB and are covered by the Lesser GNU Public License. See
+license.txt for details.
+
+IRBEM-LIB is free software: you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+IRBEM-LIB is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public License
+along with IRBEM-LIB.  If not, see <http://www.gnu.org/licenses/>.
+
+The response function library was sponsored in part by NASA/HGIP Grant 
+NNX10AQ51G
+*************************************************************************
+
+The goal of OpenDC is to provide a central repository for validated
+codes that compute the diffusion coefficients widely used in radiation
+belt physics. Unlike the main IRBEM-LIB, many OpenDC routines may
+exist only in one high-level language.
+
+matlab/Daa_FA_local.m the local angle and momentum diffusion
+coefficients for gyroresonant interactions with parallel-propagating
+waves in a proton plasma, following Summers 2005.
+
+matlab/Sheeley2001.m - the plasmasphere/trough density model of
+Sheeley 2001.
+
