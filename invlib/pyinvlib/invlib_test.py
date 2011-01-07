@@ -6,8 +6,12 @@
 Author: Steve Morley, Los Alamos National Laboratory (smorley@lanl.gov)
 Date Created: 23 Sept. 2010
 """
-
-import unittest, math
+try:
+    import unittest_pretty as utp
+except:
+    pass
+import unittest
+import math
 import pyinvlib as pinv
 from pyinvlib import ravel, transpose
 
@@ -188,4 +192,7 @@ class AngInvTests(unittest.TestCase):
 
         
 if __name__ == "__main__":
-    unittest.main()
+    try:
+        utp.main()
+    except:
+        unittest.main()
