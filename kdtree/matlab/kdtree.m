@@ -36,6 +36,9 @@ function tree = kdtree_build(X)
 
 % size variables
 [Nx,Nc] = size(X);
+if (Nx==0),
+    error('Cannot create empty kdtree');
+end
 
 % save memory, use smallest necessary int type for index records
 itype = get_int_type(Nx);
@@ -55,6 +58,9 @@ end % end of function
 function tree = kdtree_libbuild(X)
 % size variables
 [Nx,Nc] = size(X);
+if Nx==0,
+    error('Cannot create empty kdtree');
+end
 flags = 0; % Matlab is column major (0)
 kdtree_loadlib;
 
