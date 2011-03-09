@@ -24,7 +24,7 @@ end
 if isfield(options,['d',var]),
     dX = options.(['d',var]);
 else
-    dX = (xmin-xmax)/Nint;
+    dX = (xmax-xmin)/Nint;
 end
 
 switch(int_method),

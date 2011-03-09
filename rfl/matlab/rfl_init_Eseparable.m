@@ -122,16 +122,16 @@ function [hAtheta,result_code] = make_hAtheta(inst_info,thetagrid,options)
 phigrid = rfl_make_grid(0,360,'phi',options);
 [hAthetaphi,result_code] = make_hAthetaphi(inst_info,thetagrid,phigrid,options);
 if result_code == 1,
-    hAtheta = sum(hAthetaphi,3);
+    hAtheta = sum(hAthetaphi,2);
 else
     hAtheta = nan;
 end
 
 function [hA0,result_code] = make_hA0(inst_info)
-thetagrid = rfl_make_grid(0,180,'theta',options);
+thetagrid = rfl_make_grid(0,180,'theta',[]);
 [hAtheta,result_code] = make_hAtheta(inst_info,thetagrid,[]);
 if result_code == 1,
-    hA0 = sum(hAtheta,2);
+    hA0 = sum(hAtheta);
 else
     hA0 = nan;
 end
