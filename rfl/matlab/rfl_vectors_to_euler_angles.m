@@ -52,14 +52,14 @@ alpha0 = acosd(cosa0);
 
 phib = nan(NB,1); % default phib is NaN
 i0 = alpha0==0;
-if any(i0),
+if any(i0(:)),
     phib(i0) = 180/pi*atan2(dot(S1hat(i0,:),dhat(i0,:),2),-dot(S2hat(i0,:),dhat(i0,:),2));
 end
 beta0 = zeros(NB,1); % beta0=0 when alpha0=0
 beta0(~isfinite(alpha0)) = nan; % beta0=NaN when alhpa0=NaN
 
 i0 = alpha0>0;
-if any(i0),
+if any(i0(:)),
     beta0(i0) = 180/pi*atan2(dot(S0hat(i0,:),dhat(i0,:),2),-dot(S0hat(i0,:),chat(i0,:),2));
     phib(i0) = 180/pi*atan2(dot(S2hat(i0,:),bhat(i0,:),2),-dot(S1hat(i0,:),bhat(i0,:),2));
 end

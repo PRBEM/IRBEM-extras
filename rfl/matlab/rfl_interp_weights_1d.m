@@ -1,5 +1,5 @@
-function H = rfl_interp_weights_1to1(xgrid,xhat,varargin)
-% H = rfl_interp_weights_1to1(xgrid,xhat,...)
+function H = rfl_interp_weights_1d(xgrid,xhat,varargin)
+% H = rfl_interp_weights_1d(xgrid,xhat,...)
 % returns H [N x Nx], sparse
 % matrix of weights such that H*flux(:) interpolates the
 % flux model ([Nx x 1]) into the points xhat

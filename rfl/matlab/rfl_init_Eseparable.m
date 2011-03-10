@@ -103,7 +103,7 @@ else
     costheta = cosd(min(90,theta));
 end
 f = find((costheta>0) & (X>0) & (Y>0)); % apply Heaviside implicitly and resolve tan(90)=inf
-if any(f),
+if any(f(:)),
     A(f) = costheta(f).*X(f).*Y(f); % eq 13 w/o Heaviside functions
 end
 
@@ -158,13 +158,13 @@ for it = 1:length(tgrid),
     if result_code ~= 1,
         return
     end
-    h = h+inst_info.A(inst_info,theta,phi)*dt(it);
+    h = h+inst_info.internal.A(inst_info,theta,phi)*dt(it);
     if acute, % add pi-alpha point as well
         [theta(:),phi(:),result_code] = rfl_alphabeta2thetaphi(180-alpha(:),beta(:),alpha0(it),beta0(it),phib(it));
         if result_code ~= 1,
             return
         end
-        h = h+inst_info.R(inst_info,E,repmat(theta,[NE,1,1]),repmat(phi,[NE,1,1]))*dt(it);
+        h = h+inst_info.internal.A(inst_info,theta,phi)*dt(it);
     end
 end
 h = h.*dcosa.*db;
@@ -172,7 +172,7 @@ hAalphabeta = h; % success, returns h
 
 function [hAalpha,result_code] = make_hAalpha(inst_info,alphagrid,tgrid,alpha0,beta0,phib,options)
 betagrid = rfl_make_grid(0,360,'beta',options);
-[hAalphabeta,result_code] = inseparable_hAalphabeta(inst_info,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options);
+[hAalphabeta,result_code] = make_hAalphabeta(inst_info,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options);
 if result_code == 1,
     hAalpha = sum(hAalphabeta,2);
 else
@@ -228,7 +228,7 @@ function hEthetaphi = merge_hE_hangles(hE,hangles)
 % hangles has shape: N1 x N2
 % hEthetaphi needs shape NE x N1 x N2
 
-NE = length(Egrid);
+NE = length(hE);
 [N1,N2] = size(hangles);
 
 hangles = shiftdim(hangles,-1); % introduce singleton first dimension
@@ -286,12 +286,12 @@ hE(1:(I(1))) = 0;
 
 i = I(1);
 if (i>=1) && (i < NE), % E(i) <= E0 < E(i+1)
-    hE = (Egrid(i+1)-inst_info.E0)^2/(2*(Egrid(i+1)-Egrid(i)));
+    hE(i) = (Egrid(i+1)-inst_info.E0)^2/(2*(Egrid(i+1)-Egrid(i)));
 end
 
 i = I(2);
 if (i>=2) && (i <= NE), % E(i-1) < E0 < E(i)
-    hE = dE(i) - (inst_info.E0-Egrid(E(i-1)))^2/(2*(Egrid(i)-Egrid(i-1)));
+    hE(i) = dE(i) - (inst_info.E0-Egrid(i-1))^2/(2*(Egrid(i)-Egrid(i-1)));
 end
 hE = hE * inst_info.EPS / inst_info.XCAL;
 

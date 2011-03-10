@@ -58,12 +58,12 @@ if inst_info.internal.bidirectional,
 end
 
 f = (theta <= inst_info.internal.thetac);
-if any(f),
+if any(f(:)),
     A(f) = pi*inst_info.internal.Rs^2*cosd(theta(f));
 end
 
 f = (theta > inst_info.internal.thetac) & (theta < inst_info.internal.thetam);
-if any(f),
+if any(f(:)),
     tantheta = tand(theta(f));
     Psi1 = acos((inst_info.R1^2 + inst_info.D^2*tantheta.^2 - inst_info.R2^2) ./ (2*inst_info.D*inst_info.R1*tantheta)); % rads
     Psi2 = acos((inst_info.R2^2 + inst_info.D^2*tantheta.^2 - inst_info.R1^2) ./ (2*inst_info.D*inst_info.R2*tantheta)); % rads

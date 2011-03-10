@@ -4,6 +4,7 @@ function d = rfl_make_deltas(grid,options)
 
 if length(grid)==1, % assume it's a tgrid: only one time means it's actually dt
     d = grid;
+    return;
 end
 
 if nargin < 2,
