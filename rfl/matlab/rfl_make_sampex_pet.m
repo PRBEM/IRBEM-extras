@@ -34,6 +34,7 @@ inst_info.PROT.E_TYPE = 'WIDE';
 inst_info.PROT.BIDIRECTIONAL = 'FALSE';
 inst_info.PROT.TH_TYPE = 'CYL_TELE'; % Cylindrical telescope
 inst_info.PROT.XCAL = 1; % unknown
+inst_info.PROT.XCAL_RMSE = log(2)/2; % unknown: assume 2 standard deviations is a factor of 2
 
 % Channel-specific info
 

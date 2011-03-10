@@ -42,6 +42,9 @@ inst_info.internal.thetam = atand((inst_info.R1+inst_info.R2)/inst_info.D);
 inst_info.internal.A = @telescope_csym_A;
 tmp = inst_info.R1^2+inst_info.R2^2+inst_info.D^2;
 inst_info.internal.hA0 = pi^2/2*(tmp - sqrt(tmp^2-4*inst_info.R1^2*inst_info.R2^2));  % (eqn 8)
+if inst_info.internal.bidirectional,
+    inst_info.internal.hA0 = inst_info.internal.hA0*2; % double-headed telescope has twice the area/geometric factor
+end
 
 
 function A = telescope_csym_A(inst_info,theta,phi)
