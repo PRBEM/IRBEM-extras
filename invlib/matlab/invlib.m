@@ -77,6 +77,22 @@ function varargout = invlib(what,varargin)
 % dloguniflux - standard error of natural log of uniflux (dimensionless)
 % result - return codem fro library call
 %  1 - success, 0 or negative is an error code (see invlib.pdf)
+%
+% wide2uni:
+% [uniflux,dloguniflux,result] = invlib('wide2uni',wideflux,dlogwideflux,PAgrid,H,alpha0,method,...)
+% calls wide2uni as defined in invlib.pdf
+% (note, if wideflux is a vector, then it'll invert each wideflux)
+% wideflux - Estimated isotropic unidirectional flux 
+%  (for TEM-1 method, use #/cm^2/sr/s/keV)
+% dlogwideflux - relative error for wideflux (dimensionless)
+% PAgrid - list of pitch angles (deg)
+% H - response of instrument at each pitch angle (cm^2 sr Energy_Unit)
+% alpha0 - pitch angle (deg) at which to report uniflux (member of PAgrid)
+% other options are the same as omni2uni (NA would be ignored if supplied)
+% uniflux - locally-mirroring unidirectional flux (e.g., in #/keV/cm^2/sr/s)
+% dloguniflux - standard error of natural log of uniflux (dimensionless)
+% result - return codem fro library call
+%  1 - success, 0 or negative is an error code (see invlib.pdf)
 
 load_invlib;
 
@@ -89,6 +105,8 @@ switch(lower(what)),
         [varargout{:}] = pc_spec_inv(varargin{:});
     case {'omni2uni'},
         [varargout{:}] = omni2uni(varargin{:});
+    case {'wide2uni'},
+        [varargout{:}] = wide2uni(varargin{:});
     otherwise
         error('%s: Unknown "what": "%s"',mfilename,what);
 end
@@ -246,7 +264,7 @@ dlogfluxPtr = libpointer('doublePtr',nan(NEout,NT));
 supportPtr = libpointer('doublePtr',nan((options.ASI_MAX_POW2+1)*(2+options.ASI_MAX_NQ+NY),NT));
 resultsPtr = libpointer('longPtr',zeros(NT,1));
 
-fit.result = calllib('invlib','ana_spec_inv_multi',NT,y',dy,Egrid,H0',dt,b',int_params,real_params,outFilePtr,Eout,fluxPtr,dlogfluxPtr,lambdaPtr,supportPtr,resultsPtr);
+fit.result = calllib('invlib','ana_spec_inv_multi',NT,y',dy,Egrid,full(H0)',dt,b',int_params,real_params,outFilePtr,Eout,fluxPtr,dlogfluxPtr,lambdaPtr,supportPtr,resultsPtr);
 
 fit.flux = fluxPtr.value';
 fit.dlogflux = dlogfluxPtr.value';
@@ -319,7 +337,7 @@ supportPtr = libpointer('doublePtr',nan(1+options.num_bases,NT));
 resultsPtr = libpointer('longPtr',zeros(NT,1));
 
 assert(NT==1); % for now, sin
-fit.result = calllib('invlib','pc_spec_inv_multi',NT,y',dy,Egrid,H0',dt,b',mean_log_flux,basis_vectors',basis_variance,...
+fit.result = calllib('invlib','pc_spec_inv_multi',NT,y',dy,Egrid,full(H0)',dt,b',mean_log_flux,basis_vectors',basis_variance,...
     int_params,real_params,outFilePtr,fluxPtr,dlogfluxPtr,lambdaPtr,supportPtr,resultsPtr);
 
 fit.flux = fluxPtr.value';
@@ -341,8 +359,7 @@ if any(~f),
     flux(~f) = exp(q(1)-q(2)*log(Ebreak)-(E(~f)-E0));
 end
 
-function [uniflux,dloguniflux,result] = omni2uni(omniflux,dlogomniflux,method,varargin)
-
+function [method,options] = omni2uni_options(method,varargin)
 switch(lower(method)),
     case {'tem1'}, method = -1;
     case {'vampola'}, method = -2;
@@ -400,6 +417,11 @@ while i <= length(varargin),
     i = i+1;
 end
 
+
+function [uniflux,dloguniflux,result] = omni2uni(omniflux,dlogomniflux,method,varargin)
+
+[method,options] = omni2uni_options(method,varargin{:});
+
 all_int_params = cell(5,1);
 all_real_params = cell(3,1);
 
@@ -447,6 +469,70 @@ for i = 1:N,
     unifluxPtr.value=NaN;
     dlogunifluxPtr.value=NaN;
     result(i) = calllib('invlib','omni2uni',omniflux(i),dlogomniflux,int_params,real_params,nullPtr,unifluxPtr,dlogunifluxPtr);
+    uniflux(i) = unifluxPtr.value;
+    dloguniflux(i) = dlogunifluxPtr.value;
+end
+
+function [uniflux,dloguniflux,result] = wide2uni(wideflux,dlogwideflux,PAgrid,H,alpha0,method,varargin)
+
+[method,options] = omni2uni_options(method,varargin{:});
+
+options.NA = length(PAgrid); % not usually set for wide2uni
+
+ialpha0 = interp1(PAgrid,1:options.NA,alpha0,'nearest');
+
+all_int_params = cell(5,1);
+all_real_params = cell(3,1);
+
+all_int_params{1+0} = options.NA;
+all_int_params{1+1} = method;
+all_int_params{1+2} = 0; % verbose setting = no text output
+all_int_params{1+3} = options.root_finder;
+all_int_params{1+4} = 1000; % maximumn # of iterations */
+
+all_real_params{1+0} = options.keV;
+all_real_params{1+1} = options.BB0;
+all_real_params{1+2} = options.Lm;
+
+load_invlib;
+
+int_params = nan(size(all_int_params));
+real_params = nan(size(all_real_params));
+nullPtr = libpointer('cstring'); % empty pointer to char *
+unifluxPtr = libpointer('doublePtr',NaN); % pointer to one double
+dlogunifluxPtr = libpointer('doublePtr',NaN); % pointer to one double
+
+N = numel(wideflux);
+if numel(dlogwideflux)==1,
+    dlogwideflux = repmat(dlogwideflux,size(wideflux));
+end
+uniflux = nan(size(wideflux));
+dloguniflux = nan(size(wideflux));
+result = nan(size(wideflux));
+
+if numel(ialpha0)==1,
+    ialpha0 = repmat(ialpha0,N,1);
+end
+
+for i = 1:N,
+    for j = 1:length(int_params),
+        if numel(all_int_params{j})==1,
+            int_params(j) = all_int_params{j}(1);
+        else
+            int_params(j) = all_int_params{j}(i);
+        end
+    end
+    for j = 1:length(real_params),
+        if numel(all_real_params{j})==1,
+            real_params(j) = all_real_params{j}(1);
+        else
+            real_params(j) = all_real_params{j}(i);
+        end
+    end
+    unifluxPtr.value=NaN;
+    dlogunifluxPtr.value=NaN;
+    result(i) = calllib('invlib','wide2uni',wideflux(i),dlogwideflux,PAgrid,full(H)',int_params,real_params,...
+        nullPtr,ialpha0(i),unifluxPtr,dlogunifluxPtr);
     uniflux(i) = unifluxPtr.value;
     dloguniflux(i) = dlogunifluxPtr.value;
 end
