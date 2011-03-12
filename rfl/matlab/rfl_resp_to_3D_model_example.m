@@ -29,7 +29,7 @@ options = [];
 for i = 1:Nchans,
     resp = pet.(pet.CHANNEL_NAMES{i}).PROT;
     [hEalpha,result_code] = resp.make_hEalpha(resp,local.E,local.alpha,local.tgrid,local.alpha0,local.beta0,local.phib,options);
-    H_pet(i,:,:) = hEalpha;
+    H_pet(i,:,:) = hEalpha/resp.XCAL;
 end
 
 %% plot instrument response

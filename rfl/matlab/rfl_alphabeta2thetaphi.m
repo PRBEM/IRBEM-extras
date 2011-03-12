@@ -25,9 +25,9 @@ alpha = alpha(:);
 beta = beta(:);
 
 R = [
-    - sin(beta0)*sin(phib) - cos(alpha0)*cos(beta0)*cos(phib),   cos(phib)*sin(beta0) - cos(alpha0)*cos(beta0)*sin(phib), cos(beta0)*sin(alpha0)
-    cos(beta0)*sin(phib) - cos(alpha0)*cos(phib)*sin(beta0), - cos(beta0)*cos(phib) - cos(alpha0)*sin(beta0)*sin(phib), sin(alpha0)*sin(beta0)
-    cos(phib)*sin(alpha0),                                     sin(alpha0)*sin(phib),            cos(alpha0)
+    - sind(beta0)*sind(phib) - cosd(alpha0)*cosd(beta0)*cosd(phib),   cosd(phib)*sind(beta0) - cosd(alpha0)*cosd(beta0)*sind(phib), cosd(beta0)*sind(alpha0)
+    cosd(beta0)*sind(phib) - cosd(alpha0)*cosd(phib)*sind(beta0), - cosd(beta0)*cosd(phib) - cosd(alpha0)*sind(beta0)*sind(phib), sind(alpha0)*sind(beta0)
+    cosd(phib)*sind(alpha0),                                     sind(alpha0)*sind(phib),            cosd(alpha0)
     ];
 
 sa = sind(alpha);

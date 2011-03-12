@@ -51,7 +51,7 @@ inst_info.CHAN5.ELE.EPS = [0,0,0,0,0,0,0,0,0,0,0,0,9.07907e-005,9.07907e-005,0.0
 
 
 outpath = fileparts(which([mfilename,'.m']));
-cdfname = [outpath,filesep,'sample_omni_ico_resp.cdf'];
+cdfname = [outpath,filesep,'ico.cdf'];
 
 rfl_struct2cdf(cdfname,inst_info);
 
