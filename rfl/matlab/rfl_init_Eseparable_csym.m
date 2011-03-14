@@ -30,6 +30,62 @@ switch(inst_info.RESP_TYPE),
         error('RESP_TYPE %s not defined yet',inst_info.RESP_TYPE);
 end
 
+function inst_info = init_pinhole(inst_info)
+% initialize pinhole angular response
+% G, BIDIRECTIONAL
+
+inst_info.internal.A = @(inst_info,theta,phi)(theta==0); % delta function
+inst_info.internal.hAalphabeta = @make_hAlphabeta_pinhole;
+inst_info.internal.hA0 = inst_info.G; % already includes any bidirectional effects
+
+function [hAalphabeta,result_code] = make_hAalphabeta_pinhole(inst_info,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options)
+if isfield(options,'acute'),
+    acute = options.acute;
+else
+    acute = alphagrid(end)<=90;
+end
+dt = rfl_make_deltas(tgrid,options);
+% prepare to loop
+result_code = 1; % success
+hAalphabeta = nan; % on error, returns a nan
+h = 0;
+for it = 1:length(tgrid),
+    alpha_pinhole = alpha0(it);
+    beta_pinhole = beta0(it);
+    if acute,
+        alpha_pinhole = min(alpha_pinhole,180-alpha_pinhole);
+    end
+    if result_code ~= 1,
+        return
+    end
+    va = rfl_lbf_eval(alphagrid,alpha_pinhole);
+    vb = rfl_lbf_eval(betagrid,beta_pinhole,{'period',360});
+    vab = va*vb';
+    vab = vab(:);
+
+    h = h+inst_info.G*dt(it)*vab;
+    
+    if inst_info.bidirectional,
+        alpha_pinhole = 180-alpha0(it); % opposite hemisphere on [0,180]
+        beta_pinhole = 180+beta0(it); % opposite hemisphere on [0,360]
+        if acute,
+            alpha_pinhole = min(alpha_pinhole,180-alpha_pinhole);
+        end
+        if result_code ~= 1,
+            return
+        end
+        va = rfl_lbf_eval(alphagrid,alpha_pinhole);
+        vb = rfl_lbf_eval(betagrid,beta_pinhole,{'period',360});
+        vab = va*vb';
+        vab = vab(:);
+        
+        h = h+inst_info.G*dt(it)*vab;
+        h = h/2; % G already includes bidirectional effects
+    end
+end
+hAalphabeta = h; % success, returns h
+
+
 function inst_info = init_telescope_csym(inst_info)
 % initialize cylindrically symmetric 2-element telescope
 % overloads inst_info.internal.A, sets some inst_info.internal fields, too
@@ -105,23 +161,23 @@ else % this is the case Sullivan treats
     inst_info.internal.hAtheta = @halfomni_hAtheta;
     % keep standard csym separable hAalphabeta and hAalpha
 end
-inst_info.internal.hA0 = inst_info.G;
+inst_info.internal.hA0 = inst_info.G;  % already includes any bidirectional effects
 
 function [hAthetaphi,result_code] = fullomni_hAthetaphi(inst_info,thetagrid,phigrid,options)
 result_code = 1;
-hAthetaphi = inst_info.G/4/pi*rfl_make_deltas(thetagrid(:),options)*rfl_make_deltas(phigrid(:),options)';
+hAthetaphi = inst_info.G/4/pi*rfl_make_deltas(-cosd(thetagrid(:)),options)*rfl_make_deltas(phigrid(:),options)';
 
 function [hAtheta,result_code] = fullomni_hAtheta(inst_info,thetagrid,options)
 result_code = 1;
-hAtheta = inst_info.G/2*rfl_make_deltas(thetagrid(:),options);
+hAtheta = inst_info.G/2*rfl_make_deltas(-cosd(thetagrid(:)),options);
 
 function [hAthetaphi,result_code] = halfomni_hAthetaphi(inst_info,thetagrid,phigrid,options)
 result_code = 1;
-hAthetaphi = inst_info.G/2/pi*((thetagrid(:)<=90).*rfl_make_deltas(thetagrid(:),options))*rfl_make_deltas(phigrid(:),options)';
+hAthetaphi = inst_info.G/2/pi*((thetagrid(:)<=90).*rfl_make_deltas(-cosd(thetagrid(:)),options))*rfl_make_deltas(phigrid(:),options)';
 
 function [hAtheta,result_code] = halfomni_hAtheta(inst_info,thetagrid,options)
 result_code = 1;
-hAtheta = inst_info.G*(thetagrid(:)<=90).*rfl_make_deltas(thetagrid(:),options);
+hAtheta = inst_info.G*(thetagrid(:)<=90).*rfl_make_deltas(-cosd(thetagrid(:)),options);
 
 function [hAthetaphi,result_code] = make_hAthetaphi_csym(inst_info,thetagrid,phigrid,options)
 dcost = rfl_make_deltas(-cosd(thetagrid),options);

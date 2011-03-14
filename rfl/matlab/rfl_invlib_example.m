@@ -67,10 +67,11 @@ PAgrid = (0:2:180)';
 tgrid = 1; % use 1 to leave time integral out of H
 options = [];
 resp = pet.(pet.CHANNEL_NAMES{5}).PROT; % pick a random channel
-% make up orientation values
+% make up orientation angles
 alpha0 = 75;
 beta0 = 125;
 phib = 211;
+warning('Obtaining halpha from make_hEalpha because halpha doesn''t exist yet');
 H = resp.make_hEalpha(resp,Egrid,PAgrid,tgrid,alpha0,beta0,phib,options);
 H = sum(H,1); % integral over energy
 H = H/sum(H); % angular response should sum to 1 if wideflux is in same units as uniflux

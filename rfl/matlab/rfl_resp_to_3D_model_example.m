@@ -13,7 +13,7 @@ local.alpha0 = 35; % random choice, pitch angle of boresight
 local.beta0 = 235; % random choice, gyrophase of boresight
 local.phib = 75; % random choice, longitude of B in instrument coordinates
 local.E = 10.^(0:0.05:3)'; % MeV grid
-local.alpha = (2:2:178)'; % local pitch angle grid, degrees
+local.alpha = (0:2:180)'; % local pitch angle grid, degrees
 local.tgrid = 6; % single entry means dt, seconds
 
 %% define model grid
@@ -29,7 +29,7 @@ options = [];
 for i = 1:Nchans,
     resp = pet.(pet.CHANNEL_NAMES{i}).PROT;
     [hEalpha,result_code] = resp.make_hEalpha(resp,local.E,local.alpha,local.tgrid,local.alpha0,local.beta0,local.phib,options);
-    H_pet(i,:,:) = hEalpha/resp.XCAL;
+    H_pet(i,:,:) = hEalpha;
 end
 
 %% plot instrument response
@@ -46,7 +46,7 @@ ylabel('sum H over E');
 
 %% compute weights to interpolate to model grid
 
-local.alpha_eq = asind(sind(local.alpha)/sqrt(local.BB0)); % compute model coordinates from local coordinates
+local.alpha_eq = asind(abs(sind(local.alpha))/sqrt(local.BB0)); % compute model coordinates from local coordinates
 [Ehat,alpha_eqhat,Lhat] = ndgrid(local.E,local.alpha_eq,local.L);
 H_interp = rfl_interp_weights_3d(model.E,model.alpha_eq,model.L,Ehat(:),alpha_eqhat(:),Lhat);
 

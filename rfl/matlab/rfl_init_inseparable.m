@@ -3,9 +3,21 @@ function inst_info = rfl_init_inseparable(inst_info)
 % initialize sensor with inseparable E,theta,phi response
 % RESP_TYPE = '[E,TH,PH]';
 % generic response function in E, theta, phi coordinates
+% fails silently if another allowed response type is passed in
+%  (because this is the parent of all others)
 
-% min/max forces plateau extrapolation in E
-inst_info.R = @(inst_info,E,theta,phi)interpn(inst_info.E_GRID,inst_info.TH_GRID,inst_info.PH_GRID,inst_info.R,min(max(E,inst_info.E_GRID(1)),inst_info.E_GRID(end)),theta,phi,'linear',0); % set to zero outside grid
+if strcmp(inst_info.RESP_TYPE,'[E,TH,PH]'),
+    switch(inst_info.ETP_TYPE),
+        case 'TBL',
+            % min/max forces plateau extrapolation in E
+            inst_info.internal.R = @(inst_info,E,theta,phi)interpn(inst_info.E_GRID,inst_info.TH_GRID,inst_info.PH_GRID,inst_info.R,min(max(E,inst_info.E_GRID(1)),inst_info.E_GRID(end)),theta,phi,'linear',0); % set to zero outside grid
+        otherwise
+            error('ETP_TYPE %s not defined yet',inst_info.ETP_TYPE);
+    end
+elseif ~ismember(inst_info.RESP_TYPE,{'[E,TH]','[E],[TH,PH]','[E],[TH]','[E]'}),
+    error('Unknown response type %s',inst_info.RESP_TYPE);
+end
+
 
 % make_h for grids in instrument coordinates
 inst_info.make_hEthetaphi = @inseparable_hEthetaphi; % on grid in E,theta,phi
@@ -17,7 +29,11 @@ inst_info.make_hEalpha = @inseparable_hEalpha; % on grid in E,alpha
 inst_info.make_hEiso = @inseparable_hEiso; % on grid in E
 
 % one private variable
-inst_info.internal.bidirectional = strcmpi(inst_info.BIDIRECTIONAL,'TRUE'); % convert to logical for faster execution
+if isfield(inst_info,'BIDIRECTIONAL'),
+    inst_info.internal.bidirectional = strcmpi(inst_info.BIDIRECTIONAL,'TRUE'); % convert to logical for faster execution
+else
+    inst_info.internal.bidirectional = false; % default
+end
 
 function [hEthetaphi,result_code] = inseparable_hEthetaphi(inst_info,Egrid,thetagrid,phigrid,options)
 dE = rfl_make_deltas(Egrid,options);
@@ -27,7 +43,7 @@ dp = rfl_make_deltas(phigrid,options)*pi/180;
 [E,theta,phi] = ndgrid(Egrid,thetagrid,phigrid);
 
 result_code = 1; % success
-R = inst_info.R(inst_info,E,theta,phi);
+R = inst_info.internal.R(inst_info,E,theta,phi);
 h = R.*dE.*dcost.*dp/inst_info.XCAL;
 hEthetaphi = h; % success, returns h
 
@@ -75,13 +91,13 @@ for it = 1:length(tgrid),
     if result_code ~= 1,
         return
     end
-    h = h+inst_info.R(inst_info,E,repmat(theta,[NE,1,1]),repmat(phi,[NE,1,1]))*dt(it);
+    h = h+inst_info.internal.R(inst_info,E,repmat(theta,[NE,1,1]),repmat(phi,[NE,1,1]))*dt(it);
     if acute, % add pi-alpha point as well
         [theta(:),phi(:),result_code] = rfl_alphabeta2thetaphi(180-aI(:),bI(:),alpha0(it),beta0(it),phib(it));
         if result_code ~= 1,
             return
         end
-        h = h+inst_info.R(inst_info,E,repmat(theta,[NE,1,1]),repmat(phi,[NE,1,1]))*dt(it);
+        h = h+inst_info.internal.R(inst_info,E,repmat(theta,[NE,1,1]),repmat(phi,[NE,1,1]))*dt(it);
     end
 end
 h = h.*dE.*dcosa.*db/inst_info.XCAL;

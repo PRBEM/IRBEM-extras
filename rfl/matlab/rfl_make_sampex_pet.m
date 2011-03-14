@@ -17,6 +17,7 @@ E1 = [21.0, 23.2, 25.2, 27.4, 37.4, 45.8, 53.0, 65.2, 70.5, 76.1, 85.1, 120,200,
 
 
 % top-level info
+inst_info.FORMAT_VERSION = '1.0.1';
 inst_info.CHANNEL_NAMES = arrayfun(@(x)sprintf('CHAN%d',x),1:Nchans,'uniform',false); % generic names, CHAN1, CHAN2, ...
 inst_info.L_UNIT = 'cm';
 inst_info.E_UNIT = 'MeV';

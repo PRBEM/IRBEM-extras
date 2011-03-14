@@ -56,7 +56,7 @@ for ichan = 1:length(inst_info.CHANNEL_NAMES),
                 inst_info.(chan).(sp).(fld) = inst_info.(chan).(fld);
             end
             % copy inst_info.(sp) to inst_info.(chan).(sp)
-            if ~isfield(inst_info.(chan).(sp),fld) && isfield(inst_info.(sp),fld),
+            if ~isfield(inst_info.(chan).(sp),fld) && isfield(inst_info,sp) && isfield(inst_info.(sp),fld),
                 inst_info.(chan).(sp).(fld) = inst_info.(sp).(fld);
             end
         end

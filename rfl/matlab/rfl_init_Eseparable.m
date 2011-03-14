@@ -9,7 +9,7 @@ function inst_info = rfl_init_Eseparable(inst_info)
 % R is different, and the integral weights methods
 % can be done much faster when integrals are separated
 
-inst_info.R = @(inst_info,E,theta,phi)inst_info.internal.RE(inst_info,E).*inst_info.internal.A(inst_info,theta,phi);
+inst_info.internal.R = @(inst_info,E,theta,phi)inst_info.internal.RE(inst_info,E).*inst_info.internal.A(inst_info,theta,phi);
 
 inst_info.make_hEthetaphi = @make_hEthetaphi_Eseparable;
 inst_info.make_hEtheta = @make_hEtheta_Eseparable;
@@ -34,7 +34,7 @@ inst_info.internal.merge_hE_hangles = @merge_hE_hAngles; % useful for derived cl
 % sensor-specific protected functions/methods:
 % inst_info.internal.A(inst_info,theta,phi) - area function, used for R
 % inst_info.internal.RE(inst_info,E) - eps(E), used for R
-% inst_info.internal.hE0 - hE for flat spectrum
+% inst_info.internal.hE0 - hE for flat spectrum (1 for integral channels)
 % inst_info.internal.hE(inst_info,Egrid,options), used for hE*hA
 
 
@@ -81,9 +81,23 @@ function inst_info = init_telescope_rect(inst_info)
 % W1,H1,W2,H2, D, BIDIRECTIONAL
 
 % Using Sullivan's 1971 paper as updated in ~2010
-inst_info.internal.X = @(zeta,a1,a2) min(zeta+a1/2,a1/2) - max(zeta-a1/2,-a2/2);
+inst_info.internal.X = @(zeta,a1,a2) min(zeta+a1/2,a2/2) - max(zeta-a1/2,-a2/2);
 inst_info.internal.A = @telescope_rect_A;
+D = inst_info.D; % Sullivan's ell
+alpha = (inst_info.H1 + inst_info.H2)/2;
+beta = (inst_info.W1 + inst_info.W2)/2;
+gamma = (inst_info.H1 - inst_info.H2)/2;
+delta = (inst_info.W1 - inst_info.W2)/2;
 
+% Sullivan's (11)
+inst_info.internal.hA0 = D^2*log(((D^2+alpha^2+delta^2)/(D^2+alpha^2+beta^2))*(D^2+gamma^2+beta^2)/(D^2+gamma^2+delta^2)) + ...
+     2*alpha*sqrt(D^2+beta^2) *atan(alpha/sqrt(D^2+beta^2)) +2*beta *sqrt(D^2+alpha^2)*atan(beta /sqrt(D^2+alpha^2)) + ...
+    -2*alpha*sqrt(D^2+delta^2)*atan(alpha/sqrt(D^2+delta^2))-2*beta *sqrt(D^2+gamma^2)*atan(beta /sqrt(D^2+gamma^2)) + ...
+    -2*gamma*sqrt(D^2+beta^2) *atan(gamma/sqrt(D^2+beta^2)) -2*delta*sqrt(D^2+alpha^2)*atan(delta/sqrt(D^2+alpha^2)) + ...
+     2*gamma*sqrt(D^2+delta^2)*atan(gamma/sqrt(D^2+delta^2))+2*delta*sqrt(D^2+gamma^2)*atan(delta/sqrt(D^2+gamma^2));
+if inst_info.internal.bidirectional,
+    inst_info.internal.hA0 = inst_info.internal.hA0*2;
+end
 
 function A = telescope_rect_A(inst_info,theta,phi)
 % effective area for 2-element rectangular telescope
@@ -95,7 +109,7 @@ zeta = inst_info.D*tantheta.*cosd(phi);
 eta = inst_info.D*tantheta.*sind(phi);
 
 X = inst_info.internal.X(zeta,inst_info.W1,inst_info.W2);
-Y = inst_info.internal.X(eta,inst_info.H1,H2);
+Y = inst_info.internal.X(eta,inst_info.H1,inst_info.H2);
 if inst_info.internal.bidirectional,
     theta = min(theta,180-theta);
     costheta = cosd(theta);
@@ -120,7 +134,7 @@ hAthetaphi = h; % success, returns h
 
 function [hAtheta,result_code] = make_hAtheta(inst_info,thetagrid,options)
 phigrid = rfl_make_grid(0,360,'phi',options);
-[hAthetaphi,result_code] = make_hAthetaphi(inst_info,thetagrid,phigrid,options);
+[hAthetaphi,result_code] = inst_info.internal.hAthetaphi(inst_info,thetagrid,phigrid,options);
 if result_code == 1,
     hAtheta = sum(hAthetaphi,2);
 else
@@ -129,7 +143,7 @@ end
 
 function [hA0,result_code] = make_hA0(inst_info)
 thetagrid = rfl_make_grid(0,180,'theta',[]);
-[hAtheta,result_code] = make_hAtheta(inst_info,thetagrid,[]);
+[hAtheta,result_code] = inst_info.internal.hAtheta(inst_info,thetagrid,[]);
 if result_code == 1,
     hA0 = sum(hAtheta);
 else
@@ -172,7 +186,7 @@ hAalphabeta = h; % success, returns h
 
 function [hAalpha,result_code] = make_hAalpha(inst_info,alphagrid,tgrid,alpha0,beta0,phib,options)
 betagrid = rfl_make_grid(0,360,'beta',options);
-[hAalphabeta,result_code] = make_hAalphabeta(inst_info,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options);
+[hAalphabeta,result_code] = inst_info.internal.hAalphabeta(inst_info,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options);
 if result_code == 1,
     hAalpha = sum(hAalphabeta,2);
 else
@@ -270,7 +284,7 @@ function inst_info = rfl_init_INT(inst_info)
 
 inst_info.internal.RE = @(inst_info,E)(E>=inst_info.E0)*inst_info.EPS;
 inst_info.internal.hE = @rfl_hE_int;
-inst_info.internal.hE0 = inf; % hE for flat spectrum
+inst_info.internal.hE0 = 1; % should be inf for flat spectrum, but use 1 for integral channel
 
 function [hE,result_code] = rfl_hE_int(inst_info,Egrid,options)
 result_code = 1;

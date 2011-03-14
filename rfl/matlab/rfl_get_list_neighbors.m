@@ -1,4 +1,5 @@
 function i = rfl_get_list_neighbors(list,q)
+% i = rfl_get_list_neighbors(list,q)
 % returns i = Nx2, where list(i(:,1))<=q, and list(i(:,2)>=q
 % i==0 implies q out of range
 
