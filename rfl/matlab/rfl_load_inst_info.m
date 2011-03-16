@@ -10,6 +10,8 @@ function [inst_info,result_code] = rfl_load_inst_info(FileName,FileType)
 % appropriate function pointers (methods),
 % and all properties propagated to the channels from their parent
 
+result_code = 1; % assume success! (error handling isn't really implemented yet)
+
 if isstruct(FileName),
     inst_info = FileName;
 else
@@ -68,7 +70,7 @@ for ichan = 1:length(inst_info.CHANNEL_NAMES),
     for isp = 1:length(inst_info.(chan).SPECIES),
         sp = inst_info.(chan).SPECIES{isp};
         if ~isfield(inst_info.(chan).(sp),'RESP_TYPE'),
-            error('rfl_load_inst_info:Error5','Missing channel property: RESP_TYPE');
+            error('Missing channel property: RESP_TYPE');
         end
         % initialize to inseparable, then let other initializations overload methods
         inst_info.(chan).(sp) = rfl_init_inseparable(inst_info.(chan).(sp));
@@ -80,7 +82,7 @@ for ichan = 1:length(inst_info.CHANNEL_NAMES),
             case {'[E]','[E],[TH]','[E],[TH,PH]'}
                 inst_info.(chan).(sp) = rfl_init_Eseparable(inst_info.(chan).(sp));
             otherwise
-                error('rfl_load_inst_info:Error6','Unknown RESP_TYPE: %s',inst_info.(chan).(sp).RESP_TYPE);
+                error('Unknown RESP_TYPE: %s',inst_info.(chan).(sp).RESP_TYPE);
         end
     end
 end

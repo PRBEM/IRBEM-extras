@@ -47,7 +47,7 @@ function [hAalphabeta,result_code] = make_hAalphabeta_pinhole(inst_info,alphagri
 if inst_info.internal.bidirectional,
     tmpinst_info = inst_info;
     tmpinst_info.internal.bidirectional=false;
-    [hAalphabeta1,result_code] = make_hAalphabeta_pinhole(tmpinst_info,alphagrid,betagrid,tgrid,180-alpha0,beta0,phib,options);
+    [hAalphabeta1,result_code] = make_hAalphabeta_pinhole(tmpinst_info,alphagrid,betagrid,tgrid,180-alpha0,180+beta0,phib,options);
     if result_code ~= 1,
         return
     end
@@ -117,11 +117,11 @@ function [hAalpha,result_code] = make_hAalpha_pinhole(inst_info,alphagrid,tgrid,
 if inst_info.internal.bidirectional,
     tmpinst_info = inst_info;
     tmpinst_info.internal.bidirectional=false;
-    [hAalpha1,result_code] = make_hAalpha_pinhole(tmpinst_info,alphagrid,tgrid,180-alpha0,beta0,phib,options);
+    [hAalpha1,result_code] = make_hAalpha_pinhole(tmpinst_info,alphagrid,tgrid,180-alpha0,180+beta0,phib,options);
     if result_code ~= 1,
         return
     end
-    [hAalpha,result_code] = make_hAalpha_pinhole(tmpinst_info,alphagrid,tgrid,180-alpha0,beta0,phib,options);
+    [hAalpha,result_code] = make_hAalpha_pinhole(tmpinst_info,alphagrid,tgrid,180-alpha0,180+beta0,phib,options);
     if result_code ~= 1,
         return
     end

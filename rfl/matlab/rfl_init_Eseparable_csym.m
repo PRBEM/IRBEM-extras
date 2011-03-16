@@ -14,7 +14,7 @@ switch(inst_info.RESP_TYPE),
             case 'TBL',
                 inst_info.internal.A = @(inst_info,theta,phi)interpn(inst_info.TH_GRID,inst_info.A,theta,'linear',0); % zero outside grid, ignore phi
             case 'PINHOLE',
-                inst_info = init_pinhole(inst_info);
+                inst_info = rfl_init_pinhole(inst_info);
             case 'CYL_TELE', %%
                 inst_info = init_telescope_csym(inst_info);
             case 'SLAB',
@@ -30,62 +30,80 @@ switch(inst_info.RESP_TYPE),
         error('RESP_TYPE %s not defined yet',inst_info.RESP_TYPE);
 end
 
-function inst_info = init_pinhole(inst_info)
-% initialize pinhole angular response
-% G, BIDIRECTIONAL
-
-inst_info.internal.A = @(inst_info,theta,phi)(theta==0); % delta function
-inst_info.internal.hAalphabeta = @make_hAlphabeta_pinhole;
-inst_info.internal.hA0 = inst_info.G; % already includes any bidirectional effects
-
-function [hAalphabeta,result_code] = make_hAalphabeta_pinhole(inst_info,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options)
-if isfield(options,'acute'),
-    acute = options.acute;
-else
-    acute = alphagrid(end)<=90;
-end
-dt = rfl_make_deltas(tgrid,options);
-% prepare to loop
-result_code = 1; % success
-hAalphabeta = nan; % on error, returns a nan
-h = 0;
-for it = 1:length(tgrid),
-    alpha_pinhole = alpha0(it);
-    beta_pinhole = beta0(it);
-    if acute,
-        alpha_pinhole = min(alpha_pinhole,180-alpha_pinhole);
-    end
-    if result_code ~= 1,
-        return
-    end
-    va = rfl_lbf_eval(alphagrid,alpha_pinhole);
-    vb = rfl_lbf_eval(betagrid,beta_pinhole,{'period',360});
-    vab = va*vb';
-    vab = vab(:);
-
-    h = h+inst_info.G*dt(it)*vab;
-    
-    if inst_info.bidirectional,
-        alpha_pinhole = 180-alpha0(it); % opposite hemisphere on [0,180]
-        beta_pinhole = 180+beta0(it); % opposite hemisphere on [0,360]
-        if acute,
-            alpha_pinhole = min(alpha_pinhole,180-alpha_pinhole);
-        end
-        if result_code ~= 1,
-            return
-        end
-        va = rfl_lbf_eval(alphagrid,alpha_pinhole);
-        vb = rfl_lbf_eval(betagrid,beta_pinhole,{'period',360});
-        vab = va*vb';
-        vab = vab(:);
-        
-        h = h+inst_info.G*dt(it)*vab;
-        h = h/2; % G already includes bidirectional effects
-    end
-end
-hAalphabeta = h; % success, returns h
-
-
+%%% accidentally wrote this code that duplicates rfl_init_pinhole.m. Might
+%%% actually be better code ;)
+% function inst_info = init_pinhole(inst_info)
+% % initialize pinhole angular response
+% % G, BIDIRECTIONAL
+% 
+% if inst_info.internal.bidirectional,
+%     inst_info.internal.A = @(inst_info,theta,phi)(theta==0)*inst_info.G; % delta function
+% else
+%     inst_info.internal.A = @(inst_info,theta,phi)((theta==0)|(theta==180))*inst_info.G/2; % delta function
+% end
+% inst_info.internal.hAalphabeta = @make_hAlphabeta_pinhole;
+% inst_info.internal.hAthetaphi = @make_hAthetaphi_pinhole;
+% inst_info.internal.hA0 = inst_info.G; % already includes any bidirectional effects
+% 
+% function [hAthetaphi,result_code] = make_hAthetaphi_pinhole(inst_info,thetagrid,phigrid,options)
+% result_code = 1; % success
+% h = zeros(length(thetagrid),length(phigrid));
+% h(thetagrid==0) = inst_info.G; % delta function at theta=0
+% if inst_info.internal.bidirectional,
+%     h(thetagrid==180) = inst_info.G; % add backward response
+%     h = h/2; % G includes bidirectional effect
+% end
+% hAthetaphi = h; % success, returns h
+% 
+% 
+% function [hAalphabeta,result_code] = make_hAalphabeta_pinhole(inst_info,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options)
+% if isfield(options,'acute'),
+%     acute = options.acute;
+% else
+%     acute = alphagrid(end)<=90;
+% end
+% dt = rfl_make_deltas(tgrid,options);
+% % prepare to loop
+% result_code = 1; % success
+% hAalphabeta = nan; % on error, returns a nan
+% h = 0;
+% for it = 1:length(tgrid),
+%     alpha_pinhole = alpha0(it);
+%     beta_pinhole = beta0(it);
+%     if acute,
+%         alpha_pinhole = min(alpha_pinhole,180-alpha_pinhole);
+%     end
+%     if result_code ~= 1,
+%         return
+%     end
+%     va = rfl_lbf_eval(alphagrid,alpha_pinhole);
+%     vb = rfl_lbf_eval(betagrid,beta_pinhole,{'period',360});
+%     vab = va*vb';
+% 
+%     h = h+inst_info.G*dt(it)*vab;
+%     
+%     if inst_info.bidirectional,
+%         alpha_pinhole = 180-alpha0(it); % opposite hemisphere on [0,180]
+%         beta_pinhole = 180+beta0(it); % opposite hemisphere on [0,360]
+%         if acute,
+%             alpha_pinhole = min(alpha_pinhole,180-alpha_pinhole);
+%         end
+%         if result_code ~= 1,
+%             return
+%         end
+%         va = rfl_lbf_eval(alphagrid,alpha_pinhole);
+%         vb = rfl_lbf_eval(betagrid,beta_pinhole,{'period',360});
+%         vab = va*vb';
+%         
+%         h = h+inst_info.G*dt(it)*vab;
+%     end
+% end
+% if inst_info.bidirectional,
+%     h = h/2; % G already includes bidirectional effects
+% end
+% hAalphabeta = h; % success, returns h
+% 
+% 
 function inst_info = init_telescope_csym(inst_info)
 % initialize cylindrically symmetric 2-element telescope
 % overloads inst_info.internal.A, sets some inst_info.internal fields, too

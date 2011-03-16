@@ -23,10 +23,14 @@ end
 inst_info.make_hEthetaphi = @inseparable_hEthetaphi; % on grid in E,theta,phi
 inst_info.make_hEtheta = @inseparable_hEtheta; % on grid in E,theta
 inst_info.make_hE = @inseparable_hE; % on grid in E
+inst_info.make_hthetaphi = @inseparable_hthetaphi; % on grid in theta,phi
+inst_info.make_htheta = @inseparable_htheta; % on grid in theta
 % make_h for grids in magnetic coordinates over time
 inst_info.make_hEalphabeta = @inseparable_hEalphabeta; % on grid in E,alpha,beta
 inst_info.make_hEalpha = @inseparable_hEalpha; % on grid in E,alpha
 inst_info.make_hEiso = @inseparable_hEiso; % on grid in E
+inst_info.make_halphabeta = @inseparable_halphabeta; % on grid in alpha,beta
+inst_info.make_halpha = @inseparable_halpha; % on grid in alpha
 
 % one private variable
 if isfield(inst_info,'BIDIRECTIONAL'),
@@ -47,18 +51,34 @@ R = inst_info.internal.R(inst_info,E,theta,phi);
 h = R.*dE.*dcost.*dp/inst_info.XCAL;
 hEthetaphi = h; % success, returns h
 
+function [hthetaphi,result_code] = inseparable_hthetaphi(inst_info,thetagrid,phigrid,options)
+[hEthetaphi,result_code] = inst_info.make_hEthetaphi(inst_info,inst_info.E_GRID,thetagrid,phigrid,options);
+if result_code == 1,
+    hthetaphi = shiftdim(sum(hEthetaphi,1),1);
+else
+    hthetaphi = nan;
+end
+
 function [hEtheta,result_code] = inseparable_hEtheta(inst_info,Egrid,thetagrid,options)
 phigrid = rfl_make_grid(0,360,'phi',options);
-[hEthetaphi,result_code] = inseparable_hEthetaphi(inst_info,Egrid,thetagrid,phigrid,options);
+[hEthetaphi,result_code] = inst_info.make_hEthetaphi(inst_info,Egrid,thetagrid,phigrid,options);
 if result_code == 1,
     hEtheta = sum(hEthetaphi,3);
 else
     hEtheta = nan;
 end
 
+function [htheta,result_code] = inseparable_htheta(inst_info,thetagrid,options)
+[hEtheta,result_code] = inst_info.make_hEtheta(inst_info,inst_info.E_GRID,thetagrid,options);
+if result_code == 1,
+    htheta = shiftdim(sum(hEtheta,1),1);
+else
+    htheta = nan;
+end
+
 function [hE,result_code] = inseparable_hE(inst_info,Egrid,options)
 thetagrid = rfl_make_grid(0,180,'theta',options);
-[hEtheta,result_code] = inseparable_hEtheta(inst_info,Egrid,thetagrid,options);
+[hEtheta,result_code] = inst_info.make_hEtheta(inst_info,Egrid,thetagrid,options);
 if result_code == 1,
     hE = sum(hEtheta,2);
 else
@@ -103,9 +123,17 @@ end
 h = h.*dE.*dcosa.*db/inst_info.XCAL;
 hEalphabeta = h; % success, returns h
 
+function [hEalphabeta,result_code] = inseparable_halphabeta(inst_info,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options)
+[hEalphabeta,result_code] = inst_info.make_hEalphabeta(inst_info,inst_info.E_GRID,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options);
+if result_code==1,
+    hEalphabeta = shiftdim(sum(hEalphabeta,1),1);
+else
+    hEalphabeta = nan;
+end
+
 function [hEalpha,result_code] = inseparable_hEalpha(inst_info,Egrid,alphagrid,tgrid,alpha0,beta0,phib,options)
 betagrid = rfl_make_grid(0,360,'beta',options);
-[hEalphabeta,result_code] = inseparable_hEalphabeta(inst_info,Egrid,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options);
+[hEalphabeta,result_code] = inst_info.make_hEalphabeta(inst_info,Egrid,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options);
 if result_code == 1,
     hEalpha = sum(hEalphabeta,3);
 else
@@ -113,7 +141,7 @@ else
 end
 
 function [hEiso,result_code] = inseparable_hEiso(inst_info,Egrid,tgrid,options)
-[hE,result_code] = inseparable_hE(inst_info,Egrid,options);
+[hE,result_code] = inst_info.make_hE(inst_info,Egrid,options);
 if result_code == 1,
     dt = rfl_make_deltas(tgrid,options);
     hEiso = hE*sum(dt);

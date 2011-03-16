@@ -14,9 +14,13 @@ inst_info.internal.R = @(inst_info,E,theta,phi)inst_info.internal.RE(inst_info,E
 inst_info.make_hEthetaphi = @make_hEthetaphi_Eseparable;
 inst_info.make_hEtheta = @make_hEtheta_Eseparable;
 inst_info.make_hE = @make_hE_Eseparable;
+inst_info.make_hthetaphi = @make_hthetaphi_Eseparable;
+inst_info.make_htheta = @make_htheta_Eseparable;
 inst_info.make_hEalphabeta = @make_hEalphabeta_Eseparable;
 inst_info.make_hEalpha = @make_hEalpha_Eseparable;
 inst_info.make_hEiso = @make_hEiso_Eseparable;
+inst_info.make_halphabeta = @make_halphabeta_Eseparable;
+inst_info.make_halpha = @make_halpha_Eseparable;
 
 % separables have a new structure "internal"
 % with (protected) methods:
@@ -201,12 +205,23 @@ hAthetaphi = inst_info.internal.hAthetaphi(inst_info,thetagrid,phigrid,options);
 
 hEthetaphi = merge_hE_hangles(hE,hAthetaphi);
 
+function [hthetaphi,result_code] = make_hthetaphi_Eseparable(inst_info,thetagrid,phigrid,options)
+result_code = 1;
+hAthetaphi = inst_info.internal.hAthetaphi(inst_info,thetagrid,phigrid,options);
+hthetaphi = hAthetaphi*inst_info.internal.hE0;% includes XCAL
+
 function [hEtheta,result_code] = make_hEtheta_Eseparable(inst_info,Egrid,thetagrid,options)
 % combines results of make_hE and make_theta
 result_code = 1;
 hE = inst_info.internal.hE(inst_info,Egrid,options);
 hAtheta = inst_info.internal.hAtheta(inst_info,thetagrid,options);
 hEtheta = merge_hE_hangles(hE,hAtheta);
+
+function [htheta,result_code] = make_htheta_Eseparable(inst_info,thetagrid,options)
+% combines results of make_hE and make_theta
+result_code = 1;
+hAtheta = inst_info.internal.hAtheta(inst_info,thetagrid,options);
+htheta = hAtheta*inst_info.internal.hE0;% includes XCAL
 
 function [hE,result_code] = make_hE_Eseparable(inst_info,Egrid,options)
 [hE,result_code] = inst_info.internal.hE(inst_info,Egrid,options);
@@ -219,12 +234,22 @@ hE = inst_info.internal.hE(inst_info,Egrid,options);
 hAalphabeta = inst_info.internal.hAalphabeta(inst_info,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options);
 hEalphabeta = merge_hE_hangles(hE,hAalphabeta);
 
+function [halphabeta,result_code] = make_halphabeta_Eseparable(inst_info,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options)
+result_code = 1;
+hAalphabeta = inst_info.internal.hAalphabeta(inst_info,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options);
+halphabeta = hAalphabeta*inst_info.internal.hE0; % includes XCAL
+
 function [hEalpha,result_code] = make_hEalpha_Eseparable(inst_info,Egrid,alphagrid,tgrid,alpha0,beta0,phib,options)
 % combines results of make_hE and make_alpha
 result_code = 1;
 hE = inst_info.internal.hE(inst_info,Egrid,options);
 hAalpha = inst_info.internal.hAalpha(inst_info,alphagrid,tgrid,alpha0,beta0,phib,options);
 hEalpha = merge_hE_hangles(hE,hAalpha);
+
+function [halpha,result_code] = make_halpha_Eseparable(inst_info,alphagrid,tgrid,alpha0,beta0,phib,options)
+result_code = 1;
+hAalpha = inst_info.internal.hAalpha(inst_info,alphagrid,tgrid,alpha0,beta0,phib,options);
+halpha = hAalpha*inst_info.internal.hE0; % includes XCAL
 
 function [hEiso,result_code] = make_hEiso_Eseparable(inst_info,Egrid,tgrid,options)
 % combines results of make_hE and hA0
@@ -284,7 +309,7 @@ function inst_info = rfl_init_INT(inst_info)
 
 inst_info.internal.RE = @(inst_info,E)(E>=inst_info.E0)*inst_info.EPS;
 inst_info.internal.hE = @rfl_hE_int;
-inst_info.internal.hE0 = 1; % should be inf for flat spectrum, but use 1 for integral channel
+inst_info.internal.hE0 = inst_info.EPS/inst_info.XCAL; % should be inf for flat spectrum, but assume energy bandwidth==1
 
 function [hE,result_code] = rfl_hE_int(inst_info,Egrid,options)
 result_code = 1;
