@@ -1,5 +1,5 @@
-function [Daa,Dap,Dpp] = Daa_FA_local(species,E,alpha,L,MLT,B,Beq,wave_model)
-% [Daa,Dap,Dpp] = Daa_FA_local(species,E,alpha,L,MLT,B,Beq,wave_model)
+function [Daa,Dap,Dpp] = Daa_FA_local(species,E,alpha,L,MLT,B,Beq,hemi,wave_model,varargin)
+% [Daa,Dap,Dpp] = Daa_FA_local(species,E,alpha,L,MLT,B,Beq,hemi,wave_model)
 % compute local diffusion coefficients
 % for field-aligned waves. Coefficients are momentum-normalized
 % Daa is rad^2/s
@@ -23,12 +23,9 @@ function [Daa,Dap,Dpp] = Daa_FA_local(species,E,alpha,L,MLT,B,Beq,wave_model)
 % MLT - Magnetic Local Time in Hours
 % B - local magnetic field strength, nT
 % Beq - equatorial magnetic field strength, nT
+% hemi - hemisphere +1 for northern, -1 for southern
 % wave_model - structure
 %  .mode - 'R' or 'L' - wave mode (polarization)
-%  .directions - 
-%    'F' forward (k || to B)
-%    'B' backward (k || to -B)
-%    'FB' both
 %  .normalization - string
 %    changes meaning of omega_m, domega, omega1, omega2
 %    to be in terms of
@@ -40,7 +37,14 @@ function [Daa,Dap,Dpp] = Daa_FA_local(species,E,alpha,L,MLT,B,Beq,wave_model)
 %    'Omega_s_eq' equatorial cold species gyro
 %  .omega_pe_normalization - string
 %     changes meaning of omega_pe. Uses same values as .normalization
-%  (each of the following can be a scalar or function handle that takes (L,MLT,maglat)
+%  [each of the following can be a scalar or
+%   a function handle that takes (L,MLT,maglat), maglat in degrees]
+%  .directions -
+%    'F' forward (k || to B)
+%    'B' backward (k || to -B)
+%    'FB' both
+%    'P' poleward (k || to hemi*B)
+%    'E' equatorward (k || to -hemi*B)
 %  .dB - function provides peak wave amplitude, nT
 %  .omega_m - angular frequency of peak wave power, rad/sec
 %  .domega - angular frequency width of wave power, rad/sec
@@ -50,15 +54,36 @@ function [Daa,Dap,Dpp] = Daa_FA_local(species,E,alpha,L,MLT,B,Beq,wave_model)
 %   ** can supply .alpha_star = (Omega_e/omega_pe)^2 (local)
 %   ** can supply .omega_pe (rad/s, unless omega_pe_normalization provided)
 %
+% options:
+% D = Daa_FA_local(...,'join_outputs'): D = [Daa,Dap,Dpp];
 
-last_root_only = false;
-
-yrange = [0 0];
-if any(lower(wave_model.directions) == 'f'),
-    yrange(2) = inf;
+join_outputs = false;
+last_root_only = false; % this is for debugging only
+i = 1;
+while i <= length(varargin),
+    switch(lower(varargin{i})),
+        case 'join_outputs',
+            join_outputs = true;
+        case 'last_root_only', % for debugging only
+            last_root_only = true;
+    end
+    i = i+1;
 end
-if any(lower(wave_model.directions) == 'b'),
-    yrange(1) = -inf;
+
+maglat = BBeq_to_maglat(B/Beq)*hemi;
+
+directions = upper(evaluate_scalar_or_handle(wave_model.directions,L,MLT,maglat));
+switch(directions),
+    case 'F', % forward (k || to B)
+        yrange = [0 inf];
+    case 'B', % backward (k || to -B)
+        yrange = [-inf 0];
+    case 'P', % poleward (k || to hemi*B)
+        yrange = sort([0 hemi*inf]);
+    case 'E', % equatorward (k || to -hemi*B)
+        yrange = sort([0 -hemi*inf]);
+    case {'FB','PE','BF','EP'}, % both
+        yrange = [-inf inf];
 end
 
 Daa = 0;
@@ -66,15 +91,18 @@ Dap = 0;
 Dpp = 0;
 
 % test for nonzero, finite wave field
-maglat = BBeq_to_maglat(B/Beq);
 dB = evaluate_scalar_or_handle(wave_model.dB,L,MLT,maglat);
 
 if dB==0,
     return; % zeros
 elseif ~isfinite(dB),
-    Daa = nan;
-    Dap = nan;
-    Dpp = nan;
+    if join_outputs,
+        Daa = nan(1,3);
+    else
+        Daa = nan;
+        Dap = nan;
+        Dpp = nan;
+    end
     return
 end
 
@@ -193,6 +221,9 @@ else
     % Evaluate Summers (33)-(35)
     rr = rroots(x1,x2,s,beta,mu,epsilon,a,b);
     rr = rr((rr>=xrange(1)) & (rr < xrange(end)));
+    if last_root_only && ~isempty(rr),
+        rr = rr(end);
+    end
     for iroot = 1:length(rr),
         x = rr(iroot); % omega(i) / Omega_e, Summers after (35)
         y = (x+a)/(beta*mu); % Summers (24)
@@ -214,15 +245,19 @@ else
     Dpp = common_prefactor*Dpp*p_prefactor^2; % Summers (35)
 end
 
+if join_outputs,
+    Daa = [Daa,Dap,Dpp];
+end
+
 function y = evaluate_scalar_or_handle(x,varargin)
 % y = evaluate_scalar_or_hande(x,...)
 % if x is a scalar, returns it
 % otherwise, evaluates it as a function y = x(...)
 
-if isnumeric(x),
-    y = x;
-else
+if isa(x,'function_handle'),
     y = x(varargin{:});
+else
+    y = x;
 end
 
 function maglat = BBeq_to_maglat(BB0)

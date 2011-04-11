@@ -51,9 +51,9 @@ X = r.*cos(lambda).*cos(phi);
 Y = r.*cos(lambda).*sin(phi);
 Z = r.*sin(lambda);
 
-local = @(XYZ,Blocal,Bm,sign_pa)f(BB0toMagLat(Blocal./Beq,'rad'));
+local = @(XYZ,Blocal,Bm,maglat,sign_cospa)f(BB0toMagLat(Blocal./Beq,'rad'));
 
-f_bavt = bounce_average_trace([X,Y,Z],B,local);
+f_bavt = bounce_average_trace([X,Y,Z],B,local,sign(lambda));
 [f_bav f_bavt]
 
 

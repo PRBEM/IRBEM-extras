@@ -4,6 +4,8 @@
 
 %% reproduce some figures from Summers, 2005
 
+hemi = +1; % always in northern hemisphere
+
 %% Figure 1.
 % R-mode waves with alpha_star = 0.16 and dB = 0.1 nT
 
@@ -36,7 +38,7 @@ wave_model.directions = 'b'; % backward waves only
 
 % % print diagnostics
 % fprintf('3 MeV, alpha=85\n');
-% Daa_FA_local('e',3,85,L,MLT,B,Beq,wave_model);
+% Daa_FA_local('e',3,85,L,MLT,B,Beq,hemi,wave_model);
 
 h = nan(size(keV));
 for iE = 1:length(keV),
@@ -45,7 +47,7 @@ for iE = 1:length(keV),
     Dap = nan(size(alpha));
     Dpp = nan(size(alpha));
     for ialpha = 1:length(alpha),
-        [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = Daa_FA_local('e',MeV,alpha(ialpha),L,MLT,B,Beq,wave_model);
+        [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = Daa_FA_local('e',MeV,alpha(ialpha),L,MLT,B,Beq,hemi,wave_model);
     end
     subplot(3,1,1);
     h(iE) = semilogy(alpha,Daa,styles{iE});
@@ -108,7 +110,7 @@ wave_model.directions = 'b'; % backward waves only
 
 % % print diagnostics
 % fprintf('3 MeV, alpha=85\n');
-% Daa_FA_local('e',3,85,L,MLT,B,Beq,wave_model);
+% Daa_FA_local('e',3,85,L,MLT,B,Beq,hemi,wave_model);
 
 h = nan(size(alpha_star));
 for istar = 1:length(alpha_star),
@@ -117,7 +119,7 @@ for istar = 1:length(alpha_star),
     Dap = nan(size(alpha));
     Dpp = nan(size(alpha));
     for ialpha = 1:length(alpha),
-        [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = Daa_FA_local('e',MeV,alpha(ialpha),L,MLT,B,Beq,wave_model);
+        [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = Daa_FA_local('e',MeV,alpha(ialpha),L,MLT,B,Beq,hemi,wave_model);
     end
     subplot(3,1,1);
     h(istar) = semilogy(alpha,Daa,styles{istar});
@@ -186,14 +188,14 @@ for i = 1:length(directions),
     Dap = nan(size(alpha));
     Dpp = nan(size(alpha));
     for ialpha = 1:length(alpha),
-        [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = Daa_FA_local('e',MeV,alpha(ialpha),L,MLT,B,Beq,wave_model);
+        [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = Daa_FA_local('e',MeV,alpha(ialpha),L,MLT,B,Beq,hemi,wave_model);
     end
     h(i) = semilogy(alpha,Dpp,styles{i});
     hold on;
 end    
 axis([0 90 1e-5 1e-3]);
 ylabel('D_{pp}/p^2 1/sec');
-legend(h,'backward only, k<0','forward and backward');
+legend(h,'backward only, k<0','forward and backward','location','nw');
 grid on;
 
 %% Figure 4.
@@ -228,7 +230,7 @@ wave_model.directions = 'f'; % forwards only (backwards does not resonate)
 
 % % print diagnostics
 % fprintf('3 MeV, alpha=85\n');
-% Daa_FA_local('e',3,85,L,MLT,B,Beq,wave_model);
+% Daa_FA_local('e',3,85,L,MLT,B,Beq,hemi,wave_model);
 
 h = nan(size(keV));
 for iE = 1:length(keV),
@@ -237,7 +239,7 @@ for iE = 1:length(keV),
     Dap = nan(size(alpha));
     Dpp = nan(size(alpha));
     for ialpha = 1:length(alpha),
-        [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = Daa_FA_local('e',MeV,alpha(ialpha),L,MLT,B,Beq,wave_model);
+        [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = Daa_FA_local('e',MeV,alpha(ialpha),L,MLT,B,Beq,hemi,wave_model);
     end
     h(iE) = semilogy(alpha,Daa,styles{iE},'linew',2);
     hold on;
@@ -282,7 +284,7 @@ wave_model.directions = 'bf'; % forwards only (backwards does not resonate)
 
 % % print diagnostics
 % fprintf('3 MeV, alpha=85\n');
-% Daa_FA_local('e',3,85,L,MLT,B,Beq,wave_model);
+% Daa_FA_local('e',3,85,L,MLT,B,Beq,hemi,wave_model);
 
 h = nan(size(keV));
 for iE = 1:length(keV),
@@ -291,7 +293,7 @@ for iE = 1:length(keV),
     Dap = nan(size(alpha));
     Dpp = nan(size(alpha));
     for ialpha = 1:length(alpha),
-        [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = Daa_FA_local('H+',MeV,alpha(ialpha),L,MLT,B,Beq,wave_model);
+        [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = Daa_FA_local('H+',MeV,alpha(ialpha),L,MLT,B,Beq,hemi,wave_model);
     end
     h(iE) = semilogy(alpha,Daa,styles{iE},'linew',2);
     hold on;
@@ -342,7 +344,7 @@ xlabel('Local Pitch Angle, \alpha (deg)');
 % alpha = 1:89;
 % for ialpha = 1:length(alpha),
 %     Daa_UCLA(ialpha) =Daa_local(alpha(ialpha)*pi/180, keV/511, maglat, L);
-%     Daa(ialpha) = Daa_FA_local('e',keV/1e3,alpha(ialpha),L,MLT,B,Beq,wave_model);
+%     Daa(ialpha) = Daa_FA_local('e',keV/1e3,alpha(ialpha),L,MLT,B,Beq,hemi,wave_model);
 % end
 % semilogy(alpha,Daa_UCLA,'k-',alpha,Daa,'r-');
 % 
