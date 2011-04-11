@@ -20,12 +20,7 @@ cos_a_lam = @(lam)sqrt(1-sin_a_lam(lam).^2);
 
 % find mirror lat:
 sina0 = sin(a0);
-% note, below fixes error in Shprits thesis, eqn  F13
-% which has sina0^2. Instead use sina0^4 from Shprits 2006 eqn 10.
-Px = [1, 0, 0, 0, 0, 3*sina0^4, -4*sina0^4]; 
-xroots = roots(Px);
-xroot = xroots((imag(xroots)==0) & (xroots>0));
-lambdam = acos(sqrt(xroot)); % mirror latitude
+lambdam = dipole_mirror_latitude(a0,'rad');
 
 %f = @(lambda)ones(size(lambda)); % trivial function to integrate
 %f = @(lambda)cos_a_lam(lambda); % cosine of local pitch angle
