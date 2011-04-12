@@ -196,11 +196,11 @@ if mu==0,
     % special case for alpha=0, given in Summers paragraph [45]
     % note, resonates with forward and backward going waves, so
     % sum over +y0 and -y0
-    x0 = -s*species.lambda/gamma;
     if (s==1) && (species.lambda==-1), % Summers case (i), A2
+        x0 = 1/gamma;
         y0 = 1/gamma*sqrt(1+b*gamma^2 / (gamma-1)/(1+epsilon*gamma));
     elseif (s==-1) && (species.lambda==epsilon), % Summers case (ii), A3
-        x0 = s*species.lambda/gamma;
+        x0 = epsilon/gamma;
         y0 = epsilon/gamma*sqrt(1+b*gamma^2 / epsilon / (gamma-1)/(gamma+epsilon));
     else
         x0 = nan;
@@ -211,11 +211,11 @@ if mu==0,
             y = signy*y0;
             if (y>=yrange(1)) && (y <= yrange(end)),
                 Daa = Daa+Daa_tmp;
-                Dap = Dap+Daa_tmp/beta*(x0/y);  % Summers (37), w/o +/- y0
+                Dap = Dap+Daa_tmp/beta*(x0/y);  % Summers (37)
                 Dpp = Dpp+Daa_tmp/beta^2*(x0/y)^2; % Summers (38)
             end
         end
-    end
+    end    
 else
     
     % Evaluate Summers (33)-(35)
