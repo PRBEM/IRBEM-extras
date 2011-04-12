@@ -23,6 +23,8 @@ function [ba,denom] = bounce_average_trace(XYZ,Blocal,local,hemi,varargin)
 % [...] = bounce_average_trace(...,'symmetric') - local does not depend
 %  on sign of the pitch angle (i.e., northward and southward legs are
 %  identical)
+% [...] = bounce_average_trace(...,'Bm',Bm) - provide Bmirror
+%   (otherwise it's max(|B|)
 
 % ba = [int_s1^s2 local(XYZ,B) *ds / sqrt(Bmirror - B)] /
 %      [int_s1^s2 ds / sqrt(Bmirror - B)]
@@ -32,6 +34,7 @@ function [ba,denom] = bounce_average_trace(XYZ,Blocal,local,hemi,varargin)
 
 force_symmetric = false; % user tells us it's symmetric?
 do_avg = true; % do bounce average? vs integral?
+Bm = nan;
 i = 1;
 while i <= length(varargin),
     switch(lower(varargin{i})),
@@ -39,6 +42,9 @@ while i <= length(varargin),
             do_avg = false;
         case 'symmetric',
             force_symmetric = true;
+        case 'bm',
+            i = i+1;
+            Bm = varargin{i};
         otherwise
             error('Unknown argument "%s"',varargin{i});
     end
@@ -52,7 +58,9 @@ else
 end
 
 N = length(Bmag);
-Bm = max(Bmag); % mirror field strength
+if ~isfinite(Bm),
+    Bm = max(Bmag); % mirror field strength
+end
 Beq = min(Bmag);
 maglat = BB0toMagLat(Bmag./Beq).*hemi;
 
