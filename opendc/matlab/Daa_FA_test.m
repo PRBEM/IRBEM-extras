@@ -201,7 +201,7 @@ grid on;
 %% Figure 4.
 % L-mode waves electrons
 
-keV = [1.2 1.5 2 5 10]*1e3;
+keV = [1.25 1.5 2 5 10]*1e3;
 styles = {'r-','g--','b:','k.-','r.:'};
 
 figure;
