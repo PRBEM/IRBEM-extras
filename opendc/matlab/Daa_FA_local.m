@@ -445,13 +445,13 @@ switch(normalization),
     case 'Omega_p_eq',
         freq_norm = Omega_p_eq;
     case 'Omega_He+',
-        freq_norm = Omega_p*4;
+        freq_norm = Omega_p/4;
     case 'Omega_He+_eq',
-        freq_norm = Omega_p_eq*4;
+        freq_norm = Omega_p_eq/4;
     case 'Omega_O+',
-        freq_norm = Omega_p*16;
+        freq_norm = Omega_p/16;
     case 'Omega_O+_eq',
-        freq_norm = Omega_p_eq*16;
+        freq_norm = Omega_p_eq/16;
     case 'Omega_s',
         freq_norm = Omega_s;
     case 'Omega_s_eq',
