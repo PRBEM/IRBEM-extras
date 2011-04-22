@@ -26,6 +26,8 @@ function [Daa,Dap,Dpp] = Daa_FA_local(species,E,alpha,L,MLT,B,Beq,hemi,wave_mode
 % hemi - hemisphere +1 for northern, -1 for southern
 % wave_model - structure
 %  .mode - 'R' or 'L' - wave mode (polarization)
+%  .composition' - [H+ fraction,He+ fraction,O+ fraction]
+%   (provides ion composition, must sum to 1. Default = [1 0 0])
 %  .normalization - string
 %    changes meaning of omega_m, domega, omega1, omega2
 %    to be in terms of
@@ -57,19 +59,17 @@ function [Daa,Dap,Dpp] = Daa_FA_local(species,E,alpha,L,MLT,B,Beq,hemi,wave_mode
 %
 % options:
 % [...] = Daa_FA_local(...,'method','Summers2007'); use Summers 2007 method
-%   (multispecies plasma) (default)
+%   (multispecies plasma)
 % [...] = Daa_FA_local(...,'method','Summers2005'); use Summers 2005 method
 %   (Hydrogen plasma only, maybe some errors)
-% [...] = Daa_FA_local(...,'composition',[H+ fraction,He+ fraction,O+ fraction]);
-%   (provides ion composition, must sum to 1. Default = [1 0 0])
+% [...] = Daa_FA_local(...,'method','auto'); select Summers 2005 for
+% Hydrogen plasma, Summers 2007 for multispecies (default)
 % [...] = Daa_FA_local(...,'usenu'); use nu versus rho
 %   (nu is 2005 normalization and appears to be incorrect, rho is 2007
 %   normalization)
-%   (provides ion composition, must sum to 1. Default = [1 0 0])
 % D = Daa_FA_local(...,'join_outputs'): D = [Daa,Dap,Dpp];
 
-composition = [1 0 0]; % H+, He+, O+, default is all Hydrogen
-method = 'Summers2007';
+method = 'auto';
 join_outputs = false;
 last_root_only = false; % this is for debugging only
 usenu = false;
@@ -89,6 +89,21 @@ while i <= length(varargin),
             error('Unknown argument "%s"',varargin{i});
     end
     i = i+1;
+end
+
+if isfield(wave_model,'composition'),
+    composition = wave_model.composition;
+else    
+    composition = [1 0 0]; % H+, He+, O+, default is all Hydrogen
+end
+
+
+if strcmpi(method,'auto'),
+    if composition(1) == 1, % Hydrogen plasma
+        method = 'Summers2005';
+    else
+        method = 'Summers2007'; % multispecies
+    end
 end
 
 maglat = BBeq_to_maglat(B/Beq)*hemi;
