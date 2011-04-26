@@ -16,7 +16,7 @@ function [ba,denom] = bounce_average_trace(XYZ,Blocal,local,hemi,varargin)
 % hemi Nx1 - sign of hemisphere +1 for northern, -1 for southern
 % options:
 % [bint,denom] = bounce_average_trace(...,'no_avg') - returns bounce integral
-%  and denominator, does not naverage (bav = bint/denom)
+%  and denominator (in RE), does not average (bav = bint/denom)
 %  NOTE: the true bounce integral is bint*v, where v is the velocity
 %  and denom*v is the true full bounce period
 %
