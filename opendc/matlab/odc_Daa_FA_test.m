@@ -1,9 +1,10 @@
-% test Daa_FA_local
+% test odc_Daa_FA_local
 %% reproduce some figures from Summers, 2005, and 2007
 % as of 4/25/2011, visual comparison shows apparent success
 % computing diffusion coefficients for hydrogen and multispecies plasmas
 
 hemi = +1; % always in northern hemisphere
+util = odc_util; % get constants and function handles
 
 %% Figure 1. 2005
 % R-mode waves with alpha_star = 0.16 and dB = 0.1 nT
@@ -16,13 +17,7 @@ alpha = (0.1:0.1:90)';
 % dummy field values for realistic frequencies
 L = 4.5; % RE
 Beq = 30e3/L^3; % equator, nT
-% f_ce = 9.54 kHz = Omega_e/2/pi
-% Omega_e = qB/m
-% B= Omega_e*m/q
-m0c2 = 0.510998910; % rest mass, MeV
-m0kg = m0c2*1.782661758877380e-030; % rest mass, kg
-qC = -1.602176487e-19; % charge, C
-B = 9.54e3*2*pi*m0kg/abs(qC)*1e9; % somewhere off the equator
+B = util.fce2B(9.54e3); % f_ce = 9.54 kHz
 MLT = 6; % hours
 
 clear wave_model
@@ -37,7 +32,7 @@ wave_model.directions = 'b'; % backward waves only
 
 % % print diagnostics
 % fprintf('3 MeV, alpha=85\n');
-% Daa_FA_local('e',3,85,L,MLT,B,Beq,hemi,wave_model);
+% odc_Daa_FA_local('e',3,85,L,MLT,B,Beq,hemi,wave_model);
 
 h = nan(size(keV));
 for iE = 1:length(keV),
@@ -46,7 +41,7 @@ for iE = 1:length(keV),
     Dap = nan(size(alpha));
     Dpp = nan(size(alpha));
     for ialpha = 1:length(alpha),
-        [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = Daa_FA_local('e',MeV,alpha(ialpha),L,MLT,B,Beq,hemi,wave_model);
+        [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = odc_Daa_FA_local('e',MeV,alpha(ialpha),L,MLT,B,Beq,hemi,wave_model);
     end
     subplot(3,1,1);
     h(iE) = semilogy(alpha,Daa,styles{iE});
@@ -76,7 +71,6 @@ ylabel('D_{pp}/p^2 1/sec');
 xlabel('Local Pitch Angle, \alpha (deg)');
 grid on;
 
-
 %% Figure 2. 2005
 % R-mode waves with alpha_star = 0.16 and dB = 0.1 nT
 
@@ -89,13 +83,7 @@ alpha = (0.1:0.1:90)';
 % dummy field values for realistic frequencies
 L = 4.5; % RE
 Beq = 30e3/L^3; % equator, nT
-% f_ce = 9.54 kHz = Omega_e/2/pi
-% Omega_e = qB/m
-% B= Omega_e*m/q
-m0c2 = 0.510998910; % rest mass, MeV
-m0kg = m0c2*1.782661758877380e-030; % rest mass, kg
-qC = -1.602176487e-19; % charge, C
-B = 9.54e3*2*pi*m0kg/abs(qC)*1e9; % somewhere off the equator
+B = util.fce2B(9.54e3); % f_ce = 9.54 kHz
 MLT = 6; % hours
 
 clear wave_model
@@ -109,7 +97,7 @@ wave_model.directions = 'b'; % backward waves only
 
 % % print diagnostics
 % fprintf('3 MeV, alpha=85\n');
-% Daa_FA_local('e',3,85,L,MLT,B,Beq,hemi,wave_model);
+% odc_Daa_FA_local('e',3,85,L,MLT,B,Beq,hemi,wave_model);
 
 h = nan(size(alpha_star));
 for istar = 1:length(alpha_star),
@@ -118,7 +106,7 @@ for istar = 1:length(alpha_star),
     Dap = nan(size(alpha));
     Dpp = nan(size(alpha));
     for ialpha = 1:length(alpha),
-        [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = Daa_FA_local('e',MeV,alpha(ialpha),L,MLT,B,Beq,hemi,wave_model);
+        [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = odc_Daa_FA_local('e',MeV,alpha(ialpha),L,MLT,B,Beq,hemi,wave_model);
     end
     subplot(3,1,1);
     h(istar) = semilogy(alpha,Daa,styles{istar});
@@ -156,16 +144,8 @@ alpha = (0.1:0.1:90)';
 % dummy field values for realistic frequencies
 L = 4; % RE
 Beq = 30e3/L^3; % equator, nT
-% f_ce = 9.54 kHz = Omega_e/2/pi
-% Omega_e = qB/m
-% B= Omega_e*m/q
-m0c2 = 0.510998910; % rest mass, MeV
-m0kg = m0c2*1.782661758877380e-030; % rest mass, kg
-qC = -1.602176487e-19; % charge, C
-B = 13.65e3*2*pi*m0kg/abs(qC)*1e9; % somewhere off the equator
+B = util.fce2B(13.65e3); % f_ce = 13.65 kHz
 MLT = 6; % hours
-c = 2.99792458e8; % m/s
-
 
 clear wave_model
 wave_model.mode = 'R';
@@ -187,7 +167,7 @@ for i = 1:length(directions),
     Dap = nan(size(alpha));
     Dpp = nan(size(alpha));
     for ialpha = 1:length(alpha),
-        [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = Daa_FA_local('e',MeV,alpha(ialpha),L,MLT,B,Beq,hemi,wave_model);
+        [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = odc_Daa_FA_local('e',MeV,alpha(ialpha),L,MLT,B,Beq,hemi,wave_model);
     end
     h(i) = semilogy(alpha,Dpp,styles{i});
     hold on;
@@ -208,13 +188,7 @@ alpha = (0.1:0.1:90)';
 % dummy field values for realistic frequencies
 L = 4; % RE
 Beq = 30e3/L^3; % equator, nT
-% f_ce = 9.54 kHz = Omega_e/2/pi
-% Omega_e = qB/m
-% B= Omega_e*m/q
-m0c2 = 0.510998910; % rest mass, MeV
-m0kg = m0c2*1.782661758877380e-030; % rest mass, kg
-qC = -1.602176487e-19; % charge, C
-B = 13.65e3*2*pi*m0kg/abs(qC)*1e9; % somewhere off the equator
+B = util.fce2B(13.65e3); % f_ce = 13.65 kHz
 MLT = 6; % hours
 
 clear wave_model
@@ -229,7 +203,7 @@ wave_model.directions = 'f'; % forwards only (backwards does not resonate)
 
 % % print diagnostics
 % fprintf('3 MeV, alpha=85\n');
-% Daa_FA_local('e',3,85,L,MLT,B,Beq,hemi,wave_model);
+% odc_Daa_FA_local('e',3,85,L,MLT,B,Beq,hemi,wave_model);
 
 h = nan(size(keV));
 for iE = 1:length(keV),
@@ -238,7 +212,7 @@ for iE = 1:length(keV),
     Dap = nan(size(alpha));
     Dpp = nan(size(alpha));
     for ialpha = 1:length(alpha),
-        [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = Daa_FA_local('e',MeV,alpha(ialpha),L,MLT,B,Beq,hemi,wave_model);
+        [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = odc_Daa_FA_local('e',MeV,alpha(ialpha),L,MLT,B,Beq,hemi,wave_model);
     end
     h(iE) = semilogy(alpha,Daa,styles{iE},'linew',2);
     hold on;
@@ -249,7 +223,6 @@ ylabel('D_{\alpha\alpha} 1/sec');
 legend(h,arrayfun(@(x)sprintf('%g',x/1e3),keV,'uniform',false),'location','sw');
 grid on;
 xlabel('Local Pitch Angle, \alpha (deg)');
-
 
 %% Figure 5. 2005
 % L-mode waves protons
@@ -262,13 +235,7 @@ alpha = (0.1:0.1:90)';
 % dummy field values for realistic frequencies
 L = 4; % RE
 Beq = 30e3/L^3; % equator, nT
-% f_ce = 9.54 kHz = Omega_e/2/pi
-% Omega_e = qB/m
-% B= Omega_e*m/q
-m0c2 = 0.510998910; % electron rest mass, MeV
-m0kg = m0c2*1.782661758877380e-030; % rest mass, kg
-qC = -1.602176487e-19; % charge, C
-B = 13.65e3*2*pi*m0kg/abs(qC)*1e9; % somewhere off the equator
+B = util.fce2B(13.65e3); % f_ce = 13.65 kHz
 MLT = 6; % hours
 
 clear wave_model
@@ -283,7 +250,7 @@ wave_model.directions = 'bf'; % forwards only (backwards does not resonate)
 
 % % print diagnostics
 % fprintf('3 MeV, alpha=85\n');
-% Daa_FA_local('e',3,85,L,MLT,B,Beq,hemi,wave_model);
+% odc_Daa_FA_local('e',3,85,L,MLT,B,Beq,hemi,wave_model);
 
 h = nan(size(keV));
 for iE = 1:length(keV),
@@ -292,7 +259,7 @@ for iE = 1:length(keV),
     Dap = nan(size(alpha));
     Dpp = nan(size(alpha));
     for ialpha = 1:length(alpha),
-        [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = Daa_FA_local('H+',MeV,alpha(ialpha),L,MLT,B,Beq,hemi,wave_model);
+        [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = odc_Daa_FA_local('H+',MeV,alpha(ialpha),L,MLT,B,Beq,hemi,wave_model);
     end
     h(iE) = semilogy(alpha,Daa,styles{iE},'linew',2);
     hold on;
@@ -347,7 +314,7 @@ for ia = 1:2,
         Dap = nan(size(alpha));
         Dpp = nan(size(alpha));
         for ialpha = 1:length(alpha),
-            [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = Daa_FA_local('e',MeV,alpha(ialpha),L,MLT,B,Beq,hemi,wave_model);
+            [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = odc_Daa_FA_local('e',MeV,alpha(ialpha),L,MLT,B,Beq,hemi,wave_model);
         end
         h(iE) = semilogy(alpha,Daa*drift_av_weighting,styles{iE},'linew',2);
         hold on;
@@ -404,7 +371,7 @@ for ia = 1:2,
         Dap = nan(size(alpha));
         Dpp = nan(size(alpha));
         for ialpha = 1:length(alpha),
-            [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = Daa_FA_local('e',MeV,alpha(ialpha),L,MLT,B,Beq,hemi,wave_model);
+            [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = odc_Daa_FA_local('e',MeV,alpha(ialpha),L,MLT,B,Beq,hemi,wave_model);
         end
         h(iE) = semilogy(alpha,Daa*drift_av_weighting,styles{iE},'linew',2);
         hold on;
@@ -460,7 +427,7 @@ for ia = 1:2,
         Dap = nan(size(alpha));
         Dpp = nan(size(alpha));
         for ialpha = 1:length(alpha),
-            [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = Daa_FA_local('e',MeV,alpha(ialpha),L,MLT,B,Beq,hemi,wave_model);
+            [Daa(ialpha),Dap(ialpha),Dpp(ialpha)] = odc_Daa_FA_local('e',MeV,alpha(ialpha),L,MLT,B,Beq,hemi,wave_model);
         end
         h(iE) = semilogy(alpha,Daa*drift_av_weighting,styles{iE},'linew',2);
         hold on;

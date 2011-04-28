@@ -59,11 +59,13 @@ else
     SIGN_COSPA = [-1,1]; % do both half-bounces
 end
 
+util = odc_util; % load utility functions and constants
+
 a0 = alpha0_deg*pi/180; % radians
 sina0 = sin(a0);
 Bm = Beq./sina0.^2; % mirror field strength
 % find mirror lat:
-lambdam = dipole_mirror_latitude(a0,'rad');
+lambdam = util.dipole_mirror_latitude(a0,'rad');
 
 tiny = 1e-6; % small distance to avoid numerical errors at mirror point
 lam2 = lambdam*(1-tiny); % northern mirror latitude
@@ -75,10 +77,7 @@ else
     Tfactor = 2;
 end
 
-T0 = 1+1/(2*sqrt(3))*log(2+sqrt(3)); % S&L 1.28a
-T1 = pi/6*sqrt(2); % S&L 1.28b
-
-T = T0-0.5*(T0-T1)*(sin(a0)+sqrt(sin(a0))); % 1/4 bounce integral of 1
+T = util.T(sina0);
 % <f>_b = 1/T(a0)*int_0^lambdam [f(lam)*cos(lam)*sqrt(1+3*sin^2(lam))/cos(a)]dlam
 
 % sin(a) = sin(a0)*sqrt[sqrt(1+3*sin^2(lam))/cos^6(lam)]
@@ -121,12 +120,14 @@ XYZ = (R.*cmlat)*[cos(MLTrads) sin(MLTrads) 0]; % set X, Y
 XYZ(:,end) = R.*smlat;
 Blocal = Beq*(1+3*smlat.^2).^(1/2)./cmlat.^6;
 
+maglat_deg = maglat*180/pi;
+
 if (N==1) || vectorized,
-    out = local(XYZ,Blocal,Bm,maglat,sign_cospa);
+    out = local(XYZ,Blocal,Bm,maglat_deg,sign_cospa);
 else
-    out = local(XYZ,Blocal,Bm,maglat(1),sign_cospa);
+    out = local(XYZ,Blocal,Bm,maglat_deg(1),sign_cospa);
     out = repmat(out,length(maglat));
     for i = 2:N,
-        out(i,:) = local(XYZ(i,:),Blocal(i),Bm,maglat(i),sign_cospa);
+        out(i,:) = local(XYZ(i,:),Blocal(i),Bm,maglat_deg(i),sign_cospa);
     end
 end

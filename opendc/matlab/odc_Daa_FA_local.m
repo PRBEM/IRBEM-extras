@@ -15,7 +15,7 @@ function [Daa,Dap,Dpp] = Daa_FA_local(species,E,alpha,L,MLT,B,Beq,hemi,wave_mode
 %   as string: 'e' (electron), 'p' (proton)
 %   as struct:
 %      .m0c2 - rest mass, MeV
-%      .q - charge in units of proton charge
+%      .q0 - charge in units of proton charge
 %      .lambda - species-specific lambda (-1 for e-, me/mp for protons)
 % Energy - particle energy in MeV
 % alpha - local pitch angle, degrees
@@ -106,7 +106,8 @@ if strcmpi(method,'auto'),
     end
 end
 
-maglat = BBeq_to_maglat(B/Beq)*hemi;
+util = odc_util; % get constants and utility functions
+maglat = util.BB0toMagLat(B/Beq)*hemi;
 
 directions = upper(evaluate_scalar_or_handle(wave_model.directions,L,MLT,maglat));
 switch(directions),
@@ -143,17 +144,14 @@ elseif ~isfinite(dB),
 end
 
 species = species2struct(species);
-electron = species2struct('e');
-proton = species2struct('p');
 
 % standard frequencies
-Omega_e = abs(electron.qC) * B*1e-9 / electron.m0kg; % local cold electron gyro
-Omega_e_eq = abs(electron.qC) * Beq * 1e-9 / electron.m0kg; % equatorial cold electron gyro
-Omega_p = proton.qC * B*1e-9 / proton.m0kg; % local cold proton gyro
-Omega_p_eq = proton.qC * Beq * 1e-9 / proton.m0kg; % equatorial cold proton gyro
-Omega_s = abs(species.qC) * B*1e-9 / species.m0kg; % local cold species gyro
-Omega_s_eq = abs(species.qC) * Beq * 1e-9 / species.m0kg; % equatorial cold species gyro
-
+Omega_e = abs(util.mks.electron.q) * B*1e-9 / util.mks.electron.m0; % local cold electron gyro
+Omega_e_eq = abs(util.mks.electron.q) * Beq * 1e-9 / util.mks.electron.m0; % equatorial cold electron gyro
+Omega_p = util.mks.proton.q * B*1e-9 / util.mks.proton.m0; % local cold proton gyro
+Omega_p_eq = util.mks.proton.q * Beq * 1e-9 / util.mks.proton.m0; % equatorial cold proton gyro
+Omega_s = abs(species.q) * B*1e-9 / species.m0; % local cold species gyro
+Omega_s_eq = abs(species.q) * Beq * 1e-9 / species.m0; % equatorial cold species gyro
 
 if isfield(wave_model,'normalization'),
     freq_norm = interpret_normalization(wave_model.normalization,Omega_e,Omega_e_eq,Omega_p,Omega_p_eq,Omega_s,Omega_s_eq);
@@ -184,7 +182,7 @@ end
 R = (dB/B)^2; % after Summers (35)
 Erel = E/species.m0c2; % E relative to rest mass
 
-epsilon = electron.m0c2 / proton.m0c2; % ratio of electron to proton mass, after Summers (22)
+epsilon = util.mks.electron.m0 / util.mks.proton.m0; % ratio of electron to proton mass, after Summers (22)
 
 % set s, Summers after (19)
 switch(lower(wave_model.mode)),
@@ -204,9 +202,8 @@ if isfield(wave_model,'alpha_star'), % use alpha_star
     alpha_star = evaluate_scalar_or_handle(wave_model.alpha_star,L,MLT,maglat);
     omega_pe = sqrt(Omega_e^2 / alpha_star); % Summers (22)
 elseif isfield(wave_model,'N0'),
-    epsilon0 = 8.854187817e-12; % F/m = C^2 s^2  / kg / m^3 - permitivity of free space
-    N0 = evaluate_scalar_or_handle(wave_model.N0,L,MLT,maglat);
-    omega_pe = sqrt((N0*1e2^3)*electron.qC^2 / epsilon0 / electron.m0kg);
+    N0 = evaluate_scalar_or_handle(wave_model.N0,L,MLT,maglat); % #/cm^3
+    omega_pe = sqrt((N0*1e2^3)*util.mks.electron.q^2 / util.mks.epsilon0 / util.mks.electron.m0);
 elseif isfield(wave_model','omega_pe'),
     omega_pe = evaluate_scalar_or_handle(wave_model.omega_pe,L,MLT,maglat)*omega_pe_freq_norm;
 else
@@ -324,39 +321,44 @@ else
     y = x;
 end
 
-function maglat = BBeq_to_maglat(BB0)
-% convert B/Bequator to magnetic latitude (degrees)
-persistent table
-if isempty(table),
-    table.maglat_deg = (0:0.1:89.9)';
-    table.maglat_bb0 = (1+3*sind(table.maglat_deg).^2).^(1/2)./cosd(table.maglat_deg).^6;
-end
-maglat = interp1(table.maglat_bb0,table.maglat_deg,BB0,'linear');
-
 function species = species2struct(species)
 % populate species structure
 % m0c2 - rest mass, MeV
-% m0kg - rest mass, kg
-% q - charge, in units of proton charge
-% qC - charge in C
-epsilon = 0.510998910 / 938.272013 ; % ratio of electron to proton mass, after Summers (22)
+% m0 - rest mass, kg
+% q - charge, in Coulombs (will convert from e units if struct passed in)
+util = odc_util;
 % lam is defined after Summers (24)
 if ischar(species),
     switch(lower(species)),
         case {'e','e-','beta','beta-','electron','ele'},
-            species = struct('m0c2',0.510998910,'q',-1,'lambda',-1);
+            species = util.mks.electron;
+            species.lambda = -1;
         case {'e+','beta+','positron'},
-            species = struct('m0c2',0.510998910,'q',+1);
+            species = util.mks.electron;
+            species.q = -species.q;
+            species.lambda = nan;
         case {'p','proton','p+','h+'},
-            species = struct('m0c2',938.272013,'q',+1,'lambda',epsilon);
+            species = util.mks.proton;
+            epsilon = util.mks.electron.m0 / util.mks.proton.m0; % ratio of electron to proton mass, after Summers (22)
+            species.lambda = epsilon;
         case {'p-','antiproton'},
-            species = struct('m0c2',938.272013,'q',-1);
+            species = util.mks.proton;
+            species.q = -species.q;
+            species.lambda = nan;
         otherwise
             error('Unknown species "%s"',species);
     end
+else
+    if abs(species.q)>util.mks.e*10, % convert charge from e to Coulombs
+        species.q = species.q*util.mks.e;
+    end
 end
-species.qC = species.q*1.602176487e-19;
-species.m0kg = species.m0c2*1.782661758877380e-030;
+if ~isfield(species,'m0c2'),
+    species.m0c2 = species.m0*util.mks.c^2/util.mks.MeV;
+end
+if ~isfield(species,'m0'),
+    species.m0 = species.m0c2*util.mks.MeV/util.mks.c^2;
+end
 
 
 function rr = roots2005(x1,x2,s,beta,mu,epsilon,a,b)

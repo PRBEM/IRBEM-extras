@@ -62,7 +62,8 @@ if ~isfinite(Bm),
     Bm = max(Bmag); % mirror field strength
 end
 Beq = min(Bmag);
-maglat = BB0toMagLat(Bmag./Beq).*hemi;
+util = odc_util; % load utility functions and constants
+maglat = util.BB0toMagLat(Bmag./Beq).*hemi;
 
 if isnumeric(local), % local is a table of numbers for one half-bounce
     loc_func = @(XYZ,Blocal,Bm,maglat,sign_cospa,i)local(i,:);
