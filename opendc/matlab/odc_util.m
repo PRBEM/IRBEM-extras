@@ -68,16 +68,18 @@ function util = odc_util
 % mks.electron.m0 = 9.10938215e-31; % rest mass, kg
 % mks.proton.m0 = 1.672621637e-27; % rest mass, kg
 % mks.proton.q = +mks.e; % charge, Coulombs
+% mks.RE =  6378.136e3; % Earth Radius, m
+
 %
 % Schulz & Lanzerotti constants
 % util.SL:
 % SL.T0 = T(y=0)
 % SL.T1 = T(y=1)
-% SL.B0 = 3.11e-5 T, dipole moment of the Earth (0.311 G) ***check
-% SL.a = 6378e3; % Earth Radius, meters *** check
+% SL.B0 = 3.1e-5 T, dipole moment of the Earth (0.31 G) (S&L value)
+% SL.a = 6371.2e3; % Earth Radius, (S&L value)
 % SL.Q0 = Q(y=0)
 % SL.Q1 = Q(y=1)
-% SL.Qp1 = *** what is the p? dQ/dy at y==1? check.
+% SL.Qp1 = Q'(y=1)
 % SL.Y0 = Y(y=0)
 
 global odc_constants
@@ -91,6 +93,8 @@ if isempty(odc_constants),
     mks.MeV = mks.eV*1e6; % Joules
     mks.GeV = mks.eV*1e9; % Joules
     mks.epsilon0 = 8.854187817e-12; % F/m = C^2 s^2  / kg / m^3 - permitivity of free space
+    mks.mu0 = 4*pi*1e-7; % H/m = N/A^2 = kg m/C^2 - permeability of free space
+    mks.RE =  6378.136e3; % Earth Radius, m
     
     
     mks.electron.q = -mks.e; % charge
@@ -102,8 +106,8 @@ if isempty(odc_constants),
     % Schulz & Lanzerotti constants
     SL.T0 = 1+1/(2*sqrt(3))*log(2+sqrt(3)); % S&L 1.28a
     SL.T1 = pi/6*sqrt(2); % S&L 1.28b
-    SL.B0 = 31.1e3*1e-9; % T *** check, where?
-    SL.a = 6378e3; % Earth Radius, meters, ** check, where?
+    SL.B0 = 31e3*1e-9; % T dipole field at lambda=0,L=1 (S&L value)
+    SL.a = 6371.2e3; % Earth Radius, meters (S&L value)
     SL.Q0 = -27.1266694; % S&L 1.78c
     SL.Q1 = -90*SL.T1; % S&L 1.78b
     SL.Qp1 = (15/2)*(9*SL.T0 - 41*SL.T1); % S&L 1.78d

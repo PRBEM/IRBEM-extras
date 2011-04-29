@@ -18,6 +18,8 @@ function [ba,denom] = bounce_average_dipole(L,MLT,alpha0_deg,local,varargin)
 %  NOTE: the true bounce integral is bint*v, where v is the velocity
 %  and denom*v is the true full bounce period
 %
+% [...] = bounce_average_dipole(...,'tol',tol) - absolute error tolerance
+%  for numerical integral (quadv) (default is 1e-6)
 % [...] = bounce_average_dipole(...,'symmetric') - local does not depend
 %  on sign of the pitch angle (i.e., northward and southward legs are
 %  identical)
@@ -34,6 +36,7 @@ vectorized = false;
 do_avg = true; % do bounce average? vs integral?
 Beq = 30e3/L^3;
 i = 1;
+tol = 1e-6; % default
 while i <= length(varargin),
     switch(lower(varargin{i})),
         case 'no_avg',
@@ -47,6 +50,9 @@ while i <= length(varargin),
         case 'bm',
             i = i+1;
             Beq = varargin{i};
+        case 'tol',
+            i = i+1;
+            tol = varargin{i};
         otherwise
             error('Unknown argument "%s"',varargin{i});
     end
@@ -80,16 +86,10 @@ end
 T = util.T(sina0);
 % <f>_b = 1/T(a0)*int_0^lambdam [f(lam)*cos(lam)*sqrt(1+3*sin^2(lam))/cos(a)]dlam
 
-% sin(a) = sin(a0)*sqrt[sqrt(1+3*sin^2(lam))/cos^6(lam)]
-% cos(a) = sqrt(1-sin^2(a))
-sin_a_lam = @(lam)sin(a0).*sqrt(sqrt(1+3.*sin(lam).^2)./cos(lam).^6);
-cos_a_lam = @(lam)sqrt(1-sin_a_lam(lam).^2);
-
-
 ba = 0; % numerator for now, normalized after loop
 g = 0;
 for sign_cospa = SIGN_COSPA, % which half-cycle is this?
-    ba = ba+quadv(@(lam)wrapper(local,lam,L,MLT,Beq,Bm,sign_cospa,vectorized).*cos(lam).*sqrt(1+3*sin(lam).^2)./cos_a_lam(lam),lam1,lam2);
+    ba = ba+quadv(@(lam)wrapper(local,lam,L,MLT,Beq,Bm,sign_cospa,vectorized),lam1,lam2,tol);
     g = g+T*Tfactor;
 end
 
@@ -131,3 +131,7 @@ else
         out(i,:) = local(XYZ(i,:),Blocal(i),Bm,maglat_deg(i),sign_cospa);
     end
 end
+
+cosa0 = sqrt(1-Blocal./Bm);
+
+out = out.*repmat(cmlat.*sqrt(1+3*smlat.^2)./cosa0,1,size(out,2)); % apply dlat vs dt scaling
