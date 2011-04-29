@@ -157,6 +157,8 @@ function D = SL_D(y)
 global odc_constants
 SL = odc_constants.SL;
 D = (4*SL.T0 - (3*SL.T0-5*SL.T1).*y - (SL.T0-SL.T1)*(y.*log(y)+sqrt(y)))/12; % D(y) from S&L, 1.36
+D(y==0) = SL.T0/3;
+
 
 function Y = SL_Y(y)
 % computes Y(y) from S&L 1.31
@@ -246,7 +248,7 @@ c = odc_constants.mks.c; % m/s
 a = odc_constants.SL.a; % Earth Radius, meters
 B0 = odc_constants.SL.B0; % T
 
-y = sin(PitchAngle*pi/180);
+y = sind(PitchAngle);
 W = Energy*odc_constants.mks.MeV; % Energy, Joules
 
 gamma = 1+W/(m0*c^2); % relativistic factor
@@ -274,7 +276,7 @@ m0 = odc_constants.mks.(species).m0;
 c = odc_constants.mks.c; % m/s
 a = odc_constants.SL.a; % Earth Radius, meters
 
-y = sin(PitchAngle*pi/180);
+y = sind(PitchAngle);
 W = Energy*odc_constants.mks.MeV; % Energy, Joules
 
 gamma = 1+W/(m0*c^2); % relativistic factor
