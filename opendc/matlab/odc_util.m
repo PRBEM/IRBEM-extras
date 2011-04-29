@@ -1,6 +1,7 @@
-function util = odc_util
+function util = odc_util(force)
 % util = odc_util
 % provides a set of constants and handles for utility functions
+% util = odc_util(true) - force regeneration of persistent constants (for debugging)
 %
 % mirror_lat = util.dipole_mirror_latitude(alpha0)
 % compute dipolar mirror latitude of particle with equatorial pitch angle
@@ -16,7 +17,6 @@ function util = odc_util
 % same field line.%
 % maglat is the unsigned dipole latitude
 %
-% [gamma,p] = util.MeVtogamma(MeV,species)
 % [gamma,v,m] = util.MeVtogamma(MeV,species)
 % convert Energy in MeV to gamma factor
 % and velocity in  m / s, if requested
@@ -43,16 +43,17 @@ function util = odc_util
 % B = util.fce2B(fce)
 % computes B in nT given the electron gyrofrequency in Hz
 %
-% Tg = util.GyroPeriod(Species,Energy,PitchAngle,L)
+% Tg = util.GyroPeriod(Species,Energy,MagLat,L)
 %   calculates particle gyro period Tg (seconds), dipole
-%   Species: 'e' for electrons, 'p' for protons
-%   Energy: in MeV
-%   PitchAngle: in degrees (equatorial pitch angle)
-%   L: dimensionless dipole L value
 % Tb = util.BouncePeriod(Species,Energy,PitchAngle,L)
 %   calculates particle bounce period Tb (seconds), dipole
 % Td = util.DriftPeriod(Species,Energy,PitchAngle,L);
 %   calculates particle drift period (seconds), dipole
+%   Species: 'e' for electrons, 'p' for protons
+%   Energy: in MeV
+%   MagLat: in degrees
+%   PitchAngle: in degrees (equatorial pitch angle)
+%   L: dimensionless dipole L value
 %
 %
 % SI/mks constants
@@ -82,8 +83,12 @@ function util = odc_util
 % SL.Qp1 = Q'(y=1)
 % SL.Y0 = Y(y=0)
 
+if nargin < 1,
+    force = false;
+end
+
 global odc_constants
-if isempty(odc_constants),
+if force || isempty(odc_constants),
     
     % SI/mks constants
     mks.e = 1.602176487e-19; % Coulombs per fundamental charge
@@ -154,11 +159,8 @@ Q = SL.Q0+(2*SL.Q1 - 2*SL.Q0 - (1/4)*SL.Qp1)*y.^4 + (SL.Q0-SL.Q1+(1/4)*SL.Qp1)*y
 
 function D = SL_D(y)
 % computes D(y) from S&L, 1.36
-global odc_constants
-SL = odc_constants.SL;
-D = (4*SL.T0 - (3*SL.T0-5*SL.T1).*y - (SL.T0-SL.T1)*(y.*log(y)+sqrt(y)))/12; % D(y) from S&L, 1.36
-D(y==0) = SL.T0/3;
 
+D = SL_T(y)/2-SL_Y(y)/12;
 
 function Y = SL_Y(y)
 % computes Y(y) from S&L 1.31
@@ -298,19 +300,11 @@ function Tg = GyroPeriod(Species,Energy,MagLat,L)
 
 global odc_constants
 
-species = SelectSpecies(Species);
-m0 = odc_constants.mks.(species).m0;
-
-c = odc_constants.mks.c; % m/s
+[gamma,v,m] = MeVtogamma(Energy,Species);
 
 B = odc_constants.SL.B0./L.^3.*sqrt(1+3*sind(MagLat).^2);
 
-W = Energy*odc_constants.mks.MeV; % Energy, Joules
-gamma = 1+W/(m0*c^2); % relativistic factor
-
-m = m0*gamma;
-
-f = odc_constants.mks.proton.q.*B./(2*pi*m); % no "c" in denominator in SI units
+f = odc_constants.mks.e.*B./(2*pi*m); % no "c" in denominator in SI units
 Tg = 1./f;
 
 function species = SelectSpecies(Species)
