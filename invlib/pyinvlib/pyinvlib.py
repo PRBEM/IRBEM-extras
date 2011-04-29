@@ -189,7 +189,7 @@ class InvBase(object):
             if self._verb:
                 print('Energy grid for output not set: Using grid from response function')
             self.Eout = self.Egrid
-
+        fobj.close()
         return None
         
     def readRespFunc(self, fname=None, std='LANL', dt=1):
