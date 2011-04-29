@@ -27,14 +27,16 @@ function [ba,denom] = bounce_average_dipole(L,MLT,alpha0_deg,local,varargin)
 %  on sign of magnetic latitude
 %  identical)
 % [...] = bounce_average_dipole(...,'Beq',Beq) - provide equatorial field
-%    strength at L (otherwise it's 30e3/L^3)
+%    strength at L (otherwise it's 31e3/L^3 (from util.SL.B0)
 % [...] = bounce_average_dipole(...,'vectorized',true) - local accepts multiple input points
+
+util = odc_util; % load utility functions and constants
 
 symmetric = false; % user tells us it's symmetric?
 hemi_symmetric = false; % user tells us it's invariant to sign of latitude?
 vectorized = false;
 do_avg = true; % do bounce average? vs integral?
-Beq = 30e3/L^3;
+Beq = util.SL.B0/L^3;
 i = 1;
 tol = 1e-6; % default
 while i <= length(varargin),
@@ -64,8 +66,6 @@ if symmetric,
 else
     SIGN_COSPA = [-1,1]; % do both half-bounces
 end
-
-util = odc_util; % load utility functions and constants
 
 a0 = alpha0_deg*pi/180; % radians
 sina0 = sin(a0);

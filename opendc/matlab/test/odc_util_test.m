@@ -1,6 +1,6 @@
 % test odc_util functions
 
-util = odc_util(true);
+util = odc_util;
 
 %% Generate T/Y/D/Q Figures from Schulz and Lanzerotti
 

@@ -1,7 +1,6 @@
-function util = odc_util(force)
+function util = odc_util
 % util = odc_util
 % provides a set of constants and handles for utility functions
-% util = odc_util(true) - force regeneration of persistent constants (for debugging)
 %
 % mirror_lat = util.dipole_mirror_latitude(alpha0)
 % compute dipolar mirror latitude of particle with equatorial pitch angle
@@ -55,6 +54,15 @@ function util = odc_util(force)
 %   PitchAngle: in degrees (equatorial pitch angle)
 %   L: dimensionless dipole L value
 %
+% B = util.dipoleB(L,MagLat,phi_deg)
+% [B,Bvec] = util.dipoleB(L,MagLat,phi_deg)
+% [B,Bx,By,Bz] = util.dipoleB(L,MagLat,phi_deg)
+% computes magnitude of dipole field, nT
+% returns components if requested
+% MagLat: in degrees
+% L: dimensionless dipole L value
+% phi_deg: azimuth angle, degrees
+% Bvec = [Bx(:) By(:) Bz(:)]
 %
 % SI/mks constants
 % util.mks:
@@ -83,12 +91,8 @@ function util = odc_util(force)
 % SL.Qp1 = Q'(y=1)
 % SL.Y0 = Y(y=0)
 
-if nargin < 1,
-    force = false;
-end
-
 global odc_constants
-if force || isempty(odc_constants),
+if isempty(odc_constants),
     
     % SI/mks constants
     mks.e = 1.602176487e-19; % Coulombs per fundamental charge
@@ -133,6 +137,7 @@ util.fce2B = @fce2B;
 util.GyroPeriod = @GyroPeriod;
 util.BouncePeriod = @BouncePeriod;
 util.DriftPeriod = @DriftPeriod;
+util.dipoleB = @dipoleB;
 
 function B = fce2B(fce)
 % returns B in nT for electron gyro given in Hz
@@ -245,21 +250,19 @@ global odc_constants
 species = SelectSpecies(Species);
 m0 = odc_constants.mks.(species).m0;
 
-q = odc_constants.mks.proton.q; % C
+q = odc_constants.mks.(species).q; % C
 c = odc_constants.mks.c; % m/s
 a = odc_constants.SL.a; % Earth Radius, meters
 B0 = odc_constants.SL.B0; % T
 
+gamma = MeVtogamma(Energy,Species);
+
 y = sind(PitchAngle);
-W = Energy*odc_constants.mks.MeV; % Energy, Joules
-
-gamma = 1+W/(m0*c^2); % relativistic factor
-
 Ty = SL_T(y);
 Dy = SL_D(y);
 
 % S&L eq 1.35, w/o minus sign, assume always want positive drift velocity
-f = (3*L/2/pi./gamma).*(gamma.^2-1)*(c./a).^2.*(m0*c./q./B0).*(Dy./Ty)/c; % extra 1/c for SI
+f = (3*L/2/pi./gamma).*(gamma.^2-1)*(c./a).^2.*(m0*c./abs(q)./B0).*(Dy./Ty)/c; % extra 1/c for SI
 Td = 1./f; % seconds
 
 function Tb = BouncePeriod(Species,Energy,PitchAngle,L)
@@ -272,17 +275,9 @@ function Tb = BouncePeriod(Species,Energy,PitchAngle,L)
 
 global odc_constants
 
-species = SelectSpecies(Species);
-m0 = odc_constants.mks.(species).m0;
-
-c = odc_constants.mks.c; % m/s
 a = odc_constants.SL.a; % Earth Radius, meters
-
 y = sind(PitchAngle);
-W = Energy*odc_constants.mks.MeV; % Energy, Joules
-
-gamma = 1+W/(m0*c^2); % relativistic factor
-v = sqrt((gamma.^2-1))*c./gamma; % relativistic velocity
+[gamma,v] = MeVtogamma(Energy,Species);
 
 Ty = SL_T(y);
 Tb = 4*L.*a./v.*Ty;
@@ -300,12 +295,49 @@ function Tg = GyroPeriod(Species,Energy,MagLat,L)
 
 global odc_constants
 
+species = SelectSpecies(Species);
+q = odc_constants.mks.(species).q; % C
+
 [gamma,v,m] = MeVtogamma(Energy,Species);
 
-B = odc_constants.SL.B0./L.^3.*sqrt(1+3*sind(MagLat).^2);
+B = dipoleB(L,MagLat)/1e9; % T
 
-f = odc_constants.mks.e.*B./(2*pi*m); % no "c" in denominator in SI units
+f = abs(q)*B./(2*pi*m); % no "c" in denominator in SI units
 Tg = 1./f;
+
+function [B,Bx,By,Bz] = dipoleB(L,MagLat,phi_deg)
+% B = dipoleB(L,MagLat,phi_deg)
+% [B,Bvec] = dipoleB(L,MagLat,phi_deg)
+% [B,Bx,By,Bz] = dipoleB(L,MagLat,phi_deg)
+% computes magnitude of dipole field, nT
+% returns components if requested
+% MagLat: in degrees
+% L: dimensionless dipole L value
+% phi_deg: azimuth angle, degrees
+% Bvec = [Bx(:) By(:) Bz(:)]
+
+global odc_constants
+Beq = odc_constants.SL.B0./L.^3*1e9; % T to nT
+smlat = sind(MagLat);
+cmlat = cosd(MagLat);
+cmlat6 = cmlat.^6;
+B = Beq.*sqrt(1+3*smlat.^2)./cmlat6;
+if nargout >= 2,
+    cphi = cosd(phi_deg);
+    sphi = sind(phi_deg);
+    
+    % angular part of Bx, By, Bz
+    Btmp = Beq./cmlat6;
+    Bx = -3*cphi.*cmlat.*smlat.*Btmp;
+    By = -3*sphi.*cmlat.*smlat.*Btmp;
+    Bz = -(3*smlat.^2 - 1).*Btmp;
+    
+    if nargout == 2, % [B,Bvec] style output
+        Bx = [Bx(:), By(:), Bz(:)];
+    end
+end
+
+
 
 function species = SelectSpecies(Species)
 % convert various alternatives to standard species name
