@@ -18,7 +18,8 @@ Python 2.6+ and 3.X whenever changes are made.
 Author: Steve Morley, Los Alamos National Laboratory (smorley@lanl.gov)
 Date Created: 23 Sept. 2010
 
-To Do:
+To Do
+-----
 - Enable read support for PRBEM response files
 - Generalize setting of _real_params
 - Add support for calling pc_spec_inv
@@ -36,7 +37,7 @@ import numpy as np
 if sys.platform == 'linux2':
     ext = 'so'
 elif sys.platform == 'darwin':
-    ext = 'dylib' #although invlib doesn't currently compile on mac...
+    ext = 'dylib'
 else:
     raise NotImplementedError('Your platform is not currently supported')
 
@@ -58,6 +59,26 @@ def ravel(mylist):
 def transpose(arr):
     """Pure Python implementation of numpy transpose method"""
     return [[r[col] for r in arr] for col in range(len(arr[0]))]
+    
+def load_call_dict(call_dict, lib):
+    """Loads argument/return types from the call dictionary
+    
+    @param call_dict: call dictionary. Keyed by function name;
+                      values are [return type, argtype0, argtype 1...]
+    @type call_dict: dict
+    @param lib: library where functions specified in L{call_dict} live.
+    @type lib: ctypes.WinDLL or ctypes.CDLL
+    
+    Function from SpacePy, lib.py; by J. Niehof
+    """
+    for funcname in call_dict:
+        func = getattr(lib, funcname)
+        args = call_dict[funcname]
+        func.restype = args[0]
+        if len(args) <= 1:
+            func.argtypes = None
+        else:
+            func.argtypes = args[1:]
 #----------------------
 
 
@@ -70,11 +91,19 @@ class InvBase(object):
     respectively. For help on using these, please see the help for those 
     classes.
     """
+    #_call_dict = {
+        #'ana_spec_inv', }
+    
     def __init__(self, *args, **kwargs):
         try:
             self._invlib = ctypes.CDLL(os.path.join(libpath, 'invlib.'+ext))
         except: #case for testing in IRBEM dist
             self._invlib = ctypes.CDLL('../invlib.'+ext)
+        
+        #set argtypes for relevant INVLIB functions
+        
+        #load_call_dict(self._invlib, cls._call_dict)
+        
         if 'verbose' in kwargs:
             if kwargs['verbose'] == True:
                 self._verb = 1
@@ -205,12 +234,12 @@ class SpecInv(InvBase):
     the INVLIB library. The calls to INVLIB routines are implemented as
     object methods. 
     
-    Example use:
-    ------------
-    
-    import package (required)
+    Examples
+    --------
+    #import package (required)
     >>> import pyinvlib as pinv
-    instantiate and populate attributes
+    
+    #instantiate and populate attributes
     >>> dum = pinv.SpecInv(verbose=1)
     >>> dum.counts = [4.15524e+02, 3.70161e+02, 2.42137e+02, 2.12097e+02, \
         1.47379e+02, 1.40524e+02, 9.37500e+01, 5.08064e+01, 1.93548e+01, 3.22581e+00]
@@ -218,7 +247,7 @@ class SpecInv(InvBase):
     >>> dum.readRespFunc(fname='../../projects/responses/sopa/mcp_output/version_3/electrons/sopa_LANL-97A_t2_HSP_elec.001')
     >>> dum.setParams(fnc=8)
     >>> dum.anaSpecInv()
-    plot the output spectrum with errorbars (using matplotlib)
+    #plot the output spectrum with errorbars (using matplotlib)
     >>> fig = dum.plot()
     """
     def __init__(self, *args, **kwargs):
