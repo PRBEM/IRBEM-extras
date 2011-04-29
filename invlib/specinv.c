@@ -1304,6 +1304,10 @@ int pc_spec_inv(const double *y, const double *dy, const double *Egrid, const do
   }
 
   free(pen_funcs);
+  if (Htmp) {
+    gsl_matrix_free(Htmp);
+  }
+
   gsl_vector_free(q);
   gsl_vector_free(grad);
   gsl_matrix_free(covq);

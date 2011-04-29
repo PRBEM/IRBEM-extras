@@ -168,7 +168,7 @@ double optimize(gsl_vector *q, optfunTy *optfun, const long int minimizer_flag, 
     gsl_multimin_fdfminimizer_free (s_fdf);
   } else {
     gsl_multimin_fminimizer_free (s_f);
-    free(ss);
+    gsl_vector_free(ss);
   }
   return(fval);
 }
