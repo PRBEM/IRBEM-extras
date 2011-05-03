@@ -1,5 +1,5 @@
-function [Daa,Dap,Dpp] = Daa_FA_local(species,E,alpha,L,MLT,B,Beq,hemi,wave_model,varargin)
-% [Daa,Dap,Dpp] = Daa_FA_local(species,E,alpha,L,MLT,B,Beq,hemi,wave_model)
+function [Daa,Dap,Dpp] = odc_Daa_FA_local(species,E,alpha,L,MLT,B,Beq,hemi,wave_model,varargin)
+% [Daa,Dap,Dpp] = odc_Daa_FA_local(species,E,alpha,L,MLT,B,Beq,hemi,wave_model)
 % compute local diffusion coefficients
 % for field-aligned waves. Coefficients are momentum-normalized
 % Daa is rad^2/s
@@ -299,10 +299,11 @@ else
         end
     end
 end
-        
+
 if join_outputs,
     Daa = [Daa,Dap,Dpp];
 end
+
 
 function y = y2005(x,b,s,epsilon)
 y = abs(x)*sqrt(1-b/((x-s)*(x+s*epsilon))); % (25), 2005 (also A2, A3)

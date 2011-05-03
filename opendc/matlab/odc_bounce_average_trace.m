@@ -1,5 +1,5 @@
-function [ba,denom] = bounce_average_trace(XYZ,Blocal,local,hemi,varargin)
-% ba = bounce_average_trace(XYZ,Blocal,local,hemi,...)
+function [ba,denom] = odc_bounce_average_trace(XYZ,Blocal,local,hemi,varargin)
+% ba = odc_bounce_average_trace(XYZ,Blocal,local,hemi,...)
 % bounce average "local" over traced field line
 % XYZ - Nx3 points along field line, any cartesian coordinates, RE
 % Blocal - local magnetic field, nT, two options;
@@ -166,5 +166,6 @@ else % (a <> 0 and a = b*ds or a = 0 and b = 0) and (a <> 0 and a <> b*ds or a =
 end
 
 if imag(dba)~=0,
+    fprintf('dba is complex/imaginary in %s>step\n',mfilename);
     keyboard;
 end

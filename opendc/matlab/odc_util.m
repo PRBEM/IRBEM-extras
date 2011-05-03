@@ -56,13 +56,15 @@ function util = odc_util
 %
 % B = util.dipoleB(L,MagLat,phi_deg)
 % [B,Bvec] = util.dipoleB(L,MagLat,phi_deg)
-% [B,Bx,By,Bz] = util.dipoleB(L,MagLat,phi_deg)
+% [B,Bvec,XYZ] = util.dipoleB(L,MagLat,phi_deg)
+% [B,Bx,By,Bz,X,Y,Z] = util.dipoleB(L,MagLat,phi_deg)
 % computes magnitude of dipole field, nT
-% returns components if requested
+% returns components and positions (in RE) if requested
 % MagLat: in degrees
 % L: dimensionless dipole L value
 % phi_deg: azimuth angle, degrees
 % Bvec = [Bx(:) By(:) Bz(:)]
+% XYZ = [X(:) Y(:) Z(:)]
 %
 % SI/mks constants
 % util.mks:
@@ -305,16 +307,18 @@ B = dipoleB(L,MagLat)/1e9; % T
 f = abs(q)*B./(2*pi*m); % no "c" in denominator in SI units
 Tg = 1./f;
 
-function [B,Bx,By,Bz] = dipoleB(L,MagLat,phi_deg)
+function [B,Bx,By,Bz,X,Y,Z] = dipoleB(L,MagLat,phi_deg)
 % B = dipoleB(L,MagLat,phi_deg)
-% [B,Bvec] = dipoleB(L,MagLat,phi_deg)
-% [B,Bx,By,Bz] = dipoleB(L,MagLat,phi_deg)
+% [B,Bvec] = util.dipoleB(L,MagLat,phi_deg)
+% [B,Bvec,XYZ] = util.dipoleB(L,MagLat,phi_deg)
+% [B,Bx,By,Bz,X,Y,Z] = util.dipoleB(L,MagLat,phi_deg)
 % computes magnitude of dipole field, nT
-% returns components if requested
+% returns components and positions (in RE) if requested
 % MagLat: in degrees
 % L: dimensionless dipole L value
 % phi_deg: azimuth angle, degrees
 % Bvec = [Bx(:) By(:) Bz(:)]
+% XYZ = [X(:) Y(:) Z(:)]
 
 global odc_constants
 Beq = odc_constants.SL.B0./L.^3*1e9; % T to nT
@@ -322,7 +326,7 @@ smlat = sind(MagLat);
 cmlat = cosd(MagLat);
 cmlat6 = cmlat.^6;
 B = Beq.*sqrt(1+3*smlat.^2)./cmlat6;
-if nargout >= 2,
+if nargout >= 2, % Bvec or Bx, By, Bz
     cphi = cosd(phi_deg);
     sphi = sind(phi_deg);
     
@@ -333,7 +337,19 @@ if nargout >= 2,
     Bz = -(3*smlat.^2 - 1).*Btmp;
     
     if nargout == 2, % [B,Bvec] style output
-        Bx = [Bx(:), By(:), Bz(:)];
+        Bx = [Bx(:), By(:), Bz(:)]; % Bvec output
+    end
+    
+    if ismember(nargout,[3,7]), % compute XYZ or X Y Z
+        
+        R = L.*cmlat.^2;
+        X = R.*cmlat.*cphi;
+        Y = R.*cmlat.*sphi;
+        Z = R.*smlat;
+        
+        if nargout==3, % [B, Bvec, XYZ] XYZ style output
+            By = [X(:), Y(:), Z(:)]; % XYZ output
+        end
     end
 end
 
