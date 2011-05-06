@@ -21,6 +21,8 @@ function util = odc_util
 % and velocity in  m / s, if requested
 % and relativistic mass in kg, if requested
 % species is 'e' for electrons, 'p' for protons
+% v in m/s
+% m in kg
 %
 % T = util.T(y)
 % [T,dT] = util.T(y)
@@ -65,6 +67,15 @@ function util = odc_util
 % phi_deg: azimuth angle, degrees
 % Bvec = [Bx(:) By(:) Bz(:)]
 % XYZ = [X(:) Y(:) Z(:)]
+%
+% I = util.dipoleIJ(L,y);
+% [I,J] = util.dipoleIJ(L,y,MeV,species)
+% computes I = L*Y(y) (in RE)
+% and, if requested J = 2*p*I (in RE*MeV/c)
+% for species ('e' or 'p')
+% energy in MeV
+% L: dimensionless dipole L value
+% and y = sin(alpha_equatorial)
 %
 % SI/mks constants
 % util.mks:
@@ -140,6 +151,7 @@ util.GyroPeriod = @GyroPeriod;
 util.BouncePeriod = @BouncePeriod;
 util.DriftPeriod = @DriftPeriod;
 util.dipoleB = @dipoleB;
+util.dipoleIJ = @dipoleIJ;
 
 function B = fce2B(fce)
 % returns B in nT for electron gyro given in Hz
@@ -370,6 +382,8 @@ end
 function [gamma,v,m] = MeVtogamma(MeV,species)
 % compute gamma, v, m
 % given energy in MeV and species 'e','p', etc
+% v in m/s
+% m in kg
 
 global odc_constants
 mks = odc_constants.mks;
@@ -388,3 +402,21 @@ if nargout >= 3,
     m = m0*gamma;
 end
 
+function [I,J] = dipoleIJ(L,y,MeV,species)
+% I = util.dipoleIJ(L,y);
+% [I,J] = util.dipoleIJ(L,y,MeV,species)
+% computes I = L*Y(y) (in RE)
+% and, if requested J = 2*p*I (in RE*MeV/c)
+% for species ('e' or 'p')
+% energy in MeV
+% L: dimensionless dipole L value
+% and y = sin(alpha_equatorial)
+
+global odc_constants
+I = L.*SL_Y(y);
+
+if nargout > 1,
+    [gamma,v,m] = MeVtogamma(MeV,species);
+    p = m.*v/odc_constants.mks.MeV*odc_constants.mks.c; % MeV/c
+    J = 2.*p.*I; % RE*MeV/c
+end

@@ -99,31 +99,37 @@ for sign_cospa = SIGN_COSPA, % which half-cycle is this?
     % cache i=1 point
     B2  = Bmag(1);
     loc2 = loc_func(XYZ(1,:),Blocal(1,:),Bm,maglat(1),sign_cospa,1);
-    for i = 2:N,
-        B1 = B2;
-        loc1 = loc2;
-        B2  = Bmag(i);
-        loc2 = loc_func(XYZ(i,:),Blocal(i,:),Bm,maglat(i),sign_cospa,i);
-        ds = sqrt(sum((XYZ(i,:)-XYZ(i-1,:)).^2));
-        
-        % want int(local/sqrt(Bm-B)*ds,0,s)
-        % represent as int((c+d*s)/sqrt(a-b*s),s,0,ds)
-        % B = B1+(B2-B1)/ds*s
-        % Bm-B = a-b*s = Bm - B1 - (B2-B1)/ds*s
-        % local = loc1 + (loc2-loc1)/ds*s = c +d*s
-        a = Bm - B1;
-        b = (B2-B1)/ds;
-        c = loc1;
-        d = (loc2-loc1)/ds;
-        
-        dba = zeros(size(c));
-        for icol = 1:length(c),
-            dba(icol) = step(a,b,c(icol),d(icol),ds);
+    if N==1,
+        % equatorially mirroring
+        ba = ba+loc2;
+        g = g+1;
+    else
+        for i = 2:N,
+            B1 = B2;
+            loc1 = loc2;
+            B2  = Bmag(i);
+            loc2 = loc_func(XYZ(i,:),Blocal(i,:),Bm,maglat(i),sign_cospa,i);
+            ds = sqrt(sum((XYZ(i,:)-XYZ(i-1,:)).^2));
+            
+            % want int(local/sqrt(Bm-B)*ds,0,s)
+            % represent as int((c+d*s)/sqrt(a-b*s),s,0,ds)
+            % B = B1+(B2-B1)/ds*s
+            % Bm-B = a-b*s = Bm - B1 - (B2-B1)/ds*s
+            % local = loc1 + (loc2-loc1)/ds*s = c +d*s
+            a = Bm - B1;
+            b = (B2-B1)/ds;
+            c = loc1;
+            d = (loc2-loc1)/ds;
+            
+            dba = zeros(size(c));
+            for icol = 1:length(c),
+                dba(icol) = step(a,b,c(icol),d(icol),ds);
+            end
+            dg = step(a,b,1,0,ds);
+            
+            ba = ba+dba;
+            g = g+dg;
         end
-        dg = step(a,b,1,0,ds);
-        
-        ba = ba+dba;
-        g = g+dg;
     end
 end
 

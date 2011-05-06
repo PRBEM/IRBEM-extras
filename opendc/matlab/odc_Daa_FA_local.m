@@ -130,8 +130,11 @@ Dpp = 0;
 % test for nonzero, finite wave field
 dB = evaluate_scalar_or_handle(wave_model.dB,L,MLT,maglat);
 
-if dB==0,
-    return; % zeros
+if dB==0, % return zeros
+    if join_outputs,
+        Daa = zeros(1,3);
+    end
+    return; 
 elseif ~isfinite(dB),
     if join_outputs,
         Daa = nan(1,3);
