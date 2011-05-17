@@ -192,7 +192,7 @@ class InvBase(object):
                 print('Energy grid for output not set: Using grid from response function')
             self.Eout = self.Egrid
         fobj.close()
-        return Htmp.tolist()
+        return Htmp.tolist(), col_hdr
     
     @classmethod
     def readRespFunc(self, fname=None, std='LANL', dt=1):
