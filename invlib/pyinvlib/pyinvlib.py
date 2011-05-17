@@ -93,7 +93,8 @@ class InvBase(object):
     """
     #_call_dict = {
         #'ana_spec_inv', }
-    
+    _verb = 2 #set overall verbosity so that response fnc classmethods work...
+
     def __init__(self, *args, **kwargs):
         try:
             self._invlib = ctypes.CDLL(os.path.join(libpath, 'invlib.'+ext))
@@ -134,7 +135,8 @@ class InvBase(object):
                 outstr = outstr + str(ent) + ' :  ' + leng
                 
         return outstr
-            
+    
+    @classmethod
     def _readLANLResp(self, fname, **kwargs):
         """read 'standard' LANL format response files
         
@@ -181,17 +183,18 @@ class InvBase(object):
         self.Egrid = Earray
         self.Hcols = col_hdr
         
-        if self._verb:
+        if self._verb == True:
             print('LANL response file read:\n%s' % header[:2])
         try:
             assert self.Eout#==self.Egrid
         except AttributeError:
-            if self._verb:
+            if self._verb == True:
                 print('Energy grid for output not set: Using grid from response function')
             self.Eout = self.Egrid
         fobj.close()
-        return None
-        
+        return Htmp.tolist()
+    
+    @classmethod
     def readRespFunc(self, fname=None, std='LANL', dt=1):
         """method for reading PRBEM and LANL format response functions
         
@@ -211,7 +214,7 @@ class InvBase(object):
             raise IOError('Requested file %s does not exist' % (fname))
         if std.upper() == 'LANL':
             #default dt is 1s; 10.24s is spin period of SOPA
-            self._readLANLResp(fname, dt=dt)
+            rfun = self._readLANLResp(fname, dt=dt)
             #formatting currently hacked into readLANLResp
         elif std.upper() == 'PRBEM':
             try:
@@ -223,8 +226,13 @@ class InvBase(object):
                 raise ImportError('''SpacePy is not installed;
                 CDF support is unavailable without SpacePy\n
                 Please get SpacePy from http://spacepy.lanl.gov''')
-        
-        return None
+
+        #if verbosity is set to greater than 1 it's called as a class method
+        #so we want to return the response function
+        if self._verb > 1:
+            return rfun
+        else:
+           return None
         
     
 class SpecInv(InvBase):
