@@ -25,12 +25,12 @@ DEBUG_FLAGS=
 ifeq ($(HOST),coto-ago1)
   IFLAGS= -I./ -I../nnlib/
   LFLAGS= -L./
-  CFLAGS= -Wall $(IFLAGS) $(LFLAGS) -DOLDGSL $(DEBUG_FLAGS)
+  CFLAGS= -Wall $(IFLAGS) $(LFLAGS) -DOLDGSL $(DEBUG_FLAGS) 
   OMPCC = gcc
 else
-  IFLAGS=-I/usr/local/include -I./ -I../nnlib/
-  LFLAGS=-L/usr/local/lib -L./
-  CFLAGS= -Wall $(IFLAGS) $(LFLAGS) $(DEBUG_FLAGS)
+  IFLAGS=-I/usr/local/include -I./ -I../nnlib/ -I/opt/local/include 
+  LFLAGS=-L/usr/local/lib -L./ -L/opt/local/lib/
+  CFLAGS= -Wall $(IFLAGS) $(LFLAGS) $(DEBUG_FLAGS)  
   ifeq ($(HOST),fellowship)
 	OMPCC= gcc42
   else

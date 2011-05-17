@@ -758,13 +758,6 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
   gsl_vector_const_view bgsl = gsl_vector_const_view_array(b,NY); gsl view of b
   */
 
-  int clean_return(int return_value) {
-    if (ell_params.closeOutFile) {
-      fclose(ell_params.outFilePtr);
-    }
-    return(return_value);
-  };
-
   ell_params.closeOutFile = 0; /* default: no need to close outFile */
   ell_params.type = INV_TYPE_ASI; /* set ana-spec-inv as the type */
 
@@ -773,7 +766,9 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
 				  &NY,&Ny_valid,&NE,&minimizer_flag,&MaxIter,&verbose,&dE_mode,
 				  y,dy,Egrid,H,b,flux,dlogflux,&ell_params,outFile
 				  )) != INVLIB_SUCCESS) {
-    return(clean_return(result));
+    if (ell_params.closeOutFile)
+      fclose(ell_params.outFilePtr);
+    return(result);
   }
 
   /* check/initialize asi specific inputs/vars */
@@ -781,13 +776,17 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
 
   /* check for not enough channels */
   if (NEout < 1) {
-    return(clean_return(INVLIB_ERR_DATAEMPTY));
+    if (ell_params.closeOutFile)
+      fclose(ell_params.outFilePtr);
+    return(INVLIB_ERR_DATAEMPTY);
   }
 
   /* check for NaNs and Infs or <=0 in Eout */
   for (j=0; j < NEout; j++) {
     if (!gsl_finite(Eout[j])) {
-      return(clean_return(INVLIB_ERR_DATANAN));
+      if (ell_params.closeOutFile)
+	fclose(ell_params.outFilePtr);
+      return(INVLIB_ERR_DATANAN);
     }
   }
 
@@ -796,18 +795,25 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
 
   /* check function bitmap for no set bit */
   if ((fxn_bit_map & ASI_FXN_ALL) == 0) {
-    return(clean_return(INVLIB_ERR_NOFXN));
+    if (ell_params.closeOutFile)
+      fclose(ell_params.outFilePtr);
+    return(INVLIB_ERR_NOFXN);
   };
 
   /* check function bitmap for invalid bit(s) */
   if ((fxn_bit_map & ASI_FXN_ALL) != fxn_bit_map) {
-    return(clean_return(INVLIB_ERR_INVALIDFXN));
+    if (ell_params.closeOutFile)
+      fclose(ell_params.outFilePtr);
+    return(INVLIB_ERR_INVALIDFXN);
   }
 
   /* check for rest mass needed by Relativistic Maxwellian (single or double) */
   if (fxn_bit_map & (ASI_FXN_RM | ASI_FXN_RM2)) {
     if ((!real_params) || (real_params[0]<=0)) {
-      return(clean_return(INVLIB_ERR_RME0)); /* Relativistic Maxwellian requiers positive E0=m0c2 */
+      if (ell_params.closeOutFile)
+	fclose(ell_params.outFilePtr);
+      return(INVLIB_ERR_RME0);
+      /* Relativistic Maxwellian requiers positive E0=m0c2 */
     }
     m0c2 = real_params[0]; /* store it, if need be */
   }
@@ -815,7 +821,9 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
   /* check for E_break and E0 needed by Power-Law-Exponential */
   if (fxn_bit_map & ASI_FXN_PLE) {
     if ((!real_params) || (real_params[1]<=0) || (real_params[2]<=0)) {
-      return(clean_return(INVLIB_ERR_PLE)); /* PLE requires E0 and E_break */
+      if (ell_params.closeOutFile)
+	fclose(ell_params.outFilePtr);
+      return(INVLIB_ERR_PLE); /* PLE requires E0 and E_break */
     }
     E_break = real_params[1]; /* store it, if need be */
     E0 = real_params[2]; /* store it, if need be */
@@ -1031,7 +1039,9 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
 
   if (weight_sum == 0.0) {
     /* abort - not enough data to do any of the q's */
-    return(clean_return(INVLIB_ERR_DATAEMPTY));
+    if (ell_params.closeOutFile)
+      fclose(ell_params.outFilePtr);
+    return(INVLIB_ERR_DATAEMPTY);
   }
     
   if (lambda) {
@@ -1102,7 +1112,9 @@ int ana_spec_inv(const double *y, const double *dy, const double *Egrid, const d
   }
 
   /* done, success ! */
-  return(clean_return(INVLIB_SUCCESS));
+  if (ell_params.closeOutFile)
+    fclose(ell_params.outFilePtr);
+  return(INVLIB_SUCCESS);
 }
 
 int ana_spec_inv_multi(const long int Ntimes,
@@ -1185,14 +1197,6 @@ int pc_spec_inv(const double *y, const double *dy, const double *Egrid, const do
   gsl_vector_const_view bgsl = gsl_vector_const_view_array(b,NY); gsl view of b
   */
 
-
-  int clean_return(int return_value) {
-    if (ell_params.closeOutFile) {
-      fclose(ell_params.outFilePtr);
-    }
-    return(return_value);
-  };
-
   ell_params.closeOutFile = 0; /* default: no need to close outFile */
   ell_params.type = INV_TYPE_PC; /* set principal components as the type */
 
@@ -1201,7 +1205,9 @@ int pc_spec_inv(const double *y, const double *dy, const double *Egrid, const do
 				  &NY,NULL,&NE,&minimizer_flag,&MaxIter,&verbose,&dE_mode,
 				  y,dy,Egrid,H,b,flux,dlogflux,&ell_params,outFile
 				  )) != INVLIB_SUCCESS) {
-    return(clean_return(result));
+    if (ell_params.closeOutFile)
+      fclose(ell_params.outFilePtr);
+    return(result);
   }
 
   /* notes: Eout = Egrid */
@@ -1209,23 +1215,31 @@ int pc_spec_inv(const double *y, const double *dy, const double *Egrid, const do
   Nactive_bases = int_params[3];
 
   if ((Nbases < 1) || (Nactive_bases < 1)) {
-    return(clean_return(INVLIB_ERR_DATAEMPTY));
+    if (ell_params.closeOutFile)
+      fclose(ell_params.outFilePtr);
+    return(INVLIB_ERR_DATAEMPTY);
   }
 
   /* check for NaNs and Infs or <=0 in PC definitions */
   for (j=0; j < Nactive_bases; j++) {
     if ((!gsl_finite(basis_variance[j])) || (basis_variance[j]<=0)) {
-	return(clean_return(INVLIB_ERR_DATANAN));
+      if (ell_params.closeOutFile)
+	fclose(ell_params.outFilePtr);
+      return(INVLIB_ERR_DATANAN);
     }
     for (i=0; i < NE; i++) {
       if (!gsl_finite(basis_vectors[NE*j+i])) {
-	return(clean_return(INVLIB_ERR_DATANAN));
+	if (ell_params.closeOutFile)
+	  fclose(ell_params.outFilePtr);
+	return(INVLIB_ERR_DATANAN);
       }
     }
   }
   for (i=0; i < NE; i++) {
     if (!gsl_finite(mean_log_flux[i])) {
-	return(clean_return(INVLIB_ERR_DATANAN));
+      if (ell_params.closeOutFile)
+	fclose(ell_params.outFilePtr);
+      return(INVLIB_ERR_DATANAN);
     }
   }
 
@@ -1311,8 +1325,9 @@ int pc_spec_inv(const double *y, const double *dy, const double *Egrid, const do
   gsl_vector_free(q);
   gsl_vector_free(grad);
   gsl_matrix_free(covq);
-
-  return(clean_return(INVLIB_SUCCESS));
+  if (ell_params.closeOutFile)
+    fclose(ell_params.outFilePtr);
+  return(INVLIB_SUCCESS);
 }
 
 int pc_spec_inv_multi(const long int Ntimes,

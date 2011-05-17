@@ -79,13 +79,6 @@ int wide2uni_vampola(const double *wideflux, const double *dlogwideflux,
   int closeOutFile = 0; /* default: no need to close outFile */
   FILE *outFilePtr = NULL; 
 
-  int clean_return(int return_value) {
-    if (closeOutFile) {
-      fclose(outFilePtr);
-    }
-    return(return_value);
-  }
-
   /* inputs used by all methods already checked: */
   /* inputs already checked for NULLs */
   /* NA, w2u_method, and verbose are already checked for validity */
@@ -96,12 +89,12 @@ int wide2uni_vampola(const double *wideflux, const double *dlogwideflux,
   /* minimizer_flag = int_params[3]; */
   /* MaxIter = int_params[4]; */
 
-  /* keV = real_params[0]; /* Electron energy, keV */
+  /* keV = real_params[0]; */ /* Electron energy, keV */
   BB0 = real_params[1]; /* B/B0, OPQ */
   Lm = real_params[2]; /* McIlwain L, OPQ */
 
   if ((!gsl_finite(Lm)) || (Lm < 1) || (!gsl_finite(BB0)) || (BB0 < 1)) {
-    return(clean_return(INVLIB_ERR_DATANAN));
+    return(INVLIB_ERR_DATANAN);
   }
 
   n = vampola_sin_n(Lm); /* get exponent */
@@ -120,31 +113,31 @@ int wide2uni_vampola(const double *wideflux, const double *dlogwideflux,
     if (outFile) {
       outFilePtr = (FILE *)outFile;
     } else {
-      return(clean_return(INVLIB_ERR_VERBOSE)); /* can't output to NULL */
+      return(INVLIB_ERR_VERBOSE); /* can't output to NULL */
     }
     break;
   case 4:
     if (outFile) {
       if (! (outFilePtr = fopen(outFile,"w"))) {
-	return(clean_return(INVLIB_ERR_OUTFILE)); /* Couldn't open outFile */
+	return(INVLIB_ERR_OUTFILE); /* Couldn't open outFile */
 	  }
       closeOutFile = 1;
     } else {
-      return(clean_return(INVLIB_ERR_VERBOSE)); /* can't output to NULL */
+      return(INVLIB_ERR_VERBOSE); /* can't output to NULL */
     }
     break;
   case 5:
     if (outFile) {
       if (! (outFilePtr = fopen(outFile,"a"))) {
-	return(clean_return(INVLIB_ERR_OUTFILE)); /* Couldn't open outFile */
+	return(INVLIB_ERR_OUTFILE); /* Couldn't open outFile */
 	  }
       closeOutFile = 1;
     } else {
-      return(clean_return(INVLIB_ERR_VERBOSE)); /* can't output to NULL */
+      return(INVLIB_ERR_VERBOSE); /* can't output to NULL */
     }
     break;
   default:
-    return(clean_return(INVLIB_ERR_VERBOSE)); /* invalid verbose value */
+    return(INVLIB_ERR_VERBOSE); /* invalid verbose value */
   }
 
   EPAcutoff = AE8_AtmoCutoff(Lm); /* acute equatorial pitch angle of loss cone */
@@ -162,7 +155,9 @@ int wide2uni_vampola(const double *wideflux, const double *dlogwideflux,
 
   if ((integral<=0) || (!gsl_finite(integral))) {
     /* any pitch angle grid points left? */
-    return(clean_return(INVLIB_ERR_DATANAN));
+    if (closeOutFile)
+      fclose(outFilePtr);
+    return(INVLIB_ERR_DATANAN);
   }
 
   /* get uniflux at alpha0 */
@@ -170,6 +165,8 @@ int wide2uni_vampola(const double *wideflux, const double *dlogwideflux,
   *dloguniflux = *dlogwideflux; /* preserve error */
 
   /* done, success! */
-  return(clean_return(INVLIB_SUCCESS));
+  if (closeOutFile)
+    fclose(outFilePtr);
+  return(INVLIB_SUCCESS);
 }
 

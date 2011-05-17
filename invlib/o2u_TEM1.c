@@ -266,13 +266,6 @@ int wide2uni_TEM1(const double *wideflux, const double *dlogwideflux,
   optfunTy optfun;
   /* Hgsl will be declared below */
 
-  int clean_return(int return_value) {
-    if (w2u_TEM1_params.closeOutFile) {
-      fclose(w2u_TEM1_params.outFilePtr);
-    }
-    return(return_value);
-  }
-
   w2u_TEM1_params.closeOutFile = 0; /* default: no need to close outFile */
 
   /* inputs used by all methods already checked: */
@@ -288,12 +281,16 @@ int wide2uni_TEM1(const double *wideflux, const double *dlogwideflux,
 
   /* check for valid minimizer flag */
   if ((minimizer_flag < 0) || (minimizer_flag > OPTIM_MIN_MAX)) {
-    return(clean_return(INVLIB_ERR_INVALIDMIN));
+    if (w2u_TEM1_params.closeOutFile)
+      fclose(w2u_TEM1_params.outFilePtr);
+    return(INVLIB_ERR_INVALIDMIN);
   }
 
   /* check for valid maximum interations */
   if (MaxIter<=0) {
-    return(clean_return(INVLIB_ERR_INVALIDITER));
+    if (w2u_TEM1_params.closeOutFile)
+      fclose(w2u_TEM1_params.outFilePtr);
+    return(INVLIB_ERR_INVALIDITER);
   }
 
   keV = real_params[0]; /* Electron energy, keV */
@@ -301,20 +298,26 @@ int wide2uni_TEM1(const double *wideflux, const double *dlogwideflux,
   Lm = real_params[2]; /* McIlwain L, OPQ */
 
   if ((!gsl_finite(Lm)) || (Lm < 1) || (!gsl_finite(BB0)) || (BB0 < 1) || (!gsl_finite(keV)) || (keV < 0)) {
-    return(clean_return(INVLIB_ERR_DATANAN));
+    if (w2u_TEM1_params.closeOutFile)
+      fclose(w2u_TEM1_params.outFilePtr);
+    return(INVLIB_ERR_DATANAN);
   }
 
   EPAcutoff = TEM1_AtmoCutoff(Lm); /* acute equatorial pitch angle of loss cone */
   PAcutoff = asin(sin(EPAcutoff*M_PI/180.0)*sqrt(BB0))*180.0/M_PI; /* acute local pitch angle */
   if (PAgrid[(*ialpha0)] < PAcutoff) {
-    return(clean_return(INVLIB_ERR_IALPHA0));
+    if (w2u_TEM1_params.closeOutFile)
+      fclose(w2u_TEM1_params.outFilePtr);
+    return(INVLIB_ERR_IALPHA0);
   }
   ifirst=0;
   while ((ifirst < NA) && (PAgrid[ifirst] < PAcutoff)) {
     ifirst++;
   }
   if (ifirst == NA) {
-    return(clean_return(INVLIB_ERR_IALPHA0)); 
+    if (w2u_TEM1_params.closeOutFile)
+      fclose(w2u_TEM1_params.outFilePtr);
+    return(INVLIB_ERR_IALPHA0); 
   }
 
   ilast=NA-1;
@@ -322,13 +325,17 @@ int wide2uni_TEM1(const double *wideflux, const double *dlogwideflux,
     ilast--;
   }
   if (ilast < 0) {
-    return(clean_return(INVLIB_ERR_IALPHA0)); 
+    if (w2u_TEM1_params.closeOutFile)
+      fclose(w2u_TEM1_params.outFilePtr);
+    return(INVLIB_ERR_IALPHA0); 
   }
 
   NA2 = ilast-ifirst+1;
   /* any pitch angle grid points left? */
   if (NA2 <=0) {
-    return(clean_return(INVLIB_ERR_DATANAN));
+    if (w2u_TEM1_params.closeOutFile)
+      fclose(w2u_TEM1_params.outFilePtr);
+    return(INVLIB_ERR_DATANAN);
   }
 
   /* calculate ialpha0 in new reduced vector */
@@ -407,31 +414,45 @@ int wide2uni_TEM1(const double *wideflux, const double *dlogwideflux,
     if (outFile) {
       w2u_TEM1_params.outFilePtr = (FILE *)outFile;
     } else {
-      return(clean_return(INVLIB_ERR_VERBOSE)); /* can't output to NULL */
+    if (w2u_TEM1_params.closeOutFile)
+      fclose(w2u_TEM1_params.outFilePtr);
+      return(INVLIB_ERR_VERBOSE); /* can't output to NULL */
     }
     break;
   case 4:
     if (outFile) {
       if (! (w2u_TEM1_params.outFilePtr = fopen(outFile,"w"))) {
-	return(clean_return(INVLIB_ERR_OUTFILE)); /* Couldn't open outFile */
+    if (w2u_TEM1_params.closeOutFile)
+      fclose(w2u_TEM1_params.outFilePtr);
+	return(INVLIB_ERR_OUTFILE); /* Couldn't open outFile */
 	  }
       w2u_TEM1_params.closeOutFile = 1;
     } else {
-      return(clean_return(INVLIB_ERR_VERBOSE)); /* can't output to NULL */
+    if (w2u_TEM1_params.closeOutFile)
+      fclose(w2u_TEM1_params.outFilePtr);
+    if (w2u_TEM1_params.closeOutFile)
+      fclose(w2u_TEM1_params.outFilePtr);
+      return(INVLIB_ERR_VERBOSE); /* can't output to NULL */
     }
     break;
   case 5:
     if (outFile) {
       if (! (w2u_TEM1_params.outFilePtr = fopen(outFile,"a"))) {
-	return(clean_return(INVLIB_ERR_OUTFILE)); /* Couldn't open outFile */
+    if (w2u_TEM1_params.closeOutFile)
+      fclose(w2u_TEM1_params.outFilePtr);
+	return(INVLIB_ERR_OUTFILE); /* Couldn't open outFile */
 	  }
       w2u_TEM1_params.closeOutFile = 1;
     } else {
-      return(clean_return(INVLIB_ERR_VERBOSE)); /* can't output to NULL */
+    if (w2u_TEM1_params.closeOutFile)
+      fclose(w2u_TEM1_params.outFilePtr);
+      return(INVLIB_ERR_VERBOSE); /* can't output to NULL */
     }
     break;
   default:
-    return(clean_return(INVLIB_ERR_VERBOSE)); /* invalid verbose value */
+    if (w2u_TEM1_params.closeOutFile)
+      fclose(w2u_TEM1_params.outFilePtr);
+    return(INVLIB_ERR_VERBOSE); /* invalid verbose value */
   }
 
   optfun.func = &w2u_TEM1_ell_combine;
@@ -459,5 +480,7 @@ int wide2uni_TEM1(const double *wideflux, const double *dlogwideflux,
   gsl_matrix_free(covx);
   
   /* done, success! */
-  return(clean_return(INVLIB_SUCCESS));
+    if (w2u_TEM1_params.closeOutFile) 
+      fclose(w2u_TEM1_params.outFilePtr);
+    return(INVLIB_SUCCESS);
 }
