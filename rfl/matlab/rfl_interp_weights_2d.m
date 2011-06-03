@@ -31,13 +31,8 @@ end
 
 Nx = numel(xgrid);
 Ny = numel(ygrid);
-N = numel(xhat);
 
-H = sparse(N,Nx*Ny);
-vx = rfl_lbf_eval(xgrid,xhat,xbc);
-vy = rfl_lbf_eval(ygrid,yhat,ybc);
-for i = 1:(Nx*Ny),
-    [ix,iy,iz] = ind2sub([Nx Ny],i);
-    H(:,i) = vx(:,ix).*vy(:,iy);
-end
-
+vx = sparse(rfl_lbf_eval(xgrid,xhat,xbc));
+vy = sparse(rfl_lbf_eval(ygrid,yhat,ybc));
+[ix,iy] = ind2sub([Nx Ny],1:(Nx*Ny));
+H = vx(:,ix).*vy(:,iy);
