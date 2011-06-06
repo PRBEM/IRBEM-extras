@@ -3,6 +3,7 @@ function H = rfl_interp_weights_2d(xgrid,ygrid,xhat,yhat,varargin)
 % returns H [N x (Nx * Ny)], sparse
 % matrix of weights such that H*flux(:) interpolates the
 % flux model ([Nx x Ny]) into the points xhat, yhat
+% (index ordering follows ndgrid)
 % xgrid is [Nx x 1] provides the x values on the x grid
 % ygrid is [Ny x 1] provides the y values on the y grid
 % xhat and yhat are each [N x 1]
