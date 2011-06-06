@@ -93,7 +93,6 @@ class InvBase(object):
     """
     #_call_dict = {
         #'ana_spec_inv', }
-    _verb = 2 #set overall verbosity so that response fnc classmethods work...
 
     def __init__(self, *args, **kwargs):
         try:
@@ -176,25 +175,12 @@ class InvBase(object):
         else:
             #default to 1-sec for now
             dt = 1
-        if self._verb:
-            print('Using accumulation time %g' % dt)
         Htmp = np.array(data, dtype=float).transpose().ravel()*dt
-        self.H = Htmp.tolist()
-        self.Egrid = Earray
-        self.Hcols = col_hdr
+        H = Htmp.tolist()
         
-        if self._verb == True:
-            print('LANL response file read:\n%s' % header[:2])
-        try:
-            assert self.Eout#==self.Egrid
-        except AttributeError:
-            if self._verb == True:
-                print('Energy grid for output not set: Using grid from response function')
-            self.Eout = self.Egrid
         fobj.close()
-        return Htmp.tolist(), col_hdr
+        return Htmp.tolist(), col_hdr, Earray
     
-    @classmethod
     def readRespFunc(self, fname=None, std='LANL', dt=1):
         """method for reading PRBEM and LANL format response functions
         
@@ -215,6 +201,8 @@ class InvBase(object):
         if std.upper() == 'LANL':
             #default dt is 1s; 10.24s is spin period of SOPA
             rfun = self._readLANLResp(fname, dt=dt)
+            if self._verb:
+                print('LANL response file read:\n%s' % fname)
             #formatting currently hacked into readLANLResp
         elif std.upper() == 'PRBEM':
             try:
@@ -227,12 +215,16 @@ class InvBase(object):
                 CDF support is unavailable without SpacePy\n
                 Please get SpacePy from http://spacepy.lanl.gov''')
 
-        #if verbosity is set to greater than 1 it's called as a class method
-        #so we want to return the response function
-        if self._verb > 1:
-            return rfun
-        else:
-           return None
+        self.H = rfun[0]
+        self.Hcols = rfun[1]
+        self.Egrid = rfun[2]
+        try:
+            assert self.Eout
+        except AttributeError:
+            if self._verb:
+                print('Energy grid for output not set: Using grid from response function')
+            self.Eout = self.Egrid
+        return None
         
     
 class SpecInv(InvBase):
