@@ -208,7 +208,7 @@ hEthetaphi = merge_hE_hangles(hE,hAthetaphi);
 function [hthetaphi,result_code] = make_hthetaphi_Eseparable(inst_info,thetagrid,phigrid,options)
 result_code = 1;
 hAthetaphi = inst_info.internal.hAthetaphi(inst_info,thetagrid,phigrid,options);
-hthetaphi = hAthetaphi*inst_info.internal.hE0;% includes XCAL
+hthetaphi = hAthetaphi*inst_info.internal.hE0;% includes XCAL = CROSSCALIB
 
 function [hEtheta,result_code] = make_hEtheta_Eseparable(inst_info,Egrid,thetagrid,options)
 % combines results of make_hE and make_theta
@@ -221,7 +221,7 @@ function [htheta,result_code] = make_htheta_Eseparable(inst_info,thetagrid,optio
 % combines results of make_hE and make_theta
 result_code = 1;
 hAtheta = inst_info.internal.hAtheta(inst_info,thetagrid,options);
-htheta = hAtheta*inst_info.internal.hE0;% includes XCAL
+htheta = hAtheta*inst_info.internal.hE0;% includes XCAL = CROSSCALIB
 
 function [hE,result_code] = make_hE_Eseparable(inst_info,Egrid,options)
 [hE,result_code] = inst_info.internal.hE(inst_info,Egrid,options);
@@ -237,7 +237,7 @@ hEalphabeta = merge_hE_hangles(hE,hAalphabeta);
 function [halphabeta,result_code] = make_halphabeta_Eseparable(inst_info,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options)
 result_code = 1;
 hAalphabeta = inst_info.internal.hAalphabeta(inst_info,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options);
-halphabeta = hAalphabeta*inst_info.internal.hE0; % includes XCAL
+halphabeta = hAalphabeta*inst_info.internal.hE0; % includes XCAL = CROSSCALIB
 
 function [hEalpha,result_code] = make_hEalpha_Eseparable(inst_info,Egrid,alphagrid,tgrid,alpha0,beta0,phib,options)
 % combines results of make_hE and make_alpha
@@ -249,7 +249,7 @@ hEalpha = merge_hE_hangles(hE,hAalpha);
 function [halpha,result_code] = make_halpha_Eseparable(inst_info,alphagrid,tgrid,alpha0,beta0,phib,options)
 result_code = 1;
 hAalpha = inst_info.internal.hAalpha(inst_info,alphagrid,tgrid,alpha0,beta0,phib,options);
-halpha = hAalpha*inst_info.internal.hE0; % includes XCAL
+halpha = hAalpha*inst_info.internal.hE0; % includes XCAL = CROSSCALIB
 
 function [hEiso,result_code] = make_hEiso_Eseparable(inst_info,Egrid,tgrid,options)
 % combines results of make_hE and hA0
@@ -280,7 +280,7 @@ function inst_info = rfl_init_DIFF(inst_info)
 
 inst_info.internal.RE = @(inst_info,E)(E==inst_info.E0)*inst_info.EPS; % DE gets ignored, which is bad, but unaviodable
 inst_info.internal.hE = @rfl_hE_diff;
-inst_info.internal.hE0 = inst_info.DE*inst_info.EPS/inst_info.XCAL; % hE for flat spectrum
+inst_info.internal.hE0 = inst_info.DE*inst_info.EPS/inst_info.CROSSCALIB; % hE for flat spectrum
 
 function [hE,result_code] = rfl_hE_diff(inst_info,Egrid,options)
 % options is ignored
@@ -302,14 +302,14 @@ if (i>=2) && (i <= NE), % E(i-1) < E0 < E(i)
     hE = inst_info.DE*inst_info.EPS*(inst_info.E0-Egrid(i-1)) / (Egrid(i)-Egrid(i-1));
 end
 
-hE = hE / inst_info.XCAL;
+hE = hE / inst_info.CROSSCALIB;
 
 function inst_info = rfl_init_INT(inst_info)
 % idealized integral energy channel
 
 inst_info.internal.RE = @(inst_info,E)(E>=inst_info.E0)*inst_info.EPS;
 inst_info.internal.hE = @rfl_hE_int;
-inst_info.internal.hE0 = inst_info.EPS/inst_info.XCAL; % should be inf for flat spectrum, but assume energy bandwidth==1
+inst_info.internal.hE0 = inst_info.EPS/inst_info.CROSSCALIB; % should be inf for flat spectrum, but assume energy bandwidth==1
 
 function [hE,result_code] = rfl_hE_int(inst_info,Egrid,options)
 result_code = 1;
@@ -332,7 +332,7 @@ i = I(2);
 if (i>=2) && (i <= NE), % E(i-1) < E0 < E(i)
     hE(i) = dE(i) - (inst_info.E0-Egrid(i-1))^2/(2*(Egrid(i)-Egrid(i-1)));
 end
-hE = hE * inst_info.EPS / inst_info.XCAL;
+hE = hE * inst_info.EPS / inst_info.CROSSCALIB;
 
 
 function inst_info = rfl_init_WIDE(inst_info)
@@ -340,7 +340,7 @@ function inst_info = rfl_init_WIDE(inst_info)
 
 inst_info.internal.RE = @(inst_info,E)((E>=inst_info.E0)&(E<=inst_info.E1))*inst_info.EPS;
 inst_info.internal.hE = @rfl_hE_wide;
-inst_info.internal.hE0 = (inst_info.E1-inst_info.E0)*inst_info.EPS/inst_info.XCAL; % hE for flat spectrum
+inst_info.internal.hE0 = (inst_info.E1-inst_info.E0)*inst_info.EPS/inst_info.CROSSCALIB; % hE for flat spectrum
 
 function [hE,result_code] = rfl_hE_wide(inst_info,Egrid,options)
 % treat as difference between two integral channels
@@ -357,10 +357,10 @@ function inst_info = rfl_init_TBL(inst_info)
 inst_info.internal.RE = @(inst_info,E)interp1(inst_info.E_GRID,inst_info.EPS,min(max(E,inst_info.E_GRID(1)),inst_info.E_GRID(end)),'linear',0); % set to zero outside grid
 
 inst_info.internal.hE = @rfl_hE_tbl;
-inst_info.internal.hE0 = sum(inst_info.E_GRID(:).*inst_info.EPS(:).*rfl_make_deltas(inst_info.E_GRID(:)))/inst_info.XCAL; % hE for flat spectrum
+inst_info.internal.hE0 = sum(inst_info.E_GRID(:).*inst_info.EPS(:).*rfl_make_deltas(inst_info.E_GRID(:)))/inst_info.CROSSCALIB; % hE for flat spectrum
 
 function [hE,result_code] = rfl_hE_tbl(inst_info,Egrid,options)
 result_code = 1;
 dE = rfl_make_deltas(Egrid,options);
-hE = inst_info.internal.RE(inst_info,Egrid).*dE/inst_info.XCAL;
+hE = inst_info.internal.RE(inst_info,Egrid).*dE/inst_info.CROSSCALIB;
 

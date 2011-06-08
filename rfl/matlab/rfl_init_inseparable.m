@@ -48,7 +48,7 @@ dp = rfl_make_deltas(phigrid,options)*pi/180;
 
 result_code = 1; % success
 R = inst_info.internal.R(inst_info,E,theta,phi);
-h = R.*dE.*dcost.*dp/inst_info.XCAL;
+h = R.*dE.*dcost.*dp/inst_info.CROSSCALIB;
 hEthetaphi = h; % success, returns h
 
 function [hthetaphi,result_code] = inseparable_hthetaphi(inst_info,thetagrid,phigrid,options)
@@ -120,7 +120,7 @@ for it = 1:length(tgrid),
         h = h+inst_info.internal.R(inst_info,E,repmat(theta,[NE,1,1]),repmat(phi,[NE,1,1]))*dt(it);
     end
 end
-h = h.*dE.*dcosa.*db/inst_info.XCAL;
+h = h.*dE.*dcosa.*db/inst_info.CROSSCALIB;
 hEalphabeta = h; % success, returns h
 
 function [hEalphabeta,result_code] = inseparable_halphabeta(inst_info,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options)

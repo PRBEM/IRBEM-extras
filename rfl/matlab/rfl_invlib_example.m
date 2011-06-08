@@ -23,7 +23,7 @@ for i = 1:Nchans,
     resp = ico.(ico.CHANNEL_NAMES{i}).ELE;
     hE = resp.make_hE(resp,Egrid,options);
     H(i,:) = hE;
-    dy(i) = resp.XCAL_RMSE;
+    dy(i) = resp.CROSSCALIB_RMSE;
 end
 
 %% make simulated data
@@ -77,7 +77,7 @@ H = H'/sum(H); % angular response should sum to 1 if wideflux is in same units a
 
 %% make simulated data
 flux = sind(PAgrid).^2;
-dlogwideflux = resp.XCAL_RMSE; % usually would get error from some other source
+dlogwideflux = resp.CROSSCALIB_RMSE; % usually would get error from some other source
 wideflux = H*flux*exp(randn(1)*dlogwideflux);
 keV = 500; % fake energy value
 method = 'Vampola';
@@ -121,7 +121,7 @@ for i = 1:length(times),
     H(i,:) = resp.make_halpha(resp,PAgrid,dt,alpha0(i),beta0,phib,options);
 end
 
-dy = repmat(resp.XCAL_RMSE,[1,Nchans]);
+dy = repmat(resp.CROSSCALIB_RMSE,[1,Nchans]);
 b = zeros(size(dy));
 
 %% generate fake counts

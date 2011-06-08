@@ -13,8 +13,8 @@ inst_info.DEAD_TIME_PER_COUNT = 0; % unknown
 inst_info.DEAD_TYPE = 'BLOCKING'; % unknown
 inst_info.COUNTS_MAX = inf; % unknown
 inst_info.SPECIES = {'PROT'};
-inst_info.XCAL = 1; % unknown
-inst_info.XCAL_RMSE = log(2)/2; % unknown: assume 2 standard deviations is a factor of 2
+inst_info.CROSSCALIB = 1; % unknown
+inst_info.CROSSCALIB_RMSE = log(2)/2; % unknown: assume 2 standard deviations is a factor of 2
 
 clear tmp_chans
 
