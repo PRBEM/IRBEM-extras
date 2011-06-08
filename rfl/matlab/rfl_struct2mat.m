@@ -13,7 +13,14 @@ if nargin < 3,
     version_switch = '-v6';
 end
 
-save(version_switch,matname,'-STRUCT','inst_info');
+% decompose struct
+vars = fieldnames(inst_info);
+
+for i = 1:length(vars),
+    eval([vars{i},'=inst_info.(vars{i});']);
+end
+
+save(version_switch,matname,vars{:});
 
 function var = filter(var)
 

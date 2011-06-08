@@ -34,7 +34,7 @@ inst_info.internal.hAalphabeta = @make_hAalphabeta;
 inst_info.internal.hAalpha = @make_hAalpha;
 % inst_info.internal.hA0(inst_info,options) for isotropic flux (G)
 inst_info.internal.hA0 = @make_hA0; % - will become a constant of type double before return 
-inst_info.internal.merge_hE_hangles = @merge_hE_hAngles; % useful for derived classes to call, too
+inst_info.internal.merge_hE_hangles = @merge_hE_hangles; % useful for derived classes to call, too
 % sensor-specific protected functions/methods:
 % inst_info.internal.A(inst_info,theta,phi) - area function, used for R
 % inst_info.internal.RE(inst_info,E) - eps(E), used for R

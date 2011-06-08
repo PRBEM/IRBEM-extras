@@ -20,6 +20,8 @@ else
     switch(lower(ext)),
         case 'cdf',
             inst_info = read_from_cdf(FileName);
+        case 'mat',
+            inst_info = load(FileName);
         otherwise
             error('Extension "%s" not yet supported',ext);
     end

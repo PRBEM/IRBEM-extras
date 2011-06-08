@@ -123,12 +123,22 @@ end
 h = h.*dE.*dcosa.*db/inst_info.CROSSCALIB;
 hEalphabeta = h; % success, returns h
 
-function [hEalphabeta,result_code] = inseparable_halphabeta(inst_info,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options)
+function [halphabeta,result_code] = inseparable_halphabeta(inst_info,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options)
 [hEalphabeta,result_code] = inst_info.make_hEalphabeta(inst_info,inst_info.E_GRID,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options);
 if result_code==1,
-    hEalphabeta = shiftdim(sum(hEalphabeta,1),1);
+    halphabeta = shiftdim(sum(hEalphabeta,1),1);
 else
-    hEalphabeta = nan;
+    halphabeta = nan;
+end
+
+function [halpha,result_code] = inseparable_halpha(inst_info,alphagrid,tgrid,alpha0,beta0,phib,options)
+betagrid = rfl_make_grid(0,360,'beta',options);
+[hEalphabeta,result_code] = inst_info.make_hEalphabeta(inst_info,inst_info.E_GRID,alphagrid,betagrid,tgrid,alpha0,beta0,phib,options);
+if result_code==1,
+    halphabeta = shiftdim(sum(hEalphabeta,1),1);
+    halpha = sum(halphabeta,2);
+else
+    halpha = nan;
 end
 
 function [hEalpha,result_code] = inseparable_hEalpha(inst_info,Egrid,alphagrid,tgrid,alpha0,beta0,phib,options)

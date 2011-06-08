@@ -157,9 +157,14 @@ for i = 1:length(inst_info.CHANNEL_NAMES),
     elseif isfield(resp,'R'), % guess geometric factor from RE(E)
         switch(resp.RESP_TYPE),
             case '[E,TH]',
-                G = 2*pi*max(trapz(-cosd(resp.TH_GRID),resp.R,2));
+                sz = size(resp.R);
+                tmp = trapz(repmat(shiftdim(-cosd(resp.TH_GRID),-1),[sz(1) 1]),resp.R,2);
+                % G = 2*pi*max(trapz(-cosd(resp.TH_GRID),resp.R,2));
+                G = 2*pi*max(tmp);
             case '[E,TH,PH]',
-                G = max(trapz(resp.PH_GRID*pi/180,trapz(-cosd(resp.TH_GRID),resp.R,2),3));
+                sz = size(resp.R);
+                tmp = trapz(repmat(shiftdim(-cosd(resp.TH_GRID),-1),[sz(1) 1 sz(3)]),resp.R,2);
+                G = max(trapz(repmat(shiftdim(resp.PH_GRID*pi/180,-2),[sz(1) 1 1]),tmp,3));
             otherwise
                 error('Huh? Cannot estimate G for resp type %s',resp.RESP_TYPE);
         end

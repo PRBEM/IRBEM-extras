@@ -3,6 +3,11 @@ function rfl_struct2cdf(cdfname,inst_info)
 % save an instrument response structure to a cdf
 % Note, cell arrays of strings will be converted to rows of strings
 
+if exist('OCTAVE_VERSION','builtin'),
+    warning('Cannot write CDFs from Octave. Aborting rfl_struct2cdf');
+    return;
+end
+
 varlist = break_down_struct('',inst_info);
 
 extras = {};
