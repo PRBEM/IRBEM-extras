@@ -3,7 +3,7 @@
 clear inst_info
 
 %% top-level info
-inst_info.FORMAT_VERSION = '1.0.1';
+inst_info.FORMAT_VERSION = '1.1.0';
 inst_info.L_UNIT = 'cm';
 inst_info.E_UNIT = 'MeV';
 inst_info.REFERENCES = {'Made-up sensors of all types'

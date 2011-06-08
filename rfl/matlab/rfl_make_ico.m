@@ -3,7 +3,7 @@
 clear inst_info
 
 % top-level info
-inst_info.FORMAT_VERSION = '1.0.1';
+inst_info.FORMAT_VERSION = '1.1.0';
 inst_info.CHANNEL_NAMES = {'ELEC1','ELEC2','ELEC3','ELEC4','ELEC5'};
 inst_info.L_UNIT = 'cm';
 inst_info.E_UNIT = 'MeV';
