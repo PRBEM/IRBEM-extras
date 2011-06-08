@@ -142,6 +142,7 @@ outpath = fileparts(which([mfilename,'.m']));
 cdfname = [outpath,filesep,'all_types.cdf'];
 
 rfl_struct2cdf(cdfname,inst_info);
+rfl_struct2mat(strrep(cdfname,'.cdf','.mat'),inst_info);
 
 inst_info = rfl_load_inst_info(inst_info);
 
