@@ -143,8 +143,12 @@ end
 
 varargout = cell(1,nargout);
 
+persistent warned
 if isoctave,
-    warning('***kdtree_kNN does not work in octave because it uses nested functions. Using multikNN instead');
+    if isempty(warned) || ~warned,
+        warning('***kdtree_kNN does not work in octave because it uses nested functions. Using multikNN instead');
+        warned = true;
+    end
     [varargout{:}] = kdtree_multikNN(X,tree,X0,k,DistScale);
     return
 end
