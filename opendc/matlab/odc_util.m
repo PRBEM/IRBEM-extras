@@ -233,7 +233,7 @@ function maglat = BB0toMagLat(BB0,units)
 % for each call to this function
 persistent maglat_table
 if isempty(maglat_table),
-    maglat_table.deg = (0:0.1:90)';
+    maglat_table.deg = (0:0.001:90)';
     maglat_table.rads = maglat_table.deg*pi/180;
     % this next bit is the expression for B/Bmin vs magnetic latitude for a dipole
     maglat_table.bb0 = (1+3*sin(maglat_table.rads).^2).^(1/2)./cos(maglat_table.rads).^6;
