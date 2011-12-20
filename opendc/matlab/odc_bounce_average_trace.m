@@ -26,11 +26,14 @@ function [ba,denom] = odc_bounce_average_trace(XYZ,Blocal,local,hemi,varargin)
 % [...] = bounce_average_trace(...,'Bm',Bm) - provide Bmirror
 %   (otherwise it's max(|B|)
 
-% ba = [int_s1^s2 local(XYZ,B) *ds / sqrt(Bmirror - B)] /
-%      [int_s1^s2 ds / sqrt(Bmirror - B)]
+% ba = [int_0^(2pi) local(...) ds/dB cos(psi) dpsi] /
+%      [int_0^(2pi) ds/dB cos(psi) dpsi]
 % bounce averaging involves a singularity
 % we handle this singularity by representing B and local
 % linearly between the fiducial points
+% Implements psi transform from Orlova and Shprits, 2011, Phys. Plasmas
+
+% O&S denotes equation or info from Orlova and Shprits, 2011
 
 force_symmetric = false; % user tells us it's symmetric?
 do_avg = true; % do bounce average? vs integral?
@@ -62,6 +65,7 @@ if ~isfinite(Bm),
     Bm = max(Bmag); % mirror field strength
 end
 Beq = min(Bmag);
+a0_deg = asind(sqrt(Beq./Bm));
 util = odc_util; % load utility functions and constants
 maglat = util.BB0toMagLat(Bmag./Beq).*hemi;
 
@@ -95,43 +99,40 @@ end
 
 ba = 0; % numerator for now, normalized after loop
 g = 0; % denominator
-for sign_cospa = SIGN_COSPA, % which half-cycle is this?
-    % cache i=1 point
-    B2  = Bmag(1);
-    loc2 = loc_func(XYZ(1,:),Blocal(1,:),Bm,maglat(1),sign_cospa,1);
-    if N==1,
-        % equatorially mirroring
-        ba = ba+loc2;
-        g = g+1;
-    else
-        for i = 2:N,
-            B1 = B2;
-            loc1 = loc2;
-            B2  = Bmag(i);
-            loc2 = loc_func(XYZ(i,:),Blocal(i,:),Bm,maglat(i),sign_cospa,i);
-            ds = sqrt(sum((XYZ(i,:)-XYZ(i-1,:)).^2));
-            
-            % want int(local/sqrt(Bm-B)*ds,0,s)
-            % represent as int((c+d*s)/sqrt(a-b*s),s,0,ds)
-            % B = B1+(B2-B1)/ds*s
-            % Bm-B = a-b*s = Bm - B1 - (B2-B1)/ds*s
-            % local = loc1 + (loc2-loc1)/ds*s = c +d*s
-            a = Bm - B1;
-            b = (B2-B1)/ds;
-            c = loc1;
-            d = (loc2-loc1)/ds;
-            
-            dba = zeros(size(c));
-            for icol = 1:length(c),
-                dba(icol) = step(a,b,c(icol),d(icol),ds);
-            end
-            dg = step(a,b,1,0,ds);
-            
-            ba = ba+dba;
-            g = g+dg;
+
+loc1 = loc_func(XYZ(1,:),Blocal(1,:),Bm,maglat(1),-1,1);
+loc = nan(N,size(loc1,2));
+psi = asin(min(1,sqrt(1-Bmag/Bm)/cosd(a0_deg))); % min(1,...) handles round-off error
+% psi is presently only on [0,pi/2], doubles back in North hemi
+iN = hemi>=0; % northern hemisphere points must be put on interval [pi/2,pi]
+psi(iN) = pi-psi(iN); % handle psi quadrant
+% compute dsdB*cos(psi)
+dsdBcospsi = nan(N,1);
+if N==1,
+    dsdBcospsi = 1;
+else
+    dsdBcospsi(1) = (cos(psi(1))+cos(psi(2)))/2*sqrt(sum((XYZ(2,:)-XYZ(1,:)).^2))./(Bmag(2)-Bmag(1));
+    for i = 2:(N-1),
+        if Bmag(i+1)==Bmag(i-1),
+            dsdBcospsi(i) = -tand(a0_deg)^2/2/Beq*sqrt(sum((XYZ(i+1,:)-XYZ(i-1,:)).^2))./(psi(i+1)-psi(i-1)); % O&S 7
+        else
+            dsdBcospsi(i) = cos(psi(i))*sqrt(sum((XYZ(i+1,:)-XYZ(i-1,:)).^2))./(Bmag(i+1)-Bmag(i-1));
         end
     end
+    dsdBcospsi(N) = (cos(psi(N-1))+cos(psi(N)))/2*sqrt(sum((XYZ(N,:)-XYZ(N-1,:)).^2))./(Bmag(N)-Bmag(N-1));
 end
+
+dsdBcospsi = abs(dsdBcospsi); % positive definite
+
+for sign_cospa = SIGN_COSPA, % which half-cycle is this?
+    for i = 1:N,
+        loc(i,:) = loc_func(XYZ(i,:),Blocal(i,:),Bm,maglat(i),sign_cospa,i);
+    end
+    for i = 1:size(loc,2),
+        ba(i) = ba(i) + trapz(psi,dsdBcospsi.*loc(:,i));
+    end
+end
+g = trapz(psi,dsdBcospsi)*length(SIGN_COSPA);
 
 if double_result,
     ba = ba*2;
@@ -140,38 +141,13 @@ end
 
 % now normalize: to bounce average
 % or to bounce int (without 1/v term)
+prefactor = 2*cosd(a0_deg)*Bm;
 
 if do_avg,
     ba = ba/g; % normalize: ba' to ba
 else
-    ba = ba/sqrt(Bm); % ba' to bint
+    ba = ba*prefactor; % ba' to bint
 end
 
-denom = g/sqrt(Bm);
+denom = g*prefactor;
 
-function dba = step(a,b,c,d,ds)
-% int((c+d*s)/sqrt(a-b*s),s,0,ds)
-% piecewise([a = 1 and b = 1 and ds = 1, 2*c + (4*d)/3],
-%  [a <> 0 and a = b*ds or a = 0 and b = 0, (2*a^(1/2)*(2*a*d + 3*b*c))/(3*b^2)],
-%  [a <> 0 and a <> b*ds or a = 0 and b <> 0, - (d*((4*a*(a - b*ds)^(1/2))/3 - (4*a^(3/2))/3 + (2*b*ds*(a - b*ds)^(1/2))/3))/b^2 - (c*(2*(a - b*ds)^(1/2) - 2*a^(1/2)))/b],
-%  [(a <> 0 and a = b*ds or a = 0 and b = 0) and (a <> 0 and a <> b*ds or a = 0 and b <> 0), (2*a^(1/2)*c)/b - (d*((4*a*(a - b*ds)^(1/2))/3 - (4*a^(3/2))/3 + (2*b*ds*(a - b*ds)^(1/2))/3))/b^2])
-
-tiny = 1e-10; % small difference for evaluating a-b*ds
-
-if b==0, % two points with same B, e.g., symmetric about equator
-    % int((c+d*s)/sqrt(a),s,0,ds) = (c*ds+d*ds^2/2)/sqrt(a)
-    dba = (c*ds+d*ds^2/2)/sqrt(a);
-elseif (a==1) && (b==1) && (ds==1),
-    dba = 2*c+(4*d)/3;
-elseif (a ~= 0) && abs((a-b*ds)<=tiny) || (a == 0) && (b == 0),
-    dba = (2*a^(1/2)*(2*a*d + 3*b*c))/(3*b^2);
-elseif (a ~= 0) && (abs(a-b*ds)>tiny) || (a == 0) && (b ~= 0),
-    dba = - (d*((4*a*(a - b*ds)^(1/2))/3 - (4*a^(3/2))/3 + (2*b*ds*(a - b*ds)^(1/2))/3))/b^2 - (c*(2*(a - b*ds)^(1/2) - 2*a^(1/2)))/b;
-else % (a <> 0 and a = b*ds or a = 0 and b = 0) and (a <> 0 and a <> b*ds or a = 0 and b <> 0)
-    dba = (2*a^(1/2)*c)/b - (d*((4*a*(a - b*ds)^(1/2))/3 - (4*a^(3/2))/3 + (2*b*ds*(a - b*ds)^(1/2))/3))/b^2;
-end
-
-if imag(dba)~=0,
-    fprintf('dba is complex/imaginary in %s>step\n',mfilename);
-    keyboard;
-end

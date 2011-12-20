@@ -41,6 +41,10 @@ function [ba,denom] = odc_bounce_average_dipole(L,MLT,alpha0_deg,local,varargin)
 % [...] = bounce_average_dipole(...,'Beq',Beq) - provide equatorial field
 %    strength at L (otherwise it's 31e3/L^3 (from util.SL.B0)
 % [...] = bounce_average_dipole(...,'vectorized',true) - local accepts multiple input points
+%
+% Implements psi transform from Orlova and Shprits, 2011, Phys. Plasmas
+
+% O&S denotes equation or info from Orlova and Shprits, 2011
 
 util = odc_util; % load utility functions and constants
 
@@ -91,14 +95,17 @@ Bm = Beq./sina0.^2; % mirror field strength
 % find mirror lat:
 lambdam = util.dipole_mirror_latitude(a0,'rad');
 
-tiny = 1e-6; % small distance to avoid numerical errors at mirror point
-lam2 = lambdam*(1-tiny); % northern mirror latitude
+lam2 = lambdam; % northern mirror latitude
 if hemi_symmetric, % only do northern hemisphere
     lam1 = 0;
     Tfactor = 1;
+    psi1 = 0; % southern mirror point
+    psi2 = pi/2; % equator
 else
     lam1 = -lam2;
     Tfactor = 2;
+    psi1 = 0; % southern mirror point
+    psi2 = pi; % norhtern mirror point
 end
 
 if isempty(method),
@@ -119,7 +126,7 @@ if strcmpi(method,'trace'),
     Blocal = Blocal*Beq/(util.SL.B0*1e9/L.^3);
     [ba,g] = odc_bounce_average_trace(XYZ,Blocal,local,sign(maglat_deg),options{:});
     
-    if ~do_avg && hemi_sym, % add in southern half of field line
+    if ~do_avg && hemi_symmetric, % add in southern half of field line
         ba = ba*2;
         g = g*2;
     end
@@ -154,7 +161,7 @@ T = util.T(sina0);
 ba = 0; % numerator for now, normalized after loop
 g = 0;
 for sign_cospa = SIGN_COSPA, % which half-cycle is this?
-    ba = ba+ifunc(@(lam)wrapper(local,lam,L,MLT,Beq,Bm,sign_cospa,vectorized),lam1,lam2,tol,reltol);
+    ba = ba+ifunc(@(psi)wrapper(local,psi,L,MLT,Beq,Bm,sign_cospa,vectorized),psi1,psi2,tol,reltol);
     g = g+T*Tfactor;
 end
 
@@ -167,45 +174,54 @@ else
     if symmetric, % dupilcate for sing_cospa=-1 case
         ba = ba*2;
     end
-    if hemi_symmetric, % dupilcate for souther hemisphere case
+    if hemi_symmetric, % dupilcate for southern hemisphere case
         ba = ba*2;
     end
 end
 denom = 4*L*T;
 
 
-function out = wrapper(local,maglat,L,MLT,Beq,Bm,sign_cospa,vectorized)
-% note: maglat is in rads, MLT in hours
+function out = wrapper(local,psi,L,MLT,Beq,Bm,sign_cospa,vectorized)
+% note: psi is in rads, MLT in hours
 
 util = odc_util;
 
-if size(maglat,2)==numel(maglat),
-    maglat = maglat'; % make column vector
+if size(psi,2)==numel(psi),
+    psi = psi'; % make column vector
     transpose = true;
 else
     transpose = false;
 end
 
-N = length(maglat);
+N = length(psi);
+a0_deg = asind(sqrt(Beq./Bm));
+BmoverB0 = Bm./Beq;
+BoverBm = 1-cosd(a0_deg).^2.*sin(psi).^2; % eq 3 from O&S
+BoverB0 = max(1,BoverBm*BmoverB0); % sometimes these formulae give BoverB0<1 by a tiny bit at lambda=0
+maglat = util.BB0toMagLat(BoverB0,'rad');
+maglat = -maglat.*sign(cos(psi));
 maglat_deg = maglat*180/pi;
 
-[Blocal,Bvec,XYZ] = util.dipoleB(L,maglat_deg,MLT*15);
-Blocal = Blocal.*Beq./(util.SL.B0.*1e9./L.^3); % use user-supplied Beq
+[Blocal,Bvec,XYZ] = util.dipoleB(L,maglat_deg,MLT*15); % need Blocal, XYZ
+Blocal = Beq*BoverB0; % replace, ignore Bvec
+
+y = sqrt(Beq./Bm); % sin(a0)
+smlat = sin(maglat);
+cmlat = cos(maglat);
+factor = abs(cos(psi)./smlat); % positive definite
+factor(maglat==0) = 3/sqrt(2)*tand(a0_deg); % O&S deal with singularity, after eq 14
+F = 2/3*sqrt(1-y.^2)./y.^2.*(1+3*smlat.^2).*cmlat.^8./(3+5.*smlat.^2).*factor; % O&S 13
 
 if (N==1) || vectorized,
-    out = local(XYZ,Blocal,Bm,maglat_deg,sign_cospa);
+    out = local(XYZ,Blocal,Bm,maglat_deg,sign_cospa).*F;
 else
-    out = local(XYZ,Blocal,Bm,maglat_deg(1),sign_cospa);
+    out = local(XYZ,Blocal,Bm,maglat_deg(1),sign_cospa).*F(1);
     out = repmat(out,size(maglat));
     
     for i = 2:N,
-        out(i,:) = local(XYZ(i,:),Blocal(i),Bm,maglat_deg(i),sign_cospa);
+        out(i,:) = local(XYZ(i,:),Blocal(i),Bm,maglat_deg(i),sign_cospa).*F(i);
     end
 end
-
-cosa0 = sqrt(1-Blocal./Bm);
-
-out = out.*repmat(cos(maglat).*sqrt(1+3*sin(maglat).^2)./cosa0,1,size(out,2)); % apply dlat vs dt scaling
 
 if transpose,
     out = out';

@@ -210,6 +210,10 @@ else
 end
 
 sina0 = sin(alpha0*torad);
+if sina0==0,
+    mirror_lat = inf;
+    return;
+end
 % note, below fixes error in Shprits thesis, eqn  F13
 % which has sina0^2. Instead use sina0^4 from Shprits 2006 eqn 10.
 Px = [1, 0, 0, 0, 0, 3*sina0^4, -4*sina0^4];

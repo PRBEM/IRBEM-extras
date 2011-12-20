@@ -5,6 +5,7 @@ a0 = alpha0_deg*pi/180;
 
 %f = @(lambda)ones(size(lambda)); % trivial function to integrate
 P = rand(6,1)*2-1;
+%P = [100 1];
 f = @(lambda)polyval(P,lambda/90); % random polynomial
 
 util = odc_util; % load utility functions and constants
@@ -14,14 +15,19 @@ sina0 = sin(a0);
 lambdam = util.dipole_mirror_latitude(a0,'rad');
 
 % compute field line
-lambda = linspace(-lambdam,lambdam,200)'; % radians
+lambda = linspace(-lambdam,lambdam,201)'; % radians
 L = 4.5;
 phi_deg = 37; % arbitrary azimuth
 MLT = phi_deg/15; % hours
 [B,Bvec,XYZ] = util.dipoleB(L,lambda*180/pi,phi_deg);
 
 
+fprintf('\n');
+fprintf('====================================================\n');
+fprintf('====================================================\n');
+fprintf('====================================================\n');
 fprintf('Within groups, these should all agree to 2-3 digits:\n');
+fprintf('alpha0 = %g deg\n',alpha0_deg);
 
 
 local = @(XYZ,Blocal,Bm,maglat,sign_cospa)f(maglat);
@@ -33,6 +39,10 @@ f_bavt = odc_bounce_average_trace(XYZ,B,local,sign(lambda));
 f_bavt1 = odc_bounce_average_trace(XYZ,B,local,sign(lambda),'symmetric');
 
 fprintf('Results for non-hemi-symmetric tests\n');
+fprintf('%g, analytical, full\n',f_bavd);
+fprintf('%g, trace, full\n',f_bavt);
+fprintf('%g, analytical, symmetric w.r.t. cos(alpha)\n',f_bavd1);
+fprintf('%g, trace, symmetric w.r.t. cos(alpha)\n',f_bavt1);
 [f_bavd f_bavt ; f_bavd1 f_bavt1]
 
 methods = {'quad','quadv','quadl','quadgk','trace'};
