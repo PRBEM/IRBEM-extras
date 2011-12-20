@@ -111,7 +111,7 @@ dsdBcospsi = nan(N,1);
 if N==1,
     dsdBcospsi = 1;
 else
-    dsdBcospsi(1) = (cos(psi(1))+cos(psi(2)))/2*sqrt(sum((XYZ(2,:)-XYZ(1,:)).^2))./(Bmag(2)-Bmag(1));
+    dsdBcospsi(1) = cos(psi(1))*sqrt(sum((XYZ(2,:)-XYZ(1,:)).^2))./(Bmag(2)-Bmag(1));
     for i = 2:(N-1),
         if Bmag(i+1)==Bmag(i-1),
             dsdBcospsi(i) = -tand(a0_deg)^2/2/Beq*sqrt(sum((XYZ(i+1,:)-XYZ(i-1,:)).^2))./(psi(i+1)-psi(i-1)); % O&S 7
@@ -119,7 +119,7 @@ else
             dsdBcospsi(i) = cos(psi(i))*sqrt(sum((XYZ(i+1,:)-XYZ(i-1,:)).^2))./(Bmag(i+1)-Bmag(i-1));
         end
     end
-    dsdBcospsi(N) = (cos(psi(N-1))+cos(psi(N)))/2*sqrt(sum((XYZ(N,:)-XYZ(N-1,:)).^2))./(Bmag(N)-Bmag(N-1));
+    dsdBcospsi(N) = cos(psi(N))*sqrt(sum((XYZ(N,:)-XYZ(N-1,:)).^2))./(Bmag(N)-Bmag(N-1));
 end
 
 dsdBcospsi = abs(dsdBcospsi); % positive definite
