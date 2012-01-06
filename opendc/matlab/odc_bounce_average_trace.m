@@ -97,11 +97,10 @@ end
 % denom = g'/sqrt(Bm)
 
 
-ba = 0; % numerator for now, normalized after loop
-g = 0; % denominator
 
 loc1 = loc_func(XYZ(1,:),Blocal(1,:),Bm,maglat(1),-1,1);
 loc = nan(N,size(loc1,2));
+ba = zeros(1,size(loc1,2)); % numerator for now, normalized after loop
 psi = asin(min(1,sqrt(1-Bmag/Bm)/cosd(a0_deg))); % min(1,...) handles round-off error
 % psi is presently only on [0,pi/2], doubles back in North hemi
 iN = hemi>=0; % northern hemisphere points must be put on interval [pi/2,pi]
@@ -132,7 +131,7 @@ for sign_cospa = SIGN_COSPA, % which half-cycle is this?
         ba(i) = ba(i) + trapz(psi,dsdBcospsi.*loc(:,i));
     end
 end
-g = trapz(psi,dsdBcospsi)*length(SIGN_COSPA);
+g = trapz(psi,dsdBcospsi)*length(SIGN_COSPA); % compute denominator
 
 if double_result,
     ba = ba*2;
