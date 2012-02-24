@@ -34,7 +34,6 @@ end
 DLLM = 10.^(0.506*Kp-9.325).*L.^10.*QD2; % D^M_LL Brautigam and Albert, 2000, eq. 6, with angular factor from S&L
 
 if nargout >= 2,
-    warning('B&A DLLE may not be working');
     % B&A 2000, eqn 4, 5
     util = odc_util;
     if MeV>0, % MeV style call
@@ -54,9 +53,10 @@ if nargout >= 2,
     
     % factor of 10 accounts for G and mV/m to T and V/m
     DLLE = 1/4*c^2/RE^2*Erms.^2/B0^2.*(T./(1+(omega_d.*T/2).^2)).*L.^6; % from B&A
-    % there's still some missing factor, because these results are 10^14
-    % too high or so...?
     DLLE = DLLE*24*60*60; % convert /s to /day
+    
+    % these values have been verified against Louis Ozeke's AGU poster,
+    % Fall 2011.
 else
     DLLE = nan(size(DLLM));
 end
