@@ -128,10 +128,18 @@ for sign_cospa = SIGN_COSPA, % which half-cycle is this?
         loc(i,:) = loc_func(XYZ(i,:),Blocal(i,:),Bm,maglat(i),sign_cospa,i);
     end
     for i = 1:size(loc,2),
-        ba(i) = ba(i) + trapz(psi,dsdBcospsi.*loc(:,i));
+        if N > 1,
+            ba(i) = ba(i) + trapz(psi,dsdBcospsi.*loc(:,i));
+        else
+            ba(i) = ba(i) + dsdBcospsi.*loc(:,i);
+        end
     end
 end
-g = trapz(psi,dsdBcospsi)*length(SIGN_COSPA); % compute denominator
+if N > 1,
+    g = trapz(psi,dsdBcospsi)*length(SIGN_COSPA); % compute denominator
+else
+    g = dsdBcospsi*length(SIGN_COSPA); % compute denominator
+end
 
 if double_result,
     ba = ba*2;
