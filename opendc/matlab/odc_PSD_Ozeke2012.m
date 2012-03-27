@@ -168,12 +168,6 @@ switch(param),
         coefs.M.exponent = [1.3;1.9;1.9;1.9];
 end
 
-if isequal(param,'Kp'),
-    tmp = coefs.E.a1(coefs.E.L==4.21,1);
-    warning('Setting a1 for PSDE at L=4.21, Kp=0 from %g to %g',tmp,-tmp);
-    coefs.E.a1(coefs.E.L==4.21,1) = -tmp;
-end
-
 function test
 
 % make PSD figures from paper
