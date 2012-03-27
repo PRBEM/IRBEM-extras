@@ -5,7 +5,7 @@ function [DLLM,DLLE] = odc_DLL_BA2000(L,Kp,alpha0_deg,MeV)
 % [DLLM,DLLE] = odc_DLL_BA2000(L,Kp,alpha0_deg,-Td)
 % compute radial diffusion coefficient
 % according to Brautigam and Albert, 2000
-% with (optional) Schulz & Lanzerotti angular factor for DLLM *** check
+% with (optional) Schulz & Lanzerotti angular factor for DLLM
 % L - dipole L shell
 % Kp - Kp magnetic index
 % alpha0_deg - equatorial pitch angle, degrees (default is 90)
@@ -25,8 +25,7 @@ if nargin >= 3,
     util = odc_util;
     y = sind(alpha0_deg);
     %(Q(y)/D(y))^2,  % angular dependence of DLL M, S&L, 3.13 
-    % *** check that applies to DLL M only according to S&L
-    QD2 = (util.Q(y)./util.D(y)).^2/(util.Q(0)/util.D(0))^2; 
+    QD2 = (util.Q(y)./util.D(y)).^2/(util.Q(1)/util.D(1))^2; 
 else
     alpha0_deg = 90;
     QD2 = 1; % no angular correction    

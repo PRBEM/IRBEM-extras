@@ -44,6 +44,10 @@ function util = odc_util
 % B = util.fce2B(fce)
 % computes B in nT given the electron gyrofrequency in Hz
 %
+% MeV = util.MBtoMeV(M,B,alpha,species)
+% given M in MeV/G, and B in nT, alpha in degrees, and species
+% returns energy, in MeV
+%
 % Tg = util.GyroPeriod(Species,Energy,MagLat,L)
 %   calculates particle gyro period Tg (seconds), dipole
 % Tb = util.BouncePeriod(Species,Energy,PitchAngle,L)
@@ -152,6 +156,7 @@ util.BouncePeriod = @BouncePeriod;
 util.DriftPeriod = @DriftPeriod;
 util.dipoleB = @dipoleB;
 util.dipoleIJ = @dipoleIJ;
+util.MBtoMeV = @MBtoMeV;
 
 function B = fce2B(fce)
 % returns B in nT for electron gyro given in Hz
@@ -399,8 +404,8 @@ m0 = mks.(species).m0;
 W = MeV*mks.MeV; % Energy, Joules
 
 gamma = 1+W/(m0*mks.c^2); % relativistic factor
-if nargout >= 2,
-    v = sqrt((gamma.^2-1))*mks.c./gamma; % relativistic velocity
+if nargout >= 2,    
+    v=mks.c.*sqrt(1-gamma.^-2);
 end
 if nargout >= 3,
     m = m0*gamma;
@@ -424,3 +429,25 @@ if nargout > 1,
     p = m.*v/odc_constants.mks.MeV*odc_constants.mks.c; % MeV/c
     J = 2.*p.*I; % RE*MeV/c
 end
+
+
+function MeV = MBtoMeV(M,B,alpha,species)
+% given M in MeV/G, and B in nT, alpha in degrees, and species
+% returns energy, in MeV
+
+global odc_constants
+mks = odc_constants.mks;
+
+Bm = B./sind(alpha).^2; % Bmirror
+species = SelectSpecies(species);
+m0 = mks.(species).m0;
+
+% M = p^2/2/m0/Bm
+p2 = 2*m0*Bm*M; % (kg * nT * MeV/G) = (1e5)*(kg MeV)
+p2 = 1e-5*p2*mks.MeV; % kg J = kg^2 m^2 / s^2
+gamma = sqrt(1+p2/m0^2/mks.c^2);
+E = (gamma-1)*m0*mks.c^2; % J
+MeV = E/mks.MeV;
+
+
+

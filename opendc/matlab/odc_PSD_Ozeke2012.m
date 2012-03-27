@@ -1,5 +1,5 @@
-function [PSDM,PSDE] = odc_PSD_Ozeke2012(param,value,L,f)
-% [PSDM,PSDE] = odc_PSD_Ozeke2012(param,value,L,f)
+function [PSDM,PSDE] = odc_PSD_Ozeke2012(L,param,value,f)
+% [PSDM,PSDE] = odc_PSD_Ozeke2012(L,param,value,f)
 % returns power spectral density
 % for magnetic and electric fields
 % from:
@@ -184,7 +184,7 @@ for i = 1:length(sp),
     leg = {};
     for j = 1:length(Kps),
         Kp = Kps(j);
-        [PSDM,PSDE] = odc_PSD_Ozeke2012('Kp',Kp,L,f);
+        [PSDM,PSDE] = odc_PSD_Ozeke2012(L,'Kp',Kp,f);
         loglog(f,PSDE,styles{j});
         leg{j} = sprintf('Kp=%g',Kp);
         hold on;
@@ -208,7 +208,7 @@ leg = {};
 styles = {'--','+-','^-','d-','*-','o-','s-'};
 for j = 1:length(Kps),
     Kp = Kps(j);
-    [PSDM,PSDE] = odc_PSD_Ozeke2012('Kp',Kp,L,f);
+    [PSDM,PSDE] = odc_PSD_Ozeke2012(L,'Kp',Kp,f);
     loglog(f,PSDM,styles{j});
     leg{j} = sprintf('Kp=%g',Kp);
     hold on;
@@ -228,7 +228,7 @@ leg = {};
 styles = {'--','+-','^-','d-','*-','o-','s-'};
 for j = 1:length(Vsws),
     Vsw = Vsws(j);
-    [PSDM,PSDE] = odc_PSD_Ozeke2012('Vsw',Vsw,L,f);
+    [PSDM,PSDE] = odc_PSD_Ozeke2012(L,'Vsw',Vsw,f);
     loglog(f,PSDM,styles{j});
     leg{j} = sprintf('Vsw=%g',Vsw);
     hold on;
@@ -250,7 +250,7 @@ for i = 1:length(Kps),
     subplot(3,2,i*2-1);
     y = zeros(length(Ls),length(f));
     for j = 1:length(Ls),
-        [PSDM,PSDE] = odc_PSD_Ozeke2012('Kp',Kp,Ls(j),f);
+        [PSDM,PSDE] = odc_PSD_Ozeke2012(Ls(j),'Kp',Kp,f);
         y(j,:) = PSDE;
     end
     for j = 1:length(f),
@@ -276,7 +276,7 @@ for i = 1:length(Ls),
     subplot(3,2,i*2);
     y = zeros(length(Vsws),length(f));
     for j = 1:length(Vsws),
-        [PSDM,PSDE] = odc_PSD_Ozeke2012('Kp',Kps(j),L,f);
+        [PSDM,PSDE] = odc_PSD_Ozeke2012(L,'Kp',Kps(j),f);
         y(j,:) = PSDE;
     end
     for j = 1:length(f),
