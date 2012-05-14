@@ -28,13 +28,15 @@ FUNCTION kdtree_kNN,tree,X0,k,R2=inR2,XNN=inXNN,DistScale=inDistScale,LIB_PATH=i
   
   if X0size(2) ne tree.Nc then message,"X0 must have same number of columns as tree.X"
     
-  ITYPE = 13; unsigned long int = ULONG = type 13
+  if !VERSION.MEMORY_BITS eq 64 then ITYPE = 15 else ITYPE = 13
+  ; ITYPE = 13; unsigned long int = ULONG = type 13 on win32
+  ; ITYPE = 15; ULONG64 on linux64
   
   flags = fix(0) ; IDL is effectively column major because it indexes [column,row] and calls itself row major (fix = int)
   
   if keyword_set(inMAX_ABS) then flags = flags + 2 ; max absolute distance (otherwise pythagorean)
   
-  ce_k = ulong(k)
+  ce_k = fix(k,type=ITYPE)
   if n_elements(inDistScale) eq 0 then begin
     ce_DistScale = 1.0+dblarr(tree.Nc)
   endif else begin
@@ -46,7 +48,7 @@ FUNCTION kdtree_kNN,tree,X0,k,R2=inR2,XNN=inXNN,DistScale=inDistScale,LIB_PATH=i
   
   result = call_external(lib_file,'kdtree_kNN_idl',tree.X,tree.Nx,tree.Nc,flags, $
     tree.root,tree.c,tree.parent,tree.left,tree.right,X0,NX0,ce_k,ce_DistScale,index,R2,value=bytarr(15))
-  index = index-ulong(1) ; tree indexing is 1-based, idl is zero based
+  index = index-fix(1,type=ITYPE) ; tree indexing is 1-based, idl is zero based
     
   if keyword_set(inR2) then begin
     inR2 = R2

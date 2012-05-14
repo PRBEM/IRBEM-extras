@@ -12,19 +12,21 @@ FUNCTION kdtree_build,X,LIB_PATH=inLIB_PATH,STOREX=inSTOREX
 
   if size(X,/tname) ne 'DOUBLE' then begin
     Xdbl = double(X) ; convert X to double, try again
-    tree = kdtree(Xdbl,inLIB_PATH)
+    tree = kdtree_build(Xdbl,inLIB_PATH)
     return,tree
   endif
   
   lib_file = kdtree_load(inLIB_PATH) ; load the kdtree library
   
+  if !VERSION.MEMORY_BITS eq 64 then ITYPE = 15 else ITYPE = 13
+  ; ITYPE = 13; unsigned long int = ULONG = type 13 on win32
+  ; ITYPE = 15; ULONG64 on linux64
+  
   Xsize = size(X)
-  Nx = ulong(Xsize(1))
-  Nc = ulong(Xsize(2))
+  Nx = fix(Xsize(1),type=ITYPE)
+  Nc = fix(Xsize(2),type=ITYPE)
   
-  ITYPE = 13; unsigned long int = ULONG = type 13
-  
-  root = ulong(0)
+  root = fix(0,type=ITYPE)
   c = intarr(Nx)
   parent = make_array(Nx,TYPE=ITYPE)
   left = make_array(Nx,TYPE=ITYPE)
