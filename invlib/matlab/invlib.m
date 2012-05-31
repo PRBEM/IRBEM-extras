@@ -262,7 +262,7 @@ fluxPtr = libpointer('doublePtr',nan(NEout,NT));
 lambdaPtr = libpointer('doublePtr',nan(NY,NT));
 dlogfluxPtr = libpointer('doublePtr',nan(NEout,NT));
 supportPtr = libpointer('doublePtr',nan((options.ASI_MAX_POW2+1)*(2+options.ASI_MAX_NQ+NY),NT));
-resultsPtr = libpointer('longPtr',zeros(NT,1));
+resultsPtr = libpointer('intPtr',zeros(NT,1));
 
 fit.result = calllib('invlib','ana_spec_inv_multi',NT,y',dy,Egrid,full(H0)',dt,b',int_params,real_params,outFilePtr,Eout,fluxPtr,dlogfluxPtr,lambdaPtr,supportPtr,resultsPtr);
 
@@ -334,7 +334,7 @@ fluxPtr = libpointer('doublePtr',nan(NE,NT));
 lambdaPtr = libpointer('doublePtr',nan(NY,NT));
 dlogfluxPtr = libpointer('doublePtr',nan(NE,NT));
 supportPtr = libpointer('doublePtr',nan(1+options.num_bases,NT));
-resultsPtr = libpointer('longPtr',zeros(NT,1));
+resultsPtr = libpointer('intPtr',zeros(NT,1));
 
 assert(NT==1); % for now, sin
 fit.result = calllib('invlib','pc_spec_inv_multi',NT,y',dy,Egrid,full(H0)',dt,b',mean_log_flux,basis_vectors',basis_variance,...
