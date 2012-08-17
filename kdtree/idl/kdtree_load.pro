@@ -13,7 +13,7 @@ function kdtree_load,LIB_PATH
     base_file = 'kdtree' + ext
     filesep = path_sep() ; / or \
     pathsep = path_sep(/search_path) ; : or ;
-    paths = strsplit(!PATH,pathsep,/extract) ; search IDL path
+    paths = [strsplit(!PATH,pathsep,/extract),strsplit(!DLM_PATH,pathsep,/extract)] ; search IDL path
     
     if n_elements(LIB_PATH) ne 0 then begin
       ; also search LIB_PATH if supplied
