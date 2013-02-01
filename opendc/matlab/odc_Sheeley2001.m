@@ -1,11 +1,16 @@
-function N0 = Sheeley2001(which,L,MLT)
+function N0 = Sheeley2001(which,L,MLT,apply_limits)
 % N0 = Sheeley2001(which,L,MLT)
 % Return density model from Sheeley 2001
 % which is 'plasmasphere' or 'trough'
 % L is L shell in Re (Probably Lm in IGRF or OPQ)
 % MLT is Magnetic local time in hours (LT in original paper)
 % N0 is in #/cm^3
-% outside 3 <= L <= 7, returns NaN
+% outside 3 <= L <= 7, returns NaN unless...
+% N0 = Sheeley2001(which,L,MLT,false) # ignor limits
+
+if nargin < 4,
+    apply_limits = true;
+end
 
 switch(lower(which)),
     case {'p','plasmasphere'},
@@ -16,5 +21,7 @@ switch(lower(which)),
         error('Unknown "which" = "%s"',which);
 end
 
-N0((L<3) | (L>7)) = NaN; % apply L limits from paper;
+if apply_limits,
+    N0((L<3) | (L>7)) = NaN; % apply L limits from paper;
+end
 

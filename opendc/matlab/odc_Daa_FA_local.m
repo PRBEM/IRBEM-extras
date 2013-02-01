@@ -23,7 +23,7 @@ function [Daa,Dap,Dpp] = odc_Daa_FA_local(species,E,alpha,L,MLT,B,Beq,hemi,wave_
 % MLT - Magnetic Local Time in Hours
 % B - local magnetic field strength, nT
 % Beq - equatorial magnetic field strength, nT
-% hemi - hemisphere +1 for northern, -1 for southern
+% hemi - hemisphere +1 for northern, -1 for southern, 0 is northern
 % wave_model - structure
 %  .mode - 'R' or 'L' - wave mode (polarization)
 %  .composition' - [H+ fraction,He+ fraction,O+ fraction]
@@ -40,15 +40,15 @@ function [Daa,Dap,Dpp] = odc_Daa_FA_local(species,E,alpha,L,MLT,B,Beq,hemi,wave_
 %    'Omega_s_eq' equatorial cold species gyro
 %  .omega_pe_normalization - string
 %     changes meaning of omega_pe. Uses same values as .normalization
-%  [each of the following can be a scalar or
-%   a function handle that takes (L,MLT,maglat), maglat in degrees]
 %  .directions -
 %    'F' forward (k || to B)
 %    'B' backward (k || to -B)
 %    'FB' both
 %    'P' poleward (k || to hemi*B)
 %    'E' equatorward (k || to -hemi*B)
-%  .dB - function provides peak wave amplitude, nT
+%  [each of the following can be a scalar or
+%   a function handle that takes (L,MLT,maglat), maglat in degrees]
+%  .dB - peak wave amplitude, nT
 %  .omega_m - angular frequency of peak wave power, rad/sec
 %  .domega - angular frequency width of wave power, rad/sec
 %  .omega1, .omega2 - lower and upper bounds of wave power Gaussian, rad/sec
@@ -68,11 +68,15 @@ function [Daa,Dap,Dpp] = odc_Daa_FA_local(species,E,alpha,L,MLT,B,Beq,hemi,wave_
 %   (nu is 2005 normalization and appears to be incorrect, rho is 2007
 %   normalization)
 % D = Daa_FA_local(...,'join_outputs'): D = [Daa,Dap,Dpp];
+% [...] = Daa_FA_local(...,'maglat',maglat) specify maglat in degrees
+%   (otherwise dipole magnetic latitude is computed from B/Beq)
+%   (note: sign of maglat is ignored in favor of hemi)
 
 method = 'auto';
 join_outputs = false;
 last_root_only = false; % this is for debugging only
 usenu = false;
+maglat = [];
 i = 1;
 while i <= length(varargin),
     switch(lower(varargin{i})),
@@ -85,6 +89,9 @@ while i <= length(varargin),
             last_root_only = true;
         case 'usenu', % for debugging only
             usenu = true;
+        case 'maglat',
+            i = i+1;
+            maglat = lower(varargin{i});
         otherwise
             error('Unknown argument "%s"',varargin{i});
     end
@@ -107,7 +114,12 @@ if strcmpi(method,'auto'),
 end
 
 util = odc_util; % get constants and utility functions
-maglat = util.BB0toMagLat(B/Beq)*hemi;
+hemi(hemi==0) = +1; % hemi=0 is northern
+if isempty(maglat),
+    maglat = util.BB0toMagLat(B/Beq)*hemi;
+else
+    maglat = abs(maglat)*hemi;
+end
 
 directions = upper(evaluate_scalar_or_handle(wave_model.directions,L,MLT,maglat));
 switch(directions),

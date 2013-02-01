@@ -9,7 +9,7 @@ function [ba,denom] = odc_bounce_average_trace(XYZ,Blocal,local,hemi,varargin)
 %  NxM doubles - provides local @ XYZ, Blocal
 %  @function(XYZ,Blocal,Bm,maglat,sign_cospa) - evaluated at each point on field line
 %    Bm is mirror field strength in nT
-%    maglat is signed magnetic latitude (from B/Bmin), degrees
+%    maglat is signed magnetic latitude (from B/Bmin by default), degrees
 %    can return scalar or 1 x M vector
 %    sign_cospa is sign of cos(local pitch angle) (will do for -1 and 1 to get
 %    full bounce orbit)
@@ -25,6 +25,12 @@ function [ba,denom] = odc_bounce_average_trace(XYZ,Blocal,local,hemi,varargin)
 %  identical)
 % [...] = bounce_average_trace(...,'Bm',Bm) - provide Bmirror
 %   (otherwise it's max(|B|)
+% [...] = bounce_average_trace(...,'maglat',maglat) - provide 
+%   function for computing magnetic latitude 
+%   maglat = @(|B|,Bmin,XYZ) returns positive magnetic latitude in
+%   degrees
+%   maglat = Nx1 magnetic latitude in degrees at each point
+%   (note sign of maglat is ignored in favor of hemi)
 
 % ba = [int_0^(2pi) local(...) ds/dB cos(psi) dpsi] /
 %      [int_0^(2pi) ds/dB cos(psi) dpsi]
@@ -39,6 +45,7 @@ force_symmetric = false; % user tells us it's symmetric?
 do_avg = true; % do bounce average? vs integral?
 Bm = nan;
 i = 1;
+maglat = [];
 while i <= length(varargin),
     switch(lower(varargin{i})),
         case 'no_avg',
@@ -48,6 +55,9 @@ while i <= length(varargin),
         case 'bm',
             i = i+1;
             Bm = varargin{i};
+        case 'maglat',
+            i = i+1;
+            maglat = varargin{i};
         otherwise
             error('Unknown argument "%s"',varargin{i});
     end
@@ -67,7 +77,16 @@ end
 Beq = min(Bmag);
 a0_deg = asind(sqrt(Beq./Bm));
 util = odc_util; % load utility functions and constants
-maglat = util.BB0toMagLat(Bmag./Beq).*hemi;
+hemi(hemi==0) = +1; % put equator in northern hemisphere
+if isempty(maglat),
+    maglat = util.BB0toMagLat(Bmag./Beq).*hemi; % dipole latitude
+else
+    if isequal(class(maglat),'function_handle'),
+        maglat = abs(maglat(Bmag,Beq,XYZ)).*hemi;
+    else
+        assert(length(maglat)==N);
+    end
+end
 
 if isnumeric(local), % local is a table of numbers for one half-bounce
     loc_func = @(XYZ,Blocal,Bm,maglat,sign_cospa,i)local(i,:);
@@ -101,7 +120,7 @@ end
 loc1 = loc_func(XYZ(1,:),Blocal(1,:),Bm,maglat(1),-1,1);
 loc = nan(N,size(loc1,2));
 ba = zeros(1,size(loc1,2)); % numerator for now, normalized after loop
-psi = asin(min(1,sqrt(1-Bmag/Bm)/cosd(a0_deg))); % min(1,...) handles round-off error
+psi = asin(min(1,sqrt(1-min(1,Bmag/Bm))/cosd(a0_deg))); % min(1,...) handles round-off error
 % psi is presently only on [0,pi/2], doubles back in North hemi
 iN = hemi>=0; % northern hemisphere points must be put on interval [pi/2,pi]
 psi(iN) = pi-psi(iN); % handle psi quadrant
