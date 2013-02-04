@@ -9,7 +9,6 @@ function [DLLM,DLLE] = odc_DLL_Ozeke2012(L,param,value,alpha0_deg,MeV,m)
 % value - Kp or Vsw (in km/s)
 % alpha0_deg - equatorial pitch angle, degrees (default is 90)
 % MeV - particle energy, MeV
-% Td - drift period, seconds
 % m - assumed m number (default is 1)
 %
 % DLLM - magnetic radial diffusion coefficient (1/day)
@@ -50,7 +49,7 @@ PSD = cell(1,nargout);
 Td = util.DriftPeriod('e-',MeV,alpha0_deg,L); % seconds
 BE = util.SL.B0*1e9; % equatorial field at Earth, nT
 [ele.gamma,ele.v,ele.m] = util.MeVtogamma(MeV,'e-');
-f_d = 1e3/Td; % mHz
+f_d = 1e3./Td; % mHz
 f = m*f_d;
 [PSD{:}] = odc_PSD_Ozeke2012(L,param,value,f);
 p_perp = ele.m.*ele.v.*y; % kg m/s
