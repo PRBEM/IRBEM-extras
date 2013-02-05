@@ -31,27 +31,23 @@ colors = {'r','g','b','m',[0.5 0 0.5],[0.5 0 0],'k',[1 0.5 0]};
 
 fl_path = '~/CrossTerms/Orlova/Field line points';
 
-if use_onera,
-    % read launch times
-    LaunchTimes = []; % L, Kp, MLT, datenum
-    fid = fopen([fl_path,'/Times.txt'],'rt');
-    clear tmp
-    while ~feof(fid),
-        line = fgetl(fid);
-        if isequal(line,-1),
-            break;
-        end
-        if any(line=='='),
-            eval(['tmp.',line]);
-        else
-            tmp = [];
-        end
-        if isfield(tmp,'matlabd'),
-            LaunchTimes = [LaunchTimes; tmp.L,tmp.Kp,tmp.MLT,datenum(tmp.matlabd)];
-        end
-    end
-    fclose(fid);
-end
+% from Times.doc provided by K. Orlova
+LaunchTimes = [ % L, Kp, MLT, YYYY, MM, DD, hh, mm, ss
+4 2  0 2008 03 25  9 46 00
+4 2 12 2008 03 25 10 28 33
+4 6  0 2008 03 25  9 49 31
+4 6 12 2008 03 25 10 28 18
+6 2  0 2008 03 25  9 52 64
+6 2 12 2008 03 25 10 15 54
+6 6  0 2008 03 25  9 56 40
+6 6 12 2008 03 25 10 16 49
+7 2  0 2008 03 25  9 55 14
+7 2 12 2008 03 25 10 12 35
+7 6  0 2008 03 25  9 57 68
+7 6 12 2008 03 25 10 15 41];
+
+LaunchTimes = [LaunchTimes(:,1:3),datenum(LaunchTimes(:,4:end))];
+% L, Kp, MLT, datenum
 
 BBm_to_alpha = @(sign_cospa,B,Bm)acosd(sign_cospa*sqrt(1-min(B/Bm,1)));
 da0da2 = @(B,Bm,Beq)max(0,(Bm./B-1)./(Bm./Beq-1));  % (da0/da)^2
