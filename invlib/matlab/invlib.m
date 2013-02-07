@@ -6,12 +6,12 @@ function varargout = invlib(what,varargin)
 % fit = invlib('ana_spec_inv',y,dy,Egrid,G,dt,b,Eout,...)
 % calls ana_spec_inv_multi as defined in invlib.pdf
 % y and b are NT x NY, dt is NT x 1
-% dy is NY x 1 
+% dy is NY x 1
 % Egrid is NE x 1, Eout is NEout x 1
-% G is defined as in int dE j(E) G(E) dE, size NY x NE, 
+% G is defined as in int dE j(E) G(E) dE, size NY x NE,
 % options:
 % select minimizer : 'BFGS' (default), 'FR', 'PR', 'NM'
-% select analytical spectrum functions: 'EXP','PL','PLE','RM','RM2' 
+% select analytical spectrum functions: 'EXP','PL','PLE','RM','RM2'
 %   (at least one function required)
 % set 'trapz' to use trapezoidal energy integral (default)
 % set 'plateau' to use plateau weights in energy integral
@@ -51,7 +51,7 @@ function varargout = invlib(what,varargin)
 % [uniflux,dloguniflux,result] = invlib('omni2uni',omniflux,dlogomniflux,method,...)
 % calls omni2uni as defined in invlib.pdf
 % (note, if omniflux is a vector, then it'll invert each omniflux)
-% omniflux - Estimated isotropic unidirectional flux 
+% omniflux - Estimated isotropic unidirectional flux
 %  (for TEM-1 method, use #/cm^2/sr/s/keV)
 % dlogomniflux - relative error for omniflux (dimensionless)
 % method is one of: (required options given in parentheses)
@@ -67,7 +67,7 @@ function varargout = invlib(what,varargin)
 % keyword options for choice of root finder
 %  'PHS' - Powell's Hybrid method, scaled (default)
 %  'PH' - Powell's Hybrid method
-%  'PHNHS' - Powell's Hybrid method w/ numerical Hessian, scaled 
+%  'PHNHS' - Powell's Hybrid method w/ numerical Hessian, scaled
 %  'PHNH' - Powell's Hybrid method w/ numerical Hessian
 %  'Newton' - Newton's method
 %  'GN' - Pseudo-global Newton's method
@@ -82,7 +82,7 @@ function varargout = invlib(what,varargin)
 % [uniflux,dloguniflux,result] = invlib('wide2uni',wideflux,dlogwideflux,PAgrid,H,alpha0,method,...)
 % calls wide2uni as defined in invlib.pdf
 % (note, if wideflux is a vector, then it'll invert each wideflux)
-% wideflux - Estimated isotropic unidirectional flux 
+% wideflux - Estimated isotropic unidirectional flux
 %  (for TEM-1 method, use #/cm^2/sr/s/keV)
 % dlogwideflux - relative error for wideflux (dimensionless)
 % PAgrid - list of pitch angles (deg)
@@ -93,6 +93,9 @@ function varargout = invlib(what,varargin)
 % dloguniflux - standard error of natural log of uniflux (dimensionless)
 % result - return codem fro library call
 %  1 - success, 0 or negative is an error code (see invlib.pdf)
+%
+% library file can now be specified by environment variable
+% IRBEM_INVLIB_DLL
 
 load_invlib;
 
@@ -379,22 +382,22 @@ options.root_finder = 0;
 i = 1;
 while i <= length(varargin),
     switch(lower(varargin{i})),
-        case {'kev'}, 
+        case {'kev'},
             i = i+1;
             options.keV = varargin{i};
-        case {'mev'}, 
+        case {'mev'},
             i = i+1;
             options.keV = varargin{i}*1e3;
-        case {'lm'}, 
+        case {'lm'},
             i = i+1;
             options.Lm = varargin{i};
-        case {'b/b0'}, 
+        case {'b/b0'},
             i = i+1;
             options.BB0 = varargin{i};
-        case {'na'}, 
+        case {'na'},
             i = i+1;
             options.NA = varargin{i};
-        case {'maxiter'}, 
+        case {'maxiter'},
             i = i+1;
             options.MaxIter = varargin{i};
         case {'phs'},
@@ -540,10 +543,18 @@ end
 function load_invlib
 % smartly load invlib DLL (.dll or .so)
 if ~libisloaded('invlib'),
-    if ispc,
-        libfile = which('invlib.dll');
+    if isempty(getenv('IRBEM_INVLIB_DLL')),
+        
+        if ispc,
+            libfile = which('invlib.dll');
+        else
+            libfile = which('invlib.so');
+        end
     else
-        libfile = which('invlib.so');
+        libfile = getenv('IRBEM_INVLIB_DLL');
+    end
+    if ~exist(libfile,'file'),
+        error('Unable to locate invlib library %s',libfile);
     end
     hfile = which('invlib.h');
     loadlibrary(libfile,hfile,'alias','invlib');

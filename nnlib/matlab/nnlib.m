@@ -44,13 +44,22 @@ function varargout = nnlib(what,varargin)
 % theta_struct = nnlib('theta2struct',Nx,Ny,theta);
 % theta_struct = nnlib('theta2struct',net);
 % convert theta from vector to struct (fields w, v, w0, v0)
+%
+% library file can be specified by environment variable IRBEM_NNLIB_DLL
 
 
 if ~libisloaded('nnlib'),
+    if isempty(getenv('IRBEM_NNLIB_DLL')),
     if ispc,
         libfile = which('nnlib.dll');
     else
         libfile = which('nnlib.so');
+    end
+    else
+        libfile = getenv('IRBEM_NNLIB_DLL');
+    end
+    if ~exist(libfile,'file'),
+        error('Unable to locate nnlib library %s',libfile);
     end
     hfile = which('nnlib.h');
     loadlibrary(libfile,hfile,'alias','nnlib');

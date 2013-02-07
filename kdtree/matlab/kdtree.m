@@ -14,6 +14,9 @@ function varargout = kdtree(what,varargin)
 % size(XNN) is [k size(X0,1) size(X0,2)]
 % requires kdtree.dll (or .so) and kdtree.h in the matlab path
 % R2 is squared distance
+%
+% Matlab version now supports environment variable IRBEM_KDTREE_DLL
+% to specify name/location of DLL
 
 varargout = cell(1,nargout);
 
@@ -343,12 +346,19 @@ else
             error('Unable to locate kdtree.h');
         end
         
-        if ispc,
-            libname = 'kdtree.dll';
+        if isempty(getenv('IRBEM_KDTREE_DLL')),            
+            if ispc,
+                libname = 'kdtree.dll';
+            else
+                libname = 'kdtree.so';
+            end
         else
-            libname = 'kdtree.so';
+            libname = getenv('IRBEM_KDTREE_DLL');
         end
         
+        if ~exist(libname,'file'),
+            error('Unable to locate kdtreel ibrary file %s',libname);
+        end
         loadlibrary(libname,'kdtree.h','alias','kdtree');
         
     end
