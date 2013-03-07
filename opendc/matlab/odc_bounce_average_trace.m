@@ -21,7 +21,7 @@ function [ba,denom] = odc_bounce_average_trace(XYZ,Blocal,local,hemi,varargin)
 %  and denom*v is the true full bounce period
 %
 % [...] = bounce_average_trace(...,'symmetric') - local does not depend
-%  on sign of the pitch angle (i.e., northward and southward legs are
+%  on sign of the parallel momentum (i.e., northward and southward legs are
 %  identical)
 % [...] = bounce_average_trace(...,'Bm',Bm) - provide Bmirror
 %   (otherwise it's max(|B|)
