@@ -1,5 +1,5 @@
-function N0 = Sheeley2001(which,L,MLT,apply_limits)
-% N0 = Sheeley2001(which,L,MLT)
+function N0 = odc_Sheeley2001(which,L,MLT,apply_limits)
+% N0 = odc_Sheeley2001(which,L,MLT)
 % Return density model from Sheeley 2001
 % which is 'plasmasphere' or 'trough'
 % L is L shell in Re (Probably Lm in IGRF or OPQ)
