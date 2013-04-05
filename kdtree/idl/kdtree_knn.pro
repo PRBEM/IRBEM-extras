@@ -1,4 +1,8 @@
+<<<<<<< .mine
+FORWARD_FUNCTION kdtree_load
+=======
 FORWARD_FUNCTION kdtree_buid
+>>>>>>> .r452
 FUNCTION kdtree_kNN,tree,X0,k,R2=inR2,XNN=inXNN,DistScale=inDistScale,LIB_PATH=inLIB_PATH,MAX_ABS=inMAX_ABS
   ; index = kdtree_kNN(tree,X0,k) - % retrieve index and k points nearest to X0  
   ; tree is an anonymous structure created by kdtree_build
