@@ -51,6 +51,8 @@ UBK_INLINE void ASSERT(BOOL test, const char *msg) {
 //
 class Submain : public FieldLineCoordinator {
 public:
+    Mutex *key; // This is needed because insertion to cell array is not thread-safe.
+
     long jdx;
     unsigned long M;
     double const* x0;
@@ -97,26 +99,37 @@ public:
         long cnt = fl.modifiedInvariants().size();
         long wid = jdx*M + idx;
         if (cnt) {
+            double *pxfl, *pyfl, *pzfl, *pK, *pBm;
+            {
+                Locker l(*key); // Prevent seg. fault while inserting to cell
+
+                // K & Bm
+                mxSetCell(K, wid, mxCreateDoubleMatrix(cnt, 1, mxREAL));
+                pK = mxGetPr(mxGetCell(K, wid));
+                mxSetCell(Bm, wid, mxCreateDoubleMatrix(cnt, 1, mxREAL));
+                pBm = mxGetPr(mxGetCell(Bm, wid));
+
+                // FL
+                mxSetCell(Xfl, wid, mxCreateDoubleMatrix(cnt, 1, mxREAL));
+                pxfl = mxGetPr(mxGetCell(Xfl, wid));
+                mxSetCell(Yfl, wid, mxCreateDoubleMatrix(cnt, 1, mxREAL));
+                pyfl = mxGetPr(mxGetCell(Yfl, wid));
+                mxSetCell(Zfl, wid, mxCreateDoubleMatrix(cnt, 1, mxREAL));
+                pzfl = mxGetPr(mxGetCell(Zfl, wid));
+            }
+
             // K
-            mxSetCell(K, wid, mxCreateDoubleMatrix(cnt, 1, mxREAL));
-            copy(fl.modifiedInvariants().begin(), fl.modifiedInvariants().end(), mxGetPr(mxGetCell(K, wid)));
+            copy(fl.modifiedInvariants().begin(), fl.modifiedInvariants().end(), pK);
 
             // Bm
-            mxSetCell(Bm, wid, mxCreateDoubleMatrix(cnt, 1, mxREAL));
-            copy(fl.mirrorMagnitudes().begin(), fl.mirrorMagnitudes().end(), mxGetPr(mxGetCell(Bm, wid)));
+            copy(fl.mirrorMagnitudes().begin(), fl.mirrorMagnitudes().end(), pBm);
 
             // FL
-            mxSetCell(Xfl, wid, mxCreateDoubleMatrix(cnt, 1, mxREAL));
-            mxSetCell(Yfl, wid, mxCreateDoubleMatrix(cnt, 1, mxREAL));
-            mxSetCell(Zfl, wid, mxCreateDoubleMatrix(cnt, 1, mxREAL));
-            double *px = mxGetPr(mxGetCell(Xfl, wid));
-            double *py = mxGetPr(mxGetCell(Yfl, wid));
-            double *pz = mxGetPr(mxGetCell(Zfl, wid));
             for (long it=0; it<cnt; it++) {
                 Point const &pt = fl.coordinates().at(it);
-                *px++ = pt.x;
-                *py++ = pt.y;
-                *pz++ = pt.z;
+                *pxfl++ = pt.x;
+                *pyfl++ = pt.y;
+                *pzfl++ = pt.z;
             }
         }
     };
@@ -126,6 +139,8 @@ public:
 // Main
 //
 class Main {
+    Mutex key; // Share with child workers.
+
     unsigned long M;
     unsigned long N;
     double const* x0;
@@ -305,6 +320,8 @@ public:
 #endif
 
             Submain sub(fm);
+            sub.key = &key;
+
             sub.setNThreads(n_threads);
             sub.setDs(ds);
             sub.setIonoR(ionoR);

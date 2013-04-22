@@ -52,6 +52,8 @@ UBK_INLINE void ASSERT(BOOL test, const char *msg) {
 //
 class Submain : public LstarCoordinator {
 public:
+    Mutex *key; // This is needed because insertion to cell array is not thread-safe.
+
     long jdx;
     unsigned long M;
     double const* x0;
@@ -80,15 +82,21 @@ public:
         long cnt = ptl.coordinates().size();
         long wid = jdx*M + idx;
         if (shouldKeepContour && cnt) {
-            mxSetCell(XorR, wid, mxCreateDoubleMatrix(cnt, 1, mxREAL));
-            mxSetCell(YorPhi, wid, mxCreateDoubleMatrix(cnt, 1, mxREAL));
-            mxSetCell(Phif, wid, mxCreateDoubleMatrix(cnt, 1, mxREAL));
-            mxSetCell(Thetaf, wid, mxCreateDoubleMatrix(cnt, 1, mxREAL));
+            double *pp, *pt, *px, *py;
 
-            double *pp = mxGetPr(mxGetCell(Phif, wid));
-            double *pt = mxGetPr(mxGetCell(Thetaf, wid));
-            double *px = mxGetPr(mxGetCell(XorR, wid));
-            double *py = mxGetPr(mxGetCell(YorPhi, wid));
+            {
+                Locker l(*key); // Prevent seg. fault while inserting to cell
+
+                mxSetCell(XorR, wid, mxCreateDoubleMatrix(cnt, 1, mxREAL));
+                mxSetCell(YorPhi, wid, mxCreateDoubleMatrix(cnt, 1, mxREAL));
+                mxSetCell(Phif, wid, mxCreateDoubleMatrix(cnt, 1, mxREAL));
+                mxSetCell(Thetaf, wid, mxCreateDoubleMatrix(cnt, 1, mxREAL));
+
+                pp = mxGetPr(mxGetCell(Phif, wid));
+                pt = mxGetPr(mxGetCell(Thetaf, wid));
+                px = mxGetPr(mxGetCell(XorR, wid));
+                py = mxGetPr(mxGetCell(YorPhi, wid));
+            }
             for (long it=0; it<cnt; it++) {
                 Point const &c = ptl.coordinates().at(it);
                 *px++ = c.x;
@@ -105,6 +113,8 @@ public:
 // Main
 //
 class Main {
+    Mutex key; // Share with child workers.
+
     unsigned long M;
     unsigned long N;
     double const* x0;
@@ -271,6 +281,8 @@ public:
 #endif
 
             Submain sub(fm, !isCartesianGrid);
+            sub.key = &key;
+
             sub.setNThreads(n_threads);
             sub.setIonoR(ionoR);
             sub.setDs(ds);

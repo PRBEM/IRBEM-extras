@@ -118,6 +118,7 @@ if external==1
         error('cotrans:InvalidArgument',...
             'Incompatible IOPT length.')
     end
+    ioptparmod = ioptparmod(:)';
 elseif (external~=1&&external~=0)
     if ~isequal(size(ioptparmod),[10 MxN(2)])
         error('cotrans:InvalidArgument',...
