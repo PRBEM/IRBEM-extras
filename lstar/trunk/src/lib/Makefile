@@ -13,7 +13,7 @@ CC		=
 CXX		=
 LD		=$(CXX)
 AR		=
-CFLAGS	=-Wall -O3
+CFLAGS	=-Wall -O3 -fPIC
 CXXFLAGS=$(CFLAGS)
 
 PROJECT	= lstar

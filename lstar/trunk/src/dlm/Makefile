@@ -18,6 +18,8 @@ DLM_SRC_DIR	=$(PROJECT_SRC_DIR)/dlm
 DLM_TARGET  =idl_$(PROJECT)
 LIB_TARGET	=$(PROJECT)xx
 
+LIB_PATH = $(LIB_SRC_DIR)/lib$(LIB_TARGET).a
+
 IDL_DIR =
 CC		=
 CXX		=
@@ -27,7 +29,7 @@ LD 		= $(CXX)
 SHELL		= /bin/sh
 X_CFLAGS	=
 X_LD_FLAGS	=
-X_LD_POST	= -lpthread -lm -O3 -static -L$(LIB_SRC_DIR) -l$(LIB_TARGET)
+X_LD_POST	= -lpthread -lm -O3 $(LIB_PATH)
 SO_EXT		=so
 ################################################################
 
@@ -103,14 +105,14 @@ sun64 :
 
 # The following is the entry point for the recursive build
 
-$(DLM_TARGET) : $(LIB_TARGET) $(DLM_TARGET).$(SO_EXT)
+$(DLM_TARGET) : $(DLM_TARGET).$(SO_EXT)
 	@date
 
-$(DLM_TARGET).$(SO_EXT) : $(OBJECTS)
+$(DLM_TARGET).$(SO_EXT) : $(OBJECTS) $(LIB_PATH)
 	$(LD) $(X_LD_FLAGS) -o $(DLM_TARGET).$(SO_EXT) $(X_LD_POST) $^
 
-$(LIB_TARGET):
-	$(MAKE) PROJECT=$(PROJECT) -C $(LIB_SRC_DIR) $@
+$(LIB_PATH): $(LIB_TARGET)
+	$(MAKE) PROJECT=$(PROJECT) -C $(LIB_SRC_DIR) $^
 
 .cpp.o :
 	$(CXX) $(C_FLAGS) $(X_CFLAGS) $^

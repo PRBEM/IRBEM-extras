@@ -1,0 +1,17 @@
+
+################################################################
+#
+# $Author: knation00 $
+# $LastChangedDate: 2013-04-21 21:56:00 -0400 (Sun, 21 Apr 2013) $
+# $Revision: 458 $
+# $Id: Makefile 458 2013-04-22 01:56:00Z knation00 $
+#
+################################################################
+
+BUILD DIRECTION
+
+Set MEX, MEXOPTS, CC, CXX and AR, and invoke make. For example,
+
+make MEX=/opt/MATLAB/bin/mex MEXOPTS=$(pwd)/mexopts.sh CC=gcc CXX=g++ AR=ar INSTALL_DIR=$(pwd)/local install
+
+Paths should be a full path.
