@@ -22,7 +22,7 @@
 namespace UBK {
 
     //!
-    //! Field line model abstract.
+    //! Field model abstract.
     //!
     class FieldModel {
     public:

@@ -22,8 +22,8 @@
 #include <cmath>
 #include <cassert>
 #include <cstdio>
-#include <cstring>
 #include <stdexcept>
+#include <algorithm>
 
 namespace UBK {
     using namespace std;
@@ -57,7 +57,9 @@ namespace UBK {
     //
     class TSNoneExtern : public TSFieldComponent {
     public:
-        void getFieldInGSW_atPoint (Point *bOut, Point const ptgsw) const {memset(bOut->xyz, 0, sizeof(double)*3);};
+        void getFieldInGSW_atPoint (Point *bOut, Point const ptgsw) const {
+            fill(bOut->xyz, bOut->xyz+3, 0.);
+        };
     };
 
     TSFieldModel::~TSFieldModel ()

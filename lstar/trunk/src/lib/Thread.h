@@ -168,7 +168,7 @@ namespace UBK {
     //!
     //! Loop parallelization.
     //! Indexed-loop (for loop) parallelization.
-    //! @note Functor should implement operator()();
+    //! @note Functor should implement operator()(long);
     //! @sa Thread
     //!
     template<class _Unary>
