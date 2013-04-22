@@ -204,6 +204,8 @@ namespace UBK {
             }
             if (!_n_jobs) {
                 return;
+            } else if (_n_threads > _n_jobs) {
+                _n_threads = _n_jobs;
             }
 
             vector< thread_type* > t(_n_threads, NULL);
