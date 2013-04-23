@@ -8,10 +8,14 @@
 #
 ################################################################
 
-BUILD DIRECTION
+1. LICENSE
+FreeBSD license (See license.txt).
 
-Set MEX, MEXOPTS, CC, CXX and AR, and invoke make. For example,
+
+2. BUILD DIRECTION
+
+Set MEX, MEXOPTS, CC, CXX and AR environment variables, and invoke make. For example,
 
 make MEX=/opt/MATLAB/bin/mex MEXOPTS=$(pwd)/mexopts.sh CC=gcc CXX=g++ AR=ar INSTALL_DIR=$(pwd)/local install
 
-Paths should be a full path.
+* Use full path.
