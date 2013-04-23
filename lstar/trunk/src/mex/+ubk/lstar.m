@@ -1,12 +1,12 @@
 function [ Ls K Phi0 XorRc YorPhic Phif Thetaf ] = ...
     lstar( x0, y0, pa0, datenum_, ioptparmod, external, internal, ...
     ionoR, ds, dXorR, dYorPhi, n_phi, n_theta, ...
-    shouldKeepContour, isCatesianGrid, n_threads)
+    isCatesianGrid, M_threads, N_threads)
 %UBK.LSTAR_CART Lstar in Cartesian Grid
 %   [ Ls K Phi0 XorRc YorPhic Phif Thetaf ] = ...
 %   lstar( x0, y0, pa0, datenum_, ioptparmod, external, internal, ...
 %   ionoR, ds, dXorR, dYorPhi, n_phi, n_theta, ...
-%   shouldKeepContour, isCatesianGrid, n_threads)
+%   shouldKeepContour, isCatesianGrid, M_threads, N_threads)
 %   Traces particle's drift contour and evaluates generalized L value, L*
 %   (Roederer 1970), using built-in Tsyganenko field models.
 %   SM coordinate system is default (and the only choice).
@@ -49,16 +49,15 @@ function [ Ls K Phi0 XorRc YorPhic Phif Thetaf ] = ...
 %   Default is 350/5.
 %   * n_theta: The number of polar grids for magnetic flux evaluation.
 %   Default is 180*2.
-%   * shouldKeepContour: Boolean to indicate to keep the particle drift
-%   contour and foot point coordinates. Be cautious about memory pressure.
-%   Default is hence false.
 %   * isCartesianGrid: Boolean to indicate which grid scheme to use.
 %   If true, cartesian grid scheme is used, else cylindrical grid shceme is
 %   used. Input/output coordinate system depends on this setting except for
 %   the foot point coordinates which is always in SM spherical coordinate
 %   system. Default is false.
-%   * n_threads: The number of concurrent executions (positive integer).
-%   Default is 8.
+%   * M_threads: The number of threads to loop over the first dimension
+%   (positive integer). Default is 8.
+%   * N_threads: The number of threads to loop over the second dimension
+%   (positive integer). Default is 2.
 %
 %   OUTPUTS (M by N otherwise specified)
 %   * Ls: Matrix of L*.
@@ -192,7 +191,7 @@ if n_phi <= 10
 end
 
 % isCatesianGrid check
-if nargin<15 || isempty(isCatesianGrid)
+if nargin<14 || isempty(isCatesianGrid)
     isCatesianGrid = false;
 end
 
@@ -218,20 +217,28 @@ if n_theta <= 10
         'Invalid n_theta.')
 end
 
-% shouldKeepContour check
-if nargin<14 || isempty(shouldKeepContour)
-    shouldKeepContour = false;
+% M_threads check
+if nargin<15 || isempty(M_threads)
+    M_threads = 8;
+end
+if M_threads < 1
+    warning('cotrans:InvalidArgument',...
+        'M_threads should be greater than or equal to 1. Set to default value.')
+    M_threads = 8;
 end
 
-% n_thread check
-if nargin<16 || isempty(n_threads)
-    n_threads = 8;
+% N_threads check
+if nargin<16 || isempty(N_threads)
+    N_threads = 2;
 end
-if n_threads < 1
+if N_threads < 1
     warning('cotrans:InvalidArgument',...
-        'n_threads should be greater than or equal to 1. Set to default value.')
-    n_threads = 8;
+        'N_threads should be greater than or equal to 1. Set to default value.')
+    N_threads = 2;
 end
+
+% shouldKeepContour check
+shouldKeepContour = nargout>3;
 
 %% Call MEX entry
 [ Ls, K, Phi0, XorRc, YorPhic, Phif, Thetaf ] =...
@@ -239,7 +246,7 @@ end
     [Y(:), DOY(:), H(:), MN(:), S(:)]', ...
     ioptparmod, external, internal, ...
     ionoR, ds, dXorR, dYorPhi, n_phi, n_theta, ...
-    shouldKeepContour, isCatesianGrid, n_threads);
+    shouldKeepContour, isCatesianGrid, M_threads, N_threads);
 
 %% Post-processing
 

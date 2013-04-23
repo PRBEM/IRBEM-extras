@@ -1,8 +1,8 @@
 function [ xout yout zout psi ] = cotrans(xin, yin, zin, datenum_, from_to, ...
-    n_threads)
+    M_threads)
 %UBK.COTRANS GSM <--> SM
 %   [ xout yout zout psi ] = cotrans(xin, yin, zin, datenum_, from_to, ...
-%   n_threads)
+%   M_threads)
 %   Coordinate-transform between GSM and SM coordinate at a given date
 %   using GEOPACK library (part of Tsyganenko model,
 %   http://geo.phys.spbu.ru/~tsyganenko/modeling.html).
@@ -14,8 +14,8 @@ function [ xout yout zout psi ] = cotrans(xin, yin, zin, datenum_, from_to, ...
 %   Case-insensitive.
 %
 %   OPTIONAL INPUTS (pass [] to use default)
-%   * n_threads: The number of threads to invoke (positive integer).
-%   Default is 8.
+%   * M_threads: The number of threads to loop over the first dimension
+%   (positive integer). Default is 8.
 %
 %   OUTPUTS
 %   * [xout yout zout]: Transformed coordinates with size M by N.
@@ -67,21 +67,21 @@ switch lower(from_to)
         '%s is unknown.', from_to)
 end
 
-% n_thread check
-if nargin<6 || isempty(n_threads)
-    n_threads = 8;
+% M_threads check
+if nargin<6 || isempty(M_threads)
+    M_threads = 8;
 end
-if n_threads < 1
+if M_threads < 1
     warning('cotrans:InvalidArgument',...
-        'n_threads should be greater than or equal to 1. Set to default value.')
-    n_threads = 8;
+        'M_threads should be greater than or equal to 1. Set to default value.')
+    M_threads = 8;
 end
 
 %% Call MEX entry
 [xout yout zout psi] = ...
     UBKGeopackCotranscxx(xin, yin, zin, ...
     [Y(:), DOY(:), H(:), MN(:), S(:)]', ...
-    to_co_system, n_threads);
+    to_co_system, M_threads, 1);
 
 %% Post-processing
 

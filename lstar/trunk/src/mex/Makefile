@@ -69,9 +69,9 @@ $(LIB_TARGET):
 
 install: all
 	@date
-	mkdir -p $(INSTALL_DIR)/mex
+	mkdir -p $(INSTALL_DIR)/mex/+ubk
 	cp *.mex* $(INSTALL_DIR)/mex/
-	cp -r +ubk $(INSTALL_DIR)/mex/
+	cp -r +ubk/*.m $(INSTALL_DIR)/mex/+ubk
 
 clean:
 	rm -rf *.mexa64 *.mexmaci64 *.o

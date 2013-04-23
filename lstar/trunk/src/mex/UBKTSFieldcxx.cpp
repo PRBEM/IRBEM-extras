@@ -38,23 +38,25 @@ public:
         id += ":AssertFailure";
     };
 };
-static const MsgId msgid;
+static MsgId msgid;
 
 UBK_INLINE void ASSERT(BOOL test, const char *msg) {
     if (!test) {
         mexErrMsgIdAndTxt(msgid.id.c_str(), msg);
     }
-};
+}
 
 //
 // Sub iteration
 //
 class Submain : public BFieldCoordinator {
 public:
+    // Inputs
     unsigned long M;
     double const* x;
     double const* y;
     double const* z;
+    // Outputs
     double *Bx;
     double *By;
     double *Bz;
@@ -78,6 +80,7 @@ public:
 // Main
 //
 class Main {
+    // Inputs
     unsigned long M;
     unsigned long N;
     double const* x;
@@ -88,7 +91,9 @@ class Main {
     double const* ioptparmod;
     TSExternalFieldModel external;
     long co_system;
-    long n_threads;
+    long M_threads;
+    long N_threads;
+    // Outputs
     double *Bx;
     double *By;
     double *Bz;
@@ -98,10 +103,10 @@ public:
         //
         // Check for nargin and nargout
         //
-        ASSERT(3==nlhs && 9==nrhs, "Wrong number of input/output.");
+        ASSERT(3==nlhs && 10==nrhs, "Wrong number of input/output.");
 
         //
-        // (xin [np, nt], yin [np, nt], zin [np, nt], [year, doy, hour, min, sec] (5, nt), ioptparmod [1 or 10, nt], external, internal, co_system, n_threads)
+        // (xin [np, nt], yin [np, nt], zin [np, nt], [year, doy, hour, min, sec] (5, nt), ioptparmod [1 or 10, nt], external, internal, co_system, M_threads, N_threads)
         //
         M = mxGetM(prhs[0]);
         N = mxGetN(prhs[3]);
@@ -114,7 +119,8 @@ public:
         external = round( mxGetScalar(prhs[5]) );
         internal = round( mxGetScalar(prhs[6]) );
         co_system = round( mxGetScalar(prhs[7]) );
-        n_threads = round( mxGetScalar(prhs[8]) );
+        M_threads = round( mxGetScalar(prhs[8]) );
+        N_threads = round( mxGetScalar(prhs[9]) );
 
         //
         // Validity
@@ -131,7 +137,8 @@ public:
                (external==kTS89Model && 1==mxGetM(prhs[4])) ||
                (10==mxGetM(prhs[4])), "Invalid ioptparmod dimension.");
         ASSERT((kMagneticFieldSM==co_system || kMagneticFieldGSM==co_system), "Invalid to_co_system.");
-        ASSERT(n_threads > 0, "n_threads <= 0.");
+        ASSERT(M_threads > 0, "M_threads <= 0.");
+        ASSERT(N_threads > 0, "N_threads <= 0.");
 
         //
         // Output buffer
@@ -159,18 +166,19 @@ public:
         mexPrintf("\tinternal = %ld\n", internal);
         mexPrintf("\texternal = %ld\n", external);
         mexPrintf("\tco_system = %ld\n", co_system);
-        mexPrintf("\tn_threads = %ld\n", n_threads);
+        mexPrintf("\tM_threads = %ld\n", M_threads);
+        mexPrintf("\tN_threads = %ld\n", N_threads);
 #endif
 
         //
         // Time iteration
         //
-        if (N) {
+        if ( M*N ) {
 #ifdef DEBUG
             mexPrintf("%%%% DEBUG:%s:%d: Outer loop start.\n", __FUNCTION__, __LINE__);
 #endif
 
-            ThreadFor<Main &> t((M<10 ? n_threads : 1), N, *this);
+            ThreadFor<Main &> t(N_threads, N, *this);
 
 #ifdef DEBUG
             mexPrintf("%%%% DEBUG:%s:%d: Outer loop end.\n", __FUNCTION__, __LINE__);
@@ -180,14 +188,15 @@ public:
 
     void operator()(long jdx) {
         const double vsw = 400.;
-        long offset = jdx * 5;
+        long d_offset = jdx * 5;
+        long iopt_offset = jdx * 10;
 
         //
         // Make TS field model
         //
         int iopt = (kTS89Model==external ? round(ioptparmod[jdx]) : 1);
-        double const* parmod = (kTSNone==external || kTS89Model==external ? NULL : ioptparmod + jdx*10);
-        Date d(date[offset + 0], date[offset + 1], date[offset + 2], date[offset + 3], date[offset + 4]);
+        double const* parmod = ioptparmod + iopt_offset;
+        Date d(date[d_offset + 0], date[d_offset + 1], date[d_offset + 2], date[d_offset + 3], date[d_offset + 4]);
         TSFieldModel fm(d, vsw, internal, iopt, parmod, external);
 
 #ifdef DEBUG
@@ -197,24 +206,24 @@ public:
         //
         // Sub iteration
         //
-        if (M) {
+        {
 #ifdef DEBUG
             mexPrintf("%%%% DEBUG:%s:%d: Inner loop start.\n", __FUNCTION__, __LINE__);
 #endif
 
             Submain sub(fm);
-            sub.setNThreads(n_threads);
+            sub.setNThreads(M_threads);
             sub.setCoSystem(co_system);
             sub.M = M;
 
-            offset = jdx * M;
+            long sub_offset = jdx * M;
 
-            sub.x = x + offset;
-            sub.y = y + offset;
-            sub.z = z + offset;
-            sub.Bx = Bx + offset;
-            sub.By = By + offset;
-            sub.Bz = Bz + offset;
+            sub.x = x + sub_offset;
+            sub.y = y + sub_offset;
+            sub.z = z + sub_offset;
+            sub.Bx = Bx + sub_offset;
+            sub.By = By + sub_offset;
+            sub.Bz = Bz + sub_offset;
             
             sub.start();
 

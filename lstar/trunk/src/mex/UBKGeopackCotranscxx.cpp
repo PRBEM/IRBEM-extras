@@ -38,23 +38,25 @@ public:
         id += ":AssertFailure";
     };
 };
-static const MsgId msgid;
+static MsgId msgid;
 
 UBK_INLINE void ASSERT(BOOL test, const char *msg) {
     if (!test) {
         mexErrMsgIdAndTxt(msgid.id.c_str(), msg);
     }
-};
+}
 
 //
 // Sub iteration
 //
 class Submain : public CotransCoordinator {
 public:
+    // Inputs
     unsigned long M;
     double const* xin;
     double const* yin;
     double const* zin;
+    // Outputs
     double *xout;
     double *yout;
     double *zout;
@@ -78,6 +80,7 @@ public:
 // Main
 //
 class Main {
+    // Inputs
     unsigned long M;
     unsigned long N;
     double const* xin;
@@ -85,7 +88,9 @@ class Main {
     double const* zin;
     double const* date;
     long to_co_system;
-    long n_threads;
+    long M_threads;
+    long N_threads;
+    // Outputs
     double *xout;
     double *yout;
     double *zout;
@@ -96,10 +101,10 @@ public:
         //
         // Check for nargin and nargout
         //
-        ASSERT(4==nlhs && 6==nrhs, "Wrong number of input/output.");
+        ASSERT(4==nlhs && 7==nrhs, "Wrong number of input/output.");
 
         //
-        // (xin [np, nt], yin [np, nt], zin [np, nt], [year, doy, hour, min, sec] (5, nt), to_co_system, n_threads)
+        // (xin [np, nt], yin [np, nt], zin [np, nt], [year, doy, hour, min, sec] (5, nt), to_co_system, M_threads, N_threads)
         //
         M = mxGetM(prhs[0]);
         N = mxGetN(prhs[3]);
@@ -109,7 +114,8 @@ public:
         zin = mxGetPr(prhs[2]);
         date = mxGetPr(prhs[3]);
         to_co_system = round( mxGetScalar(prhs[4]) );
-        n_threads = round( mxGetScalar(prhs[5]) );
+        M_threads = round( mxGetScalar(prhs[5]) );
+        N_threads = round( mxGetScalar(prhs[6]) );
 
         //
         // Validity
@@ -117,7 +123,8 @@ public:
         ASSERT(5==mxGetM(prhs[3]), "size(data,1) != 5.");
         ASSERT((kMagneticFieldSM==to_co_system || kMagneticFieldGSM==to_co_system),
                "Invalid to_co_system.");
-        ASSERT(n_threads>0, "n_threads <= 0.");
+        ASSERT(M_threads>0, "M_threads <= 0.");
+        ASSERT(N_threads>0, "N_threads <= 0.");
 
         //
         // Output buffer
@@ -146,7 +153,8 @@ public:
         mexPrintf("%%%% DEBUG:%s:%d:\n", __FUNCTION__, __LINE__);
         mexPrintf("\t[M, N] = [%ld, %ld]\n", M, N);
         mexPrintf("\tto_co_system = %ld\n", to_co_system);
-        mexPrintf("\tn_threads = %ld\n", n_threads);
+        mexPrintf("\tM_threads = %ld\n", M_threads);
+        mexPrintf("\tN_threads = %ld\n", N_threads);
 #endif
 
         //
@@ -157,7 +165,7 @@ public:
             mexPrintf("%%%% DEBUG:%s:%d: Outer loop start.\n", __FUNCTION__, __LINE__);
 #endif
 
-            ThreadFor<Main &> t((M<10 ? n_threads : 1), N, *this);
+            ThreadFor<Main &> t(N_threads, N, *this);
 
 #ifdef DEBUG
             mexPrintf("%%%% DEBUG:%s:%d: Outer loop end.\n", __FUNCTION__, __LINE__);
@@ -167,12 +175,12 @@ public:
 
     void operator()(long jdx) {
         const double vsw = 400.;
-        long offset = jdx * 5;
+        long d_offset = jdx * 5;
 
         //
         // Make TS field model
         //
-        Date d(date[offset + 0], date[offset + 1], date[offset + 2], date[offset + 3], date[offset + 4]);
+        Date d(date[d_offset + 0], date[d_offset + 1], date[d_offset + 2], date[d_offset + 3], date[d_offset + 4]);
         TSFieldModel fm(d, vsw, kGeopackDipoleField, 1, NULL, kTSNone);
         psi[jdx] = fm.dipoleTiltAngleRadian();
 
@@ -189,18 +197,18 @@ public:
 #endif
 
             Submain sub(fm);
-            sub.setNThreads(n_threads);
+            sub.setNThreads(M_threads);
             sub.setToCoSystem(to_co_system);
             sub.M = M;
 
-            offset = jdx * M;
+            long sub_offset = jdx * M;
 
-            sub.xin = xin + offset;
-            sub.yin = yin + offset;
-            sub.zin = zin + offset;
-            sub.xout = xout + offset;
-            sub.yout = yout + offset;
-            sub.zout = zout + offset;
+            sub.xin = xin + sub_offset;
+            sub.yin = yin + sub_offset;
+            sub.zin = zin + sub_offset;
+            sub.xout = xout + sub_offset;
+            sub.yout = yout + sub_offset;
+            sub.zout = zout + sub_offset;
 
             sub.start();
 

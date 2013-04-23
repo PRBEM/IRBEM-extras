@@ -38,13 +38,13 @@ public:
         id += ":AssertFailure";
     };
 };
-static const MsgId msgid;
+static MsgId msgid;
 
 UBK_INLINE void ASSERT(BOOL test, const char *msg) {
     if (!test) {
         mexErrMsgIdAndTxt(msgid.id.c_str(), msg);
     }
-};
+}
 
 
 //
@@ -52,14 +52,17 @@ UBK_INLINE void ASSERT(BOOL test, const char *msg) {
 //
 class Submain : public LstarCoordinator {
 public:
-    Mutex *key; // This is needed because insertion to cell array is not thread-safe.
+    // This is needed because insertion to cell array is not thread-safe.
+    Mutex *key;
 
+    // Inputs
     long jdx;
     unsigned long M;
     double const* x0;
     double const* y0;
     double const* pa0;
     BOOL shouldKeepContour;
+    // Outputs
     double *Ls;
     double *K;
     mxArray *XorR;
@@ -97,6 +100,7 @@ public:
                 px = mxGetPr(mxGetCell(XorR, wid));
                 py = mxGetPr(mxGetCell(YorPhi, wid));
             }
+
             for (long it=0; it<cnt; it++) {
                 Point const &c = ptl.coordinates().at(it);
                 *px++ = c.x;
@@ -113,8 +117,10 @@ public:
 // Main
 //
 class Main {
-    Mutex key; // Share with child workers.
+    // Share with child workers.
+    Mutex key;
 
+    // Inputs
     unsigned long M;
     unsigned long N;
     double const* x0;
@@ -132,7 +138,9 @@ class Main {
     long n_theta;
     BOOL shouldKeepContour;
     BOOL isCartesianGrid;
-    long n_threads;
+    long M_threads;
+    long N_threads;
+    // Outputs
     double *Ls;
     double *K;
     double *Phi0;
@@ -146,10 +154,10 @@ public:
         //
         // Check for nargin and nargout
         //
-        ASSERT(7==nlhs && 16==nrhs, "Wrong number of input/output.");
+        ASSERT(7==nlhs && 17==nrhs, "Wrong number of input/output.");
 
         //
-        // (xin [np, nt], yin [np, nt], zin [np, nt], [year, doy, hour, min, sec] (5, nt), ioptparmod [1 or 10, nt], external, internal, ionoR, ds, dx, dy, n_phi, n_theta, shouldKeepContour, isCartesian, n_threads)
+        // (xin [np, nt], yin [np, nt], zin [np, nt], [year, doy, hour, min, sec] (5, nt), ioptparmod [1 or 10, nt], external, internal, ionoR, ds, dx, dy, n_phi, n_theta, shouldKeepContour, isCartesian, M_threads)
         //
         M = mxGetM(prhs[0]);
         N = mxGetN(prhs[3]);
@@ -169,7 +177,8 @@ public:
         n_theta = round( mxGetScalar(prhs[12]) );
         shouldKeepContour = *mxGetLogicals(prhs[13]);
         isCartesianGrid = *mxGetLogicals(prhs[14]);
-        n_threads = round( mxGetScalar(prhs[15]) );
+        M_threads = round( mxGetScalar(prhs[15]) );
+        N_threads = round( mxGetScalar(prhs[16]) );
 
         //
         // Validity
@@ -191,7 +200,8 @@ public:
         ASSERT(dy > 0., "dy <= 0.");
         ASSERT(n_phi > 10, "n_phi <= 10.");
         ASSERT(n_theta > 10, "n_theta <= 10.");
-        ASSERT(n_threads > 0, "n_threads <= 0.");
+        ASSERT(M_threads > 0, "M_threads <= 0.");
+        ASSERT(N_threads > 0, "M_threads <= 0.");
 
         //
         // Output buffer
@@ -237,18 +247,19 @@ public:
         mexPrintf("\tn_theta = %ld\n", n_theta);
         mexPrintf("\tshouldKeepContour = %d\n", !!shouldKeepContour);
         mexPrintf("\tisCartesianGrid = %d\n", !!isCartesianGrid);
-        mexPrintf("\tn_threads = %ld\n", n_threads);
+        mexPrintf("\tM_threads = %ld\n", M_threads);
+        mexPrintf("\tN_threads = %ld\n", N_threads);
 #endif
 
         //
         // Time iteration
         //
-        if (N) {
+        if ( M*N ) {
 #ifdef DEBUG
             mexPrintf("%%%% DEBUG:%s:%d: Outer loop start.\n", __FUNCTION__, __LINE__);
 #endif
 
-            ThreadFor<Main &> t((M<10 ? n_threads : 1), N, *this);
+            ThreadFor<Main &> t(N_threads, N, *this);
 
 #ifdef DEBUG
             mexPrintf("%%%% DEBUG:%s:%d: Outer loop end.\n", __FUNCTION__, __LINE__);
@@ -258,14 +269,15 @@ public:
 
     void operator()(long jdx) {
         const double vsw = 400.;
-        long offset = jdx * 5;
+        long d_offset = jdx * 5;
+        long iopt_offset = jdx * 10;
 
         //
         // Make TS field model
         //
         int iopt = (kTS89Model==external ? round(ioptparmod[jdx]) : 1);
-        double const* parmod = (kTSNone==external || kTS89Model==external ? NULL : ioptparmod + jdx*10);
-        Date d(date[offset + 0], date[offset + 1], date[offset + 2], date[offset + 3], date[offset + 4]);
+        double const* parmod = ioptparmod + iopt_offset;
+        Date d(date[d_offset + 0], date[d_offset + 1], date[d_offset + 2], date[d_offset + 3], date[d_offset + 4]);
         TSFieldModel fm(d, vsw, internal, iopt, parmod, external);
 
 #ifdef DEBUG
@@ -275,7 +287,7 @@ public:
         //
         // Sub iteration
         //
-        if (M) {
+        {
 #ifdef DEBUG
             mexPrintf("%%%% DEBUG:%s:%d: Inner loop start.\n", __FUNCTION__, __LINE__);
 #endif
@@ -283,7 +295,7 @@ public:
             Submain sub(fm, !isCartesianGrid);
             sub.key = &key;
 
-            sub.setNThreads(n_threads);
+            sub.setNThreads(M_threads);
             sub.setIonoR(ionoR);
             sub.setDs(ds);
             sub.setNPhi(n_phi);
@@ -298,14 +310,14 @@ public:
             sub.Phif = Phif;
             sub.Thetaf = Thetaf;
 
-            offset = jdx * M;
+            long sub_offset = jdx * M;
 
-            sub.x0 = x0 + offset;
-            sub.y0 = y0 + offset;
-            sub.pa0 = pa0 + offset;
+            sub.x0 = x0 + sub_offset;
+            sub.y0 = y0 + sub_offset;
+            sub.pa0 = pa0 + sub_offset;
 
-            sub.Ls = Ls + offset;
-            sub.K = K + offset;
+            sub.Ls = Ls + sub_offset;
+            sub.K = K + sub_offset;
 
             sub.start();
 

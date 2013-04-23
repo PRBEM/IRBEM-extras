@@ -1,12 +1,12 @@
 function [ K Bm Xmeq Ymeq Zmeq Bmeq Xeq Yeq Zeq Beq Xfoot Yfoot Zfoot ...
     Xfl Yfl Zfl] = ...
     fieldline( x0, y0, z0, datenum_, ioptparmod, ...
-    external, internal, ionoR, ds, n_threads)
+    external, internal, ionoR, ds, M_threads, N_threads)
 %UBK.FIELDLINE Field Line Tracing and Bm(K) Evaluator
 %   [ K Bm Xmeq Ymeq Zmeq Bmeq Xeq Yeq Zeq Beq Xfoot Yfoot Zfoot ...
 %   Xfl Yfl Zfl] = ...
 %   fieldline( x0, y0, z0, date_, ioptparmod, ...
-%   external, internal, ionoR, ds, n_threads)
+%   external, internal, ionoR, ds, M_threads, N_threads)
 %   Trace magnetic field lines (bidirectional) and evaluate the modified
 %   2nd invariant, K (Roederer 1970).
 %   The tracing uses fixed step size RK4 (Numerical Recipe, Press).
@@ -34,8 +34,10 @@ function [ K Bm Xmeq Ymeq Zmeq Bmeq Xeq Yeq Zeq Beq Xfoot Yfoot Zfoot ...
 %   * ionoR: Ionospheric boundary (radial distance to the ionosphere) in RE.
 %   Default is 1.015 RE (~ 100 km above Earth).
 %   * ds: Field line integration step size. Default is 0.05 RE.
-%   * n_threads: The number of concurrent executions (positive integer).
-%   Default is 8.
+%   * M_threads: The number of threads to loop over the first dimension
+%   (positive integer). Default is 8.
+%   * N_threads: The number of threads to loop over the second dimension
+%   (positive integer). Default is 2.
 %
 %   OUTPUTS (M by N)
 %   * [K Bm]: Cell matrices of modified 2nd invariant and magnetic mirror
@@ -69,7 +71,7 @@ function [ K Bm Xmeq Ymeq Zmeq Bmeq Xeq Yeq Zeq Beq Xfoot Yfoot Zfoot ...
 %
 
 %% Argument check
-error(nargchk(7,10,nargin))
+error(nargchk(7,11,nargin))
 
 MxN = size(x0);
 
@@ -160,14 +162,24 @@ if ds <= 0
         'step_size should be greater than 0.')
 end
 
-% n_thread check
-if nargin<10 || isempty(n_threads)
-    n_threads = 8;
+% M_threads check
+if nargin<10 || isempty(M_threads)
+    M_threads = 8;
 end
-if n_threads < 1
+if M_threads < 1
     warning('cotrans:InvalidArgument',...
-        'n_threads should be greater than or equal to 1. Set to default value.')
-    n_threads = 8;
+        'M_threads should be greater than or equal to 1. Set to default value.')
+    M_threads = 8;
+end
+
+% N_threads check
+if nargin<11 || isempty(N_threads)
+    N_threads = 2;
+end
+if N_threads < 1
+    warning('cotrans:InvalidArgument',...
+        'N_threads should be greater than or equal to 1. Set to default value.')
+    N_threads = 2;
 end
 
 %% Call MEX entry
@@ -179,7 +191,7 @@ end
     UBKFieldLinecxx(x0, y0, z0, ...
     [Y(:), DOY(:), H(:), MN(:), S(:)]', ...
     ioptparmod, external, internal, ...
-    ionoR, ds, n_threads);
+    ionoR, ds, M_threads, N_threads);
 
 %% Post-processing
 

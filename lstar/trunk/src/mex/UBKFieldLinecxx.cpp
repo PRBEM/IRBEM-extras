@@ -38,39 +38,42 @@ public:
         id += ":AssertFailure";
     };
 };
-static const MsgId msgid;
+static MsgId msgid;
 
 UBK_INLINE void ASSERT(BOOL test, const char *msg) {
     if (!test) {
         mexErrMsgIdAndTxt(msgid.id.c_str(), msg);
     }
-};
+}
 
 //
 // Sub iteration
 //
 class Submain : public FieldLineCoordinator {
 public:
-    Mutex *key; // This is needed because insertion to cell array is not thread-safe.
+    // This is needed because insertion to cell array is not thread-safe.
+    Mutex *key;
 
+    // Inputs
     long jdx;
     unsigned long M;
     double const* x0;
     double const* y0;
     double const* z0;
-    double *Bmeq;
+    // Outputs
+    mxArray *K;
+    mxArray *Bm;
     double *Xmeq;
     double *Ymeq;
     double *Zmeq;
-    double *Beq;
+    double *Bmeq;
     double *Xeq;
     double *Yeq;
     double *Zeq;
+    double *Beq;
     double *Xfoot;
     double *Yfoot;
     double *Zfoot;
-    mxArray *K;
-    mxArray *Bm;
     mxArray *Xfl;
     mxArray *Yfl;
     mxArray *Zfl;
@@ -139,8 +142,10 @@ public:
 // Main
 //
 class Main {
-    Mutex key; // Share with child workers.
+    // Share with child workers.
+    Mutex key;
 
+    // Inputs
     unsigned long M;
     unsigned long N;
     double const* x0;
@@ -152,20 +157,22 @@ class Main {
     TSExternalFieldModel external;
     double ionoR;
     double ds;
-    long n_threads;
-    double *Bmeq;
+    long M_threads;
+    long N_threads;
+    // Outputs
+    mxArray *K;
+    mxArray *Bm;
     double *Xmeq;
     double *Ymeq;
     double *Zmeq;
-    double *Beq;
+    double *Bmeq;
     double *Xeq;
     double *Yeq;
     double *Zeq;
+    double *Beq;
     double *Xfoot;
     double *Yfoot;
     double *Zfoot;
-    mxArray *K;
-    mxArray *Bm;
     mxArray *Xfl;
     mxArray *Yfl;
     mxArray *Zfl;
@@ -175,10 +182,10 @@ public:
         //
         // Check for nargin and nargout
         //
-        ASSERT(16==nlhs && 10==nrhs, "Wrong number of input/output.");
+        ASSERT(16==nlhs && 11==nrhs, "Wrong number of input/output.");
 
         //
-        // (xin [np, nt], yin [np, nt], zin [np, nt], [year, doy, hour, min, sec] (5, nt), ioptparmod [1 or 10, nt], external, internal, ionoR, ds, n_threads)
+        // (xin [np, nt], yin [np, nt], zin [np, nt], [year, doy, hour, min, sec] (5, nt), ioptparmod [1 or 10, nt], external, internal, ionoR, ds, M_threads, N_threads)
         //
         M = mxGetM(prhs[0]);
         N = mxGetN(prhs[3]);
@@ -192,7 +199,8 @@ public:
         internal = round( mxGetScalar(prhs[6]) );
         ionoR = mxGetScalar(prhs[7]);
         ds = mxGetScalar(prhs[8]);
-        n_threads = round( mxGetScalar(prhs[9]) );
+        M_threads = round( mxGetScalar(prhs[9]) );
+        N_threads = round( mxGetScalar(prhs[10]) );
 
         //
         // Validity
@@ -210,7 +218,8 @@ public:
                (10==mxGetM(prhs[4])), "Invalid ioptparmod dimension.");
         ASSERT(ionoR >= 1., "ionoR < 1.");
         ASSERT(ds > 0., "ds <= 0.");
-        ASSERT(n_threads > 0, "n_threads <= 0.");
+        ASSERT(M_threads > 0, "M_threads <= 0.");
+        ASSERT(N_threads > 0, "N_threads <= 0.");
 
         //
         // Output buffer
@@ -276,18 +285,19 @@ public:
         mexPrintf("\texternal = %ld\n", external);
         mexPrintf("\tionoR = %f\n", ionoR);
         mexPrintf("\tds = %f\n", ds);
-        mexPrintf("\tn_threads = %ld\n", n_threads);
+        mexPrintf("\tM_threads = %ld\n", M_threads);
+        mexPrintf("\tN_threads = %ld\n", N_threads);
 #endif
 
         //
         // Time iteration
         //
-        if (N) {
+        if ( M*N ) {
 #ifdef DEBUG
             mexPrintf("%%%% DEBUG:%s:%d: Outer loop start.\n", __FUNCTION__, __LINE__);
 #endif
 
-            ThreadFor<Main &> t((M<=10 ? n_threads : 1), N, *this);
+            ThreadFor<Main &> t(N_threads, N, *this);
 
 #ifdef DEBUG
             mexPrintf("%%%% DEBUG:%s:%d: Outer loop end.\n", __FUNCTION__, __LINE__);
@@ -297,14 +307,15 @@ public:
 
     void operator()(long jdx) {
         const double vsw = 400.;
-        long offset = jdx * 5;
+        long d_offset = jdx * 5;
+        long iopt_offset = jdx * 10;
 
         //
         // Make TS field model
         //
         int iopt = (kTS89Model==external ? round(ioptparmod[jdx]) : 1);
-        double const* parmod = (kTSNone==external || kTS89Model==external ? NULL : ioptparmod + jdx*10);
-        Date d(date[offset + 0], date[offset + 1], date[offset + 2], date[offset + 3], date[offset + 4]);
+        double const* parmod = ioptparmod + iopt_offset;
+        Date d(date[d_offset + 0], date[d_offset + 1], date[d_offset + 2], date[d_offset + 3], date[d_offset + 4]);
         TSFieldModel fm(d, vsw, internal, iopt, parmod, external);
 
 #ifdef DEBUG
@@ -314,7 +325,7 @@ public:
         //
         // Sub iteration
         //
-        if (M) {
+        {
 #ifdef DEBUG
             mexPrintf("%%%% DEBUG:%s:%d: Inner loop start.\n", __FUNCTION__, __LINE__);
 #endif
@@ -322,7 +333,7 @@ public:
             Submain sub(fm);
             sub.key = &key;
 
-            sub.setNThreads(n_threads);
+            sub.setNThreads(M_threads);
             sub.setDs(ds);
             sub.setIonoR(ionoR);
             sub.M = M;
@@ -334,24 +345,24 @@ public:
             sub.Yfl = Yfl;
             sub.Zfl = Zfl;
 
-            offset = jdx * M;
+            long sub_offset = jdx * M;
 
-            sub.x0 = x0 + offset;
-            sub.y0 = y0 + offset;
-            sub.z0 = z0 + offset;
+            sub.x0 = x0 + sub_offset;
+            sub.y0 = y0 + sub_offset;
+            sub.z0 = z0 + sub_offset;
 
-            sub.Bmeq = Bmeq + offset;
-            sub.Xmeq = Xmeq + offset;
-            sub.Ymeq = Ymeq + offset;
-            sub.Zmeq = Zmeq + offset;
-            sub.Beq = Beq + offset;
-            sub.Xeq = Xeq + offset;
-            sub.Yeq = Yeq + offset;
-            sub.Zeq = Zeq + offset;
-            sub.Xfoot = Xfoot + offset;
-            sub.Yfoot = Yfoot + offset;
-            sub.Zfoot = Zfoot + offset;
-            
+            sub.Bmeq = Bmeq + sub_offset;
+            sub.Xmeq = Xmeq + sub_offset;
+            sub.Ymeq = Ymeq + sub_offset;
+            sub.Zmeq = Zmeq + sub_offset;
+            sub.Beq = Beq + sub_offset;
+            sub.Xeq = Xeq + sub_offset;
+            sub.Yeq = Yeq + sub_offset;
+            sub.Zeq = Zeq + sub_offset;
+            sub.Xfoot = Xfoot + sub_offset;
+            sub.Yfoot = Yfoot + sub_offset;
+            sub.Zfoot = Zfoot + sub_offset;
+
             sub.start();
 
 #ifdef DEBUG

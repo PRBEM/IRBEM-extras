@@ -1,8 +1,8 @@
 function [ bx by bz ] = ts_field( x, y, z, datenum_, ioptparmod, ...
-    external, internal, co_system, n_threads)
+    external, internal, co_system, M_threads)
 %UBK.TS_FIELD Tsynenko Magnetic Field
 %   [ bx by bz ] = ts_field( x, y, z, datenum_, ioptparmod, ...
-%   external, internal, co_system, n_threads)
+%   external, internal, co_system, M_threads)
 %   Calculates magnetic field using Tsyganenko magnetic field models.
 %   Please refer to http://geo.phys.spbu.ru/~tsyganenko/modeling.html and
 %   references therein.
@@ -30,8 +30,8 @@ function [ bx by bz ] = ts_field( x, y, z, datenum_, ioptparmod, ...
 %   OPTIONAL INPUTS (pass [] to use default)
 %   * co_system: 'GSM' for GSM or 'SM' for SM coordinate system.
 %   Case-insentive. Default is 'GSM'.
-%   * n_threads: The number of concurrent executions (positive integer).
-%   Default is 8.
+%   * M_threads: The number of threads to loop over the first dimension
+%   (positive integer). Default is 8.
 %
 %   OUTPUTS
 %   * [bx by bz]: Calculated magnetic field vectors of size M by N.
@@ -134,14 +134,14 @@ switch lower(co_system)
         'Coordinate system %s is unknown.', co_system)
 end
 
-% n_thread check
-if nargin<9 || isempty(n_threads)
-    n_threads = 8;
+% M_threads check
+if nargin<9 || isempty(M_threads)
+    M_threads = 8;
 end
-if n_threads < 1
+if M_threads < 1
     warning('cotrans:InvalidArgument',...
-        'n_threads should be greater than or equal to 1. Set to default value.')
-    n_threads = 8;
+        'M_threads should be greater than or equal to 1. Set to default value.')
+    M_threads = 8;
 end
 
 %% Call MEX entry
@@ -149,7 +149,7 @@ end
     UBKTSFieldcxx(x, y, z, ...
     [Y(:), DOY(:), H(:), MN(:), S(:)]', ...
     ioptparmod, external, internal, co_system, ...
-    n_threads);
+    M_threads, 1);
 
 %% Post-processing
 
