@@ -8,14 +8,23 @@
 #
 ################################################################
 
-1. LICENSE
+* LICENSE
 FreeBSD license (See license.txt).
 
 
-2. BUILD DIRECTION
+* BUILD INSTRUCTION
 
-Set MEX, MEXOPTS, CC, CXX and AR environment variables, and invoke make. For example,
+Set MEX, MEXOPTS, CC, CXX and AR environment variables, and invoke make (use full path). For example,
 
 make MEX=/opt/MATLAB/bin/mex MEXOPTS=$(pwd)/mexopts.sh CC=gcc CXX=g++ AR=ar INSTALL_DIR=$(pwd)/local install
 
-* Use full path.
+
+* REFERENCES
+- Algorithm:
+	Min K., J. Bortnik, and J. Lee (2013), A novel technique for rapid L* calculation: algorithm and implementation, J. Geophys. Res. Space Physics, 118, doi:10.1002/jgra.50250.
+	Min, K., J. Bortnik, and J. Lee (2013), A novel technique for rapid L* calculation using UBK coordinates, J. Geophys. Res. Space Physics, 118, 192–197, doi:10.1029/2012JA018177.
+
+- Magnetic field model:
+	Tsyganenko, N. A. (1987), Global quantitative models of the geomagnetic field in the cislunar magnetosphere for different disturbance levels, Planet. Space Sci., 35, 1347--1358, doi:10.1016/0032-0633(87)90046-8.	Tsyganenko, N. A. (1989), A magnetospheric magnetic field model with a warped tail current sheet, Planet. Space Sci., 37, 5--20, doi: 10.1016/0032-0633(89)90066-4.	Tsyganenko, N. A. (1995), Modeling the Earth's magnetospheric magnetic field confined within a realistic magnetopause, J. Geophys. Res., 100(A4), 5599--5612, doi:10.1029/94JA03193.
+	Tsyganenko, N. A. (2002a), A model of the near magnetosphere with a dawn-dusk asymmetry: 1. Mathematical structure, J. Geophys. Res., 107 (A8), 1179, doi:10.1029/2001JA000219.	Tsyganenko, N. A. (2002b), A model of the near magnetosphere with a dawn-dusk asymmetry: 2. Parameterization and fitting to observations, J. Geophys. Res., 107(A8), 1176, doi:10.1029/2001JA000220.	Tsyganenko, N. A., and M. I. Sitnov (2005), Modeling the dynamics of the inner magnetosphere during strong geomagnetic storms, J. Geophys. Res., 110, A03208, doi:10.1029/2004JA010798.
+
