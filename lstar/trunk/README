@@ -1,22 +1,32 @@
 
-################################################################
-#
-# $Author: knation00 $
-# $LastChangedDate: 2013-04-21 21:56:00 -0400 (Sun, 21 Apr 2013) $
-# $Revision: 458 $
-# $Id: Makefile 458 2013-04-22 01:56:00Z knation00 $
-#
-################################################################
-
 * LICENSE
 FreeBSD license (See license.txt).
+
+"Users of the UBKL* code are kindly requested to acknowledge the contributions of the developer (Dr. Kyungguk Min) in the acknowledgements section of any publications that may arise from the use of this code, and consider adding the developer to any publications where more extensive input has been obtained."
+
+
+* PRE-BUILT BINARY
+	./bin/maci64		<-- Intel mac 64 bit MEX/DLM (may not work on all platforms)
+	./bin/linuxa64		<-- 64 bit linux MEX/DLM (may not work on all distributions)
 
 
 * BUILD INSTRUCTION
 
-Set MEX, MEXOPTS, CC, CXX and AR environment variables, and invoke make (use full path). For example,
+Set MEX, MEXOPTS, CC, CXX and AR environment variables, and invoke make. For example,
 
 make MEX=/opt/MATLAB/bin/mex MEXOPTS=$(pwd)/mexopts.sh CC=gcc CXX=g++ AR=ar INSTALL_DIR=$(pwd)/local install
+
+
+* DIRECTORY STRUCTURE
+	./bin			<-- Platform-dependent pre-built binaries
+	./src	-+- lib		<-- Core library
+		 |- examples	<-- Examples for using the core library
+		 |- mex		<-- MATLAB MEX interfaces
+		 +- dlm		<-- IDL DLM interfaces
+
+
+* CONTACT
+	Kyungguk Min (km224@njit.edu)
 
 
 * REFERENCES
@@ -28,3 +38,15 @@ make MEX=/opt/MATLAB/bin/mex MEXOPTS=$(pwd)/mexopts.sh CC=gcc CXX=g++ AR=ar INST
 	Tsyganenko, N. A. (1987), Global quantitative models of the geomagnetic field in the cislunar magnetosphere for different disturbance levels, Planet. Space Sci., 35, 1347--1358, doi:10.1016/0032-0633(87)90046-8.	Tsyganenko, N. A. (1989), A magnetospheric magnetic field model with a warped tail current sheet, Planet. Space Sci., 37, 5--20, doi: 10.1016/0032-0633(89)90066-4.	Tsyganenko, N. A. (1995), Modeling the Earth's magnetospheric magnetic field confined within a realistic magnetopause, J. Geophys. Res., 100(A4), 5599--5612, doi:10.1029/94JA03193.
 	Tsyganenko, N. A. (2002a), A model of the near magnetosphere with a dawn-dusk asymmetry: 1. Mathematical structure, J. Geophys. Res., 107 (A8), 1179, doi:10.1029/2001JA000219.	Tsyganenko, N. A. (2002b), A model of the near magnetosphere with a dawn-dusk asymmetry: 2. Parameterization and fitting to observations, J. Geophys. Res., 107(A8), 1176, doi:10.1029/2001JA000220.	Tsyganenko, N. A., and M. I. Sitnov (2005), Modeling the dynamics of the inner magnetosphere during strong geomagnetic storms, J. Geophys. Res., 110, A03208, doi:10.1029/2004JA010798.
 
+- Electric field model:
+
+
+
+################################################################
+#
+# $Author: knation00 $
+# $LastChangedDate: 2013-04-21 21:56:00 -0400 (Sun, 21 Apr 2013) $
+# $Revision: 458 $
+# $Id: Makefile 458 2013-04-22 01:56:00Z knation00 $
+#
+################################################################
