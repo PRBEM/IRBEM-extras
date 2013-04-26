@@ -13,7 +13,8 @@ PROJECT	= lstar
 PROJECT_ROOT_DIR=../..
 
 
-CFLAGS=-g -c -DDEBUG
+CFLAGS=-g -DDEBUG
+LDFLAGS=-lm -pthread
 # #######################################################
 
 PROJECT_SRC_DIR=$(PROJECT_ROOT_DIR)/src
@@ -34,7 +35,7 @@ TARGET=$(EXAMPLE_TARGET)
 all: $(TARGET)
 
 $(TARGET): $(OBJECTS) $(LIB_PATH)
-	$(CXX) -o $@ $^
+	$(CXX) $(LDFLAGS) -o $@ $^
 
 .cpp.o:
 	$(CXX) -I$(LIB_SRC_DIR) $(CFLAGS) -c $<
