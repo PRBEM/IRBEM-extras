@@ -29,8 +29,10 @@ ygsm = ygsm * 10;
 zgsm = zgsm * 10;
 
 tic
-[xsm ysm zsm] = ubk.cotrans(xgsm,ygsm,zgsm,d,'gsm2sm',n_threads);
-[xgsm1 ygsm1 zgsm1] = ubk.cotrans(xsm,ysm,zsm,d,'sm2gsm',n_threads);
+[xsm ysm zsm] = ubk.cotrans(xgsm,ygsm,zgsm,d,'gsm2sm',...
+    'mthreads',n_threads);
+[xgsm1 ygsm1 zgsm1] = ubk.cotrans(xsm,ysm,zsm,d,'sm2gsm',...
+    'mthreads',n_threads);
 toc
 
 dx = abs(xgsm - xgsm1);

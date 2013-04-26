@@ -17,9 +17,8 @@ set(0,'defaultaxesfontsize',12)
 help ubk.lstar
 
 %% Ex 1. Ldip v.s. UBKL
-if 0
+if 1
     d = now; % Date
-    n_threads = 10; % Number of threads to use
     ioptparmod = 2;
     external = 'none';
     internal = 'dip';
@@ -47,9 +46,9 @@ if 0
 end
 
 %% Ex 2. Orbit calculation
-if 0
+if 1
     d = now; % Date
-    n_threads = 10; % Number of threads to use
+    m_threads = 10; % Number of threads to use
     parmod = [4, -100, 2, -15, 1, 1, 1, 1, 1, 1]';
     external = 'ts05';
     internal = 'igrf';
@@ -63,8 +62,9 @@ if 0
     tic
     [~, ~, ~, Xc, Yc, ~, ~] = ...
         ubk.lstar( xsm(:), ysm(:), pa0(:), d, parmod, ...
-        external, internal, ionoR, [], [], [], ...
-        [], [], true, n_threads);
+        external, internal, ...
+        'ionor',ionoR, 'isCARTESIANGRID',true, ...
+        'm_threads',m_threads);
     Xc = reshape(Xc, size(xsm));
     Yc = reshape(Yc, size(xsm));
     toc
@@ -103,7 +103,8 @@ if 1
     tic
     Ls = ...
         ubk.lstar( rsm, psm, pa0, ...
-        T, parmod, external, internal);
+        T, parmod, external, internal,...
+        'n_threads',4,'m_threads',4);
     toc
     
     figure(3)

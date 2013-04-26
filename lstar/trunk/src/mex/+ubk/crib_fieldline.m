@@ -18,7 +18,7 @@ help ubk.fieldline
 
 %% Ex 1. Field line info
 d = datenum([2001 1 1 1 0 0]); % Date
-n_threads = 10; % Number of threads to use
+m_threads = 10; % Number of threads to use
 parmod = [2, -10, 3, -10, 0 0 0 0 0 0]';
 external = 'TS05';
 internal = 'IGRF';
@@ -34,7 +34,8 @@ tic
 [ K Bm Xmeq Ymeq Zmeq Bmeq Xeq Yeq Zeq Beq Xfoot Yfoot Zfoot ...
     Xfl Yfl Zfl] = ...
     ubk.fieldline( xsm(:), ysm(:), zsm(:), d, parmod, ...
-    external, internal, ionoR, ds, n_threads);
+    external, internal,...
+    'ionor',ionoR, 'ds',ds, 'm_threads',m_threads);
 K = reshape(K, size(xsm));
 Bm = reshape(Bm, size(xsm));
 Xmeq = reshape(Xmeq, size(xsm));

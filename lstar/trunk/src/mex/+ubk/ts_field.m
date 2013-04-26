@@ -1,8 +1,8 @@
 function [ bx by bz ] = ts_field( x, y, z, datenum_, ioptparmod, ...
-    external, internal, co_system, M_threads)
+    external, internal, varargin)
 %UBK.TS_FIELD Tsynenko Magnetic Field
 %   [ bx by bz ] = ts_field( x, y, z, datenum_, ioptparmod, ...
-%   external, internal, co_system, M_threads)
+%       external, internal, param1, value1, ...)
 %   Calculates magnetic field using Tsyganenko magnetic field models.
 %   Please refer to http://geo.phys.spbu.ru/~tsyganenko/modeling.html and
 %   references therein.
@@ -14,11 +14,12 @@ function [ bx by bz ] = ts_field( x, y, z, datenum_, ioptparmod, ...
 %   * [x y z]: Matrices of cartesian coordinates in RE. M by N size.
 %   * datenum_: N-element time vector returned by datenum.
 %   * ioptparmod: External field parameters.
-%   IF external=='T89', THEN: ioptparmod = IOPT (length N)
+%   IF external=='T89', THEN: ioptparmod = IOPT (length N), where
 %       T89 input equivalent to Kp.
 %       IOPT= 1       2        3        4        5        6        7
 %       KP  = 0,0+  1-,1,1+  2-,2,2+  3-,3,3+  4-,4,4+  5-,5,5+  >=6-
-%   ELSE IF external!='T89' && external!='NONE', THEN: ioptparmod = PARMOD
+%   ELSE IF external!='T89' && external!='NONE', THEN: ioptparmod = PARMOD,
+%   where
 %       PARMOD=[PDYN (nPa), DST (nT), BYIMF, BZIMF (nT), W1 W2 W3 W4 W5 W6]
 %       The dimension should be [10, N].
 %   * external: External field model. 'NONE' for no external model, 'T89' for
@@ -27,10 +28,10 @@ function [ bx by bz ] = ts_field( x, y, z, datenum_, ioptparmod, ...
 %   * internal: Internal field model. 'DIP' for dipole field or 'IGRF' for
 %   IGRF model (case-insensitive). Default is 'IGRF'.
 %
-%   OPTIONAL INPUTS (pass [] to use default)
-%   * co_system: 'GSM' for GSM or 'SM' for SM coordinate system.
+%   OPTIONAL INPUTS
+%   * CO_SYSTEM: 'GSM' for GSM or 'SM' for SM coordinate system.
 %   Case-insentive. Default is 'GSM'.
-%   * M_threads: The number of threads to loop over the first dimension
+%   * M_THREADS: The number of threads to loop over the first dimension
 %   (positive integer). Default is 8.
 %
 %   OUTPUTS
@@ -44,8 +45,9 @@ function [ bx by bz ] = ts_field( x, y, z, datenum_, ioptparmod, ...
 %
 
 %% Argument check
-error(nargchk(7,9,nargin))
+error(nargchk(7,nargin,nargin))
 
+%% Required
 MxN = size(x);
 
 % Size check
@@ -116,40 +118,43 @@ switch lower(internal)
         'Coordinate system %s is unknown.', internal)
 end
 
+%% Options
+opts = ubk.optset(varargin{:});
+
 % Coordinate system check
-if nargin<8 || isempty(co_system)
-    co_system = 'gsm';
+if isempty(opts.CO_SYSTEM)
+    opts.CO_SYSTEM = 'gsm';
 end
-if ~ischar(co_system)
+if ~ischar(opts.CO_SYSTEM)
     error('cotrans:InvalidArgument',...
-        'co_system is not character array.')
+        'CO_SYSTEM is not character array.')
 end
-switch lower(co_system)
+switch lower(opts.CO_SYSTEM)
     case 'sm'
-        co_system = 1;
+        opts.CO_SYSTEM = 1;
     case 'gsm'
-        co_system = 0;
+        opts.CO_SYSTEM = 0;
     otherwise
         error('cotrans:InvalidArgument',...
-        'Coordinate system %s is unknown.', co_system)
+        'Coordinate system %s is unknown.', opts.CO_SYSTEM)
 end
 
 % M_threads check
-if nargin<9 || isempty(M_threads)
-    M_threads = 8;
+if isempty(opts.M_THREADS)
+    opts.M_THREADS = 8;
 end
-if M_threads < 1
+if opts.M_THREADS < 1
     warning('cotrans:InvalidArgument',...
-        'M_threads should be greater than or equal to 1. Set to default value.')
-    M_threads = 8;
+        'M_THREADS should be greater than or equal to 1. Set to default value.')
+    opts.M_THREADS = 8;
 end
 
 %% Call MEX entry
 [bx by bz] = ...
     UBKTSFieldcxx(x, y, z, ...
     [Y(:), DOY(:), H(:), MN(:), S(:)]', ...
-    ioptparmod, external, internal, co_system, ...
-    M_threads, 1);
+    ioptparmod, external, internal, opts.CO_SYSTEM, ...
+    opts.M_THREADS, 1);
 
 %% Post-processing
 

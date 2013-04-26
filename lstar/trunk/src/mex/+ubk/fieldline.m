@@ -1,27 +1,29 @@
 function [ K Bm Xmeq Ymeq Zmeq Bmeq Xeq Yeq Zeq Beq Xfoot Yfoot Zfoot ...
     Xfl Yfl Zfl] = ...
     fieldline( x0, y0, z0, datenum_, ioptparmod, ...
-    external, internal, ionoR, ds, M_threads, N_threads)
+    external, internal, varargin)
 %UBK.FIELDLINE Field Line Tracing and Bm(K) Evaluator
 %   [ K Bm Xmeq Ymeq Zmeq Bmeq Xeq Yeq Zeq Beq Xfoot Yfoot Zfoot ...
-%   Xfl Yfl Zfl] = ...
-%   fieldline( x0, y0, z0, date_, ioptparmod, ...
-%   external, internal, ionoR, ds, M_threads, N_threads)
-%   Trace magnetic field lines (bidirectional) and evaluate the modified
-%   2nd invariant, K (Roederer 1970).
-%   The tracing uses fixed step size RK4 (Numerical Recipe, Press).
+%       Xfl Yfl Zfl] = ...
+%       fieldline( x0, y0, z0, date_, ioptparmod, ...
+%       external, internal, param1, value1, ...)
+%   Trace magnetic field lines and evaluate the modified 2nd invariant, K
+%   (Roederer 1970).
+%   Fixed step size RK4 (Numerical Recipe, Press) for tracing.
 %
-%   References: Sheldon and Gaffey 1993;
+%   References: Roederer 1970; Sheldon and Gaffey 1993;
+%       Tsyganenko 1987, 1989, 1995, 2002a, 2002b; Tsyganenko and Sitnov 2005;
 %
 %   REQUIRED INPUTS (All in SM coordinate system)
 %   * [x0 y0 z0]: Matrices of SM cartesian coordinates in RE. M by N size.
 %   * datenum_: N-element time vector returned by datenum.
 %   * ioptparmod: External field parameters.
-%   IF external=='T89', THEN: ioptparmod = IOPT (length N)
+%   IF external=='T89', THEN: ioptparmod = IOPT (length N), where
 %       T89 input equivalent to Kp.
 %       IOPT= 1       2        3        4        5        6        7
 %       KP  = 0,0+  1-,1,1+  2-,2,2+  3-,3,3+  4-,4,4+  5-,5,5+  >=6-
-%   ELSE IF external!='T89' && external!='NONE', THEN: ioptparmod = PARMOD
+%   ELSE IF external!='T89' && external!='NONE', THEN: ioptparmod = PARMOD,
+%   where
 %       PARMOD=[PDYN (nPa), DST (nT), BYIMF, BZIMF (nT), W1 W2 W3 W4 W5 W6]
 %       The dimension should be [10, N].
 %   * external: External field model. 'NONE' for no external model, 'T89' for
@@ -30,13 +32,13 @@ function [ K Bm Xmeq Ymeq Zmeq Bmeq Xeq Yeq Zeq Beq Xfoot Yfoot Zfoot ...
 %   * internal: Internal field model. 'DIP' for dipole field or 'IGRF' for
 %   IGRF model (case-insensitive). Default is 'IGRF'.
 %
-%   OPTIONAL INPUTS (pass [] to use default)
-%   * ionoR: Ionospheric boundary (radial distance to the ionosphere) in RE.
+%   OPTIONAL INPUTS
+%   * IONOR: Ionospheric boundary (radial distance to the ionosphere) in RE.
 %   Default is 1.015 RE (~ 100 km above Earth).
-%   * ds: Field line integration step size. Default is 0.05 RE.
-%   * M_threads: The number of threads to loop over the first dimension
+%   * DS: Field line integration step size. Default is 0.05 RE.
+%   * M_THREADS: The number of threads to loop over the first dimension
 %   (positive integer). Default is 8.
-%   * N_threads: The number of threads to loop over the second dimension
+%   * N_THREADS: The number of threads to loop over the second dimension
 %   (positive integer). Default is 2.
 %
 %   OUTPUTS (M by N)
@@ -71,8 +73,9 @@ function [ K Bm Xmeq Ymeq Zmeq Bmeq Xeq Yeq Zeq Beq Xfoot Yfoot Zfoot ...
 %
 
 %% Argument check
-error(nargchk(7,11,nargin))
+error(nargchk(7,nargin,nargin))
 
+%% Required
 MxN = size(x0);
 
 % Size check
@@ -143,43 +146,45 @@ switch lower(internal)
         'Coordinate system %s is unknown.', internal)
 end
 
+%% Options
+opts = ubk.optset(varargin{:});
 
 % Ionospheric boundary check
-if nargin<8 || isempty(ionoR)
-    ionoR = 1.015;
+if isempty(opts.IONOR)
+    opts.IONOR = 1.015;
 end
-if ionoR < 1
+if opts.IONOR < 1
     error('cotrans:InvalidArgument',...
-        'ionoR should be greater than or equal to 1.')
+        'IONOR should be greater than or equal to 1.')
 end
 
 % Integration step size check
-if nargin<9 || isempty(ds)
-    ds= .05;
+if isempty(opts.DS)
+    opts.DS= .05;
 end
-if ds <= 0
+if opts.DS <= 0
     error('cotrans:InvalidArgument',...
-        'step_size should be greater than 0.')
+        'DS should be greater than 0.')
 end
 
 % M_threads check
-if nargin<10 || isempty(M_threads)
-    M_threads = 8;
+if isempty(opts.M_THREADS)
+    opts.M_THREADS = 8;
 end
-if M_threads < 1
+if opts.M_THREADS < 1
     warning('cotrans:InvalidArgument',...
-        'M_threads should be greater than or equal to 1. Set to default value.')
-    M_threads = 8;
+        'M_THREADS should be greater than or equal to 1. Set to default value.')
+    opts.M_THREADS = 8;
 end
 
 % N_threads check
-if nargin<11 || isempty(N_threads)
-    N_threads = 2;
+if isempty(opts.N_THREADS)
+    opts.N_THREADS = 2;
 end
-if N_threads < 1
+if opts.N_THREADS < 1
     warning('cotrans:InvalidArgument',...
-        'N_threads should be greater than or equal to 1. Set to default value.')
-    N_threads = 2;
+        'N_THREADS should be greater than or equal to 1. Set to default value.')
+    opts.N_THREADS = 2;
 end
 
 %% Call MEX entry
@@ -191,7 +196,7 @@ end
     UBKFieldLinecxx(x0, y0, z0, ...
     [Y(:), DOY(:), H(:), MN(:), S(:)]', ...
     ioptparmod, external, internal, ...
-    ionoR, ds, M_threads, N_threads);
+    opts.IONOR, opts.DS, opts.M_THREADS, opts.N_THREADS);
 
 %% Post-processing
 

@@ -27,7 +27,8 @@ internal = 'igrf';
 
 disp('%% T89 field')
 tic
-[bx by bz] = ubk.ts_field(x(:),y(:),z(:),d,iopt,external,internal,'gsm',n_threads);
+[bx by bz] = ubk.ts_field(x(:),y(:),z(:),d,iopt,external,internal,...
+    'co_system','gsm','m_threads',n_threads);
 bx = reshape(bx, size(x));
 by = reshape(by, size(x));
 bz = reshape(bz, size(x));
@@ -55,5 +56,6 @@ z = [0 0];
 
 disp('%% TS05 field')
 tic
-[bx by bz] = ubk.ts_field(x,y,z,d,parmod,external,internal,'gsm',n_threads)
+[bx by bz] = ubk.ts_field(x,y,z,d,parmod,external,internal,...
+    'co_system','gsm','m_threads',n_threads)
 toc
