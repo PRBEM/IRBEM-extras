@@ -1,0 +1,16 @@
+Title: "A Novel Technique for Calculating L* (UBKL*) Publicly Available"
+
+From : Kyungguk Min <km224 at njit.edu>
+
+We would like to announce that source code for calculating L* rapidly has been made publicly available under no restriction for community use, which is the implementation of first principle method described by Min et al. (2013a and 2013b JGR, the latter in press). As described in these references, there is substantial speed improvement compared to the IRBEM library while maintaining reasonable accuracy.
+
+The core library is written in C++ and does not depend on any third party libraries. Simple multi-threading model is implemented using the POSIX thread library. The library is designed to be easily extendable to user's project.
+
+Currently, GEOPACK, Tsyganenko models 89, 96, 02 and Tsyganenko and Sitnov model 05 are embedded in the library, but the list can grow as it become mature and new models are available. MATLAB and IDL interfaces which also have built-in parallel execution capability are available, but no standalone executables nor a python (or other scripting languages) interface.
+
+For more details about the code, please visit http://sourceforge.net/p/irbem/code/HEAD/tree/extras/lstar/trunk and look into the "README" file. Since it only has been tested in limited platforms, users may encounter compiling issues or bugs. Although there is no restriction, we highly encourage users to share any such problems as well as suggestions for improvement with us in sprit of community development.
+
+Thanks,
+Kyungguk Min -- New Jersey Institute of Technology
+Jacob Bortnik -- UC Los Angeles
+Paul O'Brien -- Aerospace Corporation
