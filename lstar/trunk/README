@@ -14,7 +14,10 @@ FreeBSD license (See license.txt).
 
 Set MEX, MEXOPTS, CC, CXX and AR environment variables, and invoke make. For example,
 
-make MEX=/opt/MATLAB/bin/mex MEXOPTS=$(pwd)/mexopts.sh CC=gcc CXX=g++ AR=ar INSTALL_DIR=$(pwd)/local install
+	make MEX=/opt/MATLAB/bin/mex MEXOPTS=$(pwd)/mexopts.sh CC=gcc CXX=g++ AR=ar INSTALL_DIR=$(pwd)/local install
+
+To build documentation,
+	make doc
 
 
 * DIRECTORY STRUCTURE

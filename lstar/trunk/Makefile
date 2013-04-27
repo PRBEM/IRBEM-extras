@@ -13,6 +13,7 @@ CC		=
 CXX		=
 LD		=$(CXX)
 AR		=
+DOXYGEN =doxygen
 
 PROJECT	=lstar
 PROJECT_ROOT_DIR=.
@@ -47,7 +48,10 @@ install: all
 	@date
 	$(MAKE) PROJECT=$(PROJECT) INSTALL_DIR=$(INSTALL_DIR) -C $(PROJECT_SRC_DIR) install
 
-.PHONY: clean $(PROJECT) install
+doc: lstar.dox.conf
+	doxygen $^
+
+.PHONY: clean $(PROJECT) install lstar.dox.conf
 
 clean:
 	@date
