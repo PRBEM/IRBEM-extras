@@ -13,34 +13,34 @@ function [ba,denom] = odc_bounce_average_dipole(L,MLT,alpha0_deg,local,varargin)
 %    sign_cospa is sign of cos(local pitch angle) (will do for -1 and 1 to get
 %    full bounce orbit)
 % options:
-% [bint,denom] = bounce_average_dipole(...,'no_avg') - returns bounce integral
+% [bint,denom] = odc_bounce_average_dipole(...,'no_avg') - returns bounce integral
 %  and denominator (in RE), does not average (bav = bint/denom)
 %  NOTE: the true bounce integral is bint*v, where v is the velocity
 %  and denom*v is the true full bounce period
 %
-% [...] = bounce_average_dipole(...,'method',method) - specifies
+% [...] = odc_bounce_average_dipole(...,'method',method) - specifies
 %  integration method: 'quad', 'quadl', 'quadgk', 'quadv', 'trace'
 %  method defaults to 'quad', unless "vectorized" in which case
 %  it defaults to quadv. Note that quad and quadv aren't good
 %  for functions (like diffusion coefficients) that are zero over
 %  large parts of the field line. Use 'trace' instead
-% [...] = bounce_average_dipole(...,'tol',tol) - specifies absolute
+% [...] = odc_bounce_average_dipole(...,'tol',tol) - specifies absolute
 %  tolerance for numerical integrals (quad, quadl, quadv, quadgk), default
 %  is 1e-6. Ignored for method "trace"
-% [...] = bounce_average_dipole(...,'reltol',reltol) - specifies relative
+% [...] = odc_bounce_average_dipole(...,'reltol',reltol) - specifies relative
 %  tolerance for numerical integrals by quadgk only default 1e-6.
-% [...] = bounce_average_dipole(...,'Nlats',Nlats) - specifies number of
+% [...] = odc_bounce_average_dipole(...,'Nlats',Nlats) - specifies number of
 % latitudes to use in trace integral (method='trace' only). Default 201 (an
 % odd number is probably better)
-% [...] = bounce_average_dipole(...,'symmetric') - local does not depend
+% [...] = odc_bounce_average_dipole(...,'symmetric') - local does not depend
 %  on sign of the pitch angle (i.e., northward and southward legs are
 %  identical)
-% [...] = bounce_average_dipole(...,'hemi-symmetric') - local does not depend
+% [...] = odc_bounce_average_dipole(...,'hemi-symmetric') - local does not depend
 %  on sign of magnetic latitude
 %  identical)
-% [...] = bounce_average_dipole(...,'Beq',Beq) - provide equatorial field
+% [...] = odc_bounce_average_dipole(...,'Beq',Beq) - provide equatorial field
 %    strength at L (otherwise it's 31e3/L^3 (from util.SL.B0)
-% [...] = bounce_average_dipole(...,'vectorized',true) - local accepts multiple input points
+% [...] = odc_bounce_average_dipole(...,'vectorized',true) - local accepts multiple input points
 %
 % Implements psi transform from Orlova and Shprits, 2011, Phys. Plasmas
 

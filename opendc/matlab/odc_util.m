@@ -221,11 +221,13 @@ if sina0==0,
 end
 % note, below fixes error in Shprits thesis, eqn  F13
 % which has sina0^2. Instead use sina0^4 from Shprits 2006 eqn 10.
-Px = [1, 0, 0, 0, 0, 3*sina0^4, -4*sina0^4];
-xroots = roots(Px);
-xroot = xroots((imag(xroots)==0) & (xroots>0));
-mirror_lat = acos(sqrt(xroot))/torad; % mirror latitude
-
+mirror_lat = nan(size(sina0));
+for i = 1:numel(sina0),
+    Px = [1, 0, 0, 0, 0, 3*sina0(i)^4, -4*sina0(i)^4];
+    xroots = roots(Px);
+    xroot = xroots((imag(xroots)==0) & (xroots>0));
+    mirror_lat(i) = acos(sqrt(xroot))/torad; % mirror latitude
+end
 function maglat = BB0toMagLat(BB0,units)
 % maglat = BB0toMagLat(BB0) % returns maglat in deg
 % maglat = BB0toMagLat(BB0,'rad') % returns maglat in radians
