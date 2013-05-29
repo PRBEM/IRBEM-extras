@@ -121,7 +121,7 @@ switch lower(external)
         external = 4;
     otherwise
         error('cotrans:InvalidArgument',...
-        'Coordinate system %s is unknown.', external)
+        'External model %s is unknown.', external)
 end
 
 if external==1
@@ -149,7 +149,7 @@ switch lower(internal)
         internal = 1;
     otherwise
         error('cotrans:InvalidArgument',...
-        'Coordinate system %s is unknown.', internal)
+        'Internal model %s is unknown.', internal)
 end
 
 %% Options
