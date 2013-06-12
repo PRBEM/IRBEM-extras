@@ -12,6 +12,9 @@ function results = rfl_bowtie(inst_info,type,species,exponents,channels,varargin
 %   each channel has E0 and G0 - the nominal energy E0 and
 %   for diff type, G0 includes the energy bandwidth (e.g., cm^2 sr MeV)
 %   for int type, G0 includes only the geometric factor (e.g., cm^2 sr)
+%   other fields: 
+%   type - copy of input type
+%   fig - figure handle (only present if plotting requested)
 % errors on E0 and G0 are given as E0err and G0err
 %   these errors are the standard deviation of the log of the E0, G0
 %   intersections determined in the bow tie analysis (no sqrt(N) factor)
@@ -64,7 +67,7 @@ for ichan = 1:length(channels),
     if ~isfield(inst_info,chan),
         error('Channel %s not found in inst_info',chan);
     end
-    results.(chan) = struct('G0',NaN,'E0',NaN);
+    results.(chan) = struct('G0',NaN,'E0',NaN,'type',lower(type));
     ispec = find(strcmpi(species,inst_info.(chan).SPECIES));
     if isempty(ispec),
         warning('Species %s not found in %s',species,chan);
@@ -72,6 +75,7 @@ for ichan = 1:length(channels),
     end
     if do_plot,
         fig = figure;
+        results.(chan).fig = fig;        
     end
     sp = inst_info.(chan).SPECIES{ispec};
     resp = inst_info.(chan).(sp);
@@ -145,14 +149,16 @@ for ichan = 1:length(channels),
         axis([axmin(1) axmax(1) axmin(2) axmax(2)]);
         if intE,
             Gsym = 'G0';
+            G_UNIT = sprintf('%s^2sr',resp.L_UNIT);
         else
             Gsym = 'G0dE';
+            G_UNIT = sprintf('%s%s^2sr',resp.E_UNIT,resp.L_UNIT);
         end
-        title(sprintf('%s : E0=%g (%.1f %%), %s=%g (%.1f %%)',...
+        title(sprintf('%s : E0=%g (%.1f%%), %s=%g (%.1f%%)',...
             chan,results.(chan).E0,results.(chan).E0err*100,...
             Gsym,results.(chan).G0,results.(chan).G0err*100));
-        xlabel('E0');
-        ylabel('G0');
+        xlabel(sprintf('E0, %s',resp.E_UNIT));
+        ylabel(sprintf('%s, %s',Gsym,G_UNIT));
         grid on;
     end
 end
