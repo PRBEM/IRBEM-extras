@@ -204,7 +204,7 @@ public:
         ds = mxGetScalar(prhs[8]);
         M_threads = round( mxGetScalar(prhs[9]) );
         N_threads = round( mxGetScalar(prhs[10]) );
-        interpolationOrder = round( mxGetScalar(prhs[10]) );
+        interpolationOrder = round( mxGetScalar(prhs[11]) );
 
         //
         // Validity
