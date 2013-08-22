@@ -575,7 +575,7 @@ namespace UBK {
         int ID=1;
         //int IOP=IOPT;
         for (int I=0; I<30; I++) {
-            A[I]=PARAM[IOPT][I];
+            A[I]=PARAM[IOPT-1][I];
         }
         
         XI[0]=X;

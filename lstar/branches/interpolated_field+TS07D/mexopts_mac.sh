@@ -271,7 +271,7 @@ echo "Error: Did not imbed 'options.sh' code"; exit 1 #imbed options.sh mac 12
             # C++keyVersion: 
             CXX='g++'
             CXXFLAGS="-fno-common -no-cpp-precomp -fexceptions -arch $ARCHS -isysroot $SDKROOT -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
-            CXXLIBS="$MLIBS -lstdc++"
+            CXXLIBS="$MLIBS -lc++"
             CXXOPTIMFLAGS='-O2 -DNDEBUG'
             CXXDEBUGFLAGS='-g'
 #
