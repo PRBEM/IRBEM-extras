@@ -81,6 +81,14 @@ function util = odc_util
 % L: dimensionless dipole L value
 % and y = sin(alpha_equatorial)
 %
+% K = alphaL2K(alpha,L)
+% returns K in RE*sqrt(nT) for given equatorial pitch angle
+% alpha, in deg, and L shell, in RE
+%
+% alpha = KL2alpha(K,L)
+% returns equatorial pitch angle alpha in degrees
+% for given K, L. K in RE*sqrt(nT)
+%
 % SI/mks constants
 % util.mks:
 % mks.e = 1.602176487e-19; % Coulombs per fundamental charge
@@ -157,6 +165,34 @@ util.DriftPeriod = @DriftPeriod;
 util.dipoleB = @dipoleB;
 util.dipoleIJ = @dipoleIJ;
 util.MBtoMeV = @MBtoMeV;
+util.alphaL2K = @alphaL2K;
+util.KL2alpha = @KL2alpha
+
+function K = alphaL2K(alpha,L)
+% returns K in RE*sqrt(nT) for given equatorial pitch angle
+% alpha, in deg, and L shell, in RE
+global odc_constants
+
+y = sind(alpha);
+Bm = odc_constants.SL.B0*1e9./L.^3./y.^2; % mirror field, nT
+K = SL_Y(y).*L.*sqrt(Bm);
+
+function alpha = KL2alpha(K,L)
+% returns equatorial pitch angle alpha in degrees
+% for given K, L. K in RE*sqrt(nT)
+
+global odc_constants
+persistent table
+if isempty(table),
+    dy = 1e-4;
+    table.y = dy:dy:1;
+    table.Yy = SL_Y(table.y)./table.y;
+end
+
+% K*sqrt(L)/sqrt(B0) = Y(y)/y
+KLB = K.*sqrt(L)./sqrt(odc_constants.SL.B0*1e9);
+y = interp1(table.Yy,table.y,KLB,'linear');
+alpha = asind(y);
 
 function B = fce2B(fce)
 % returns B in nT for electron gyro given in Hz
