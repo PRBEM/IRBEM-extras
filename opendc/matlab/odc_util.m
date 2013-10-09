@@ -81,13 +81,17 @@ function util = odc_util
 % L: dimensionless dipole L value
 % and y = sin(alpha_equatorial)
 %
-% K = alphaL2K(alpha,L)
+% K = alphaL2K(alpha,L,Bunit)
 % returns K in RE*sqrt(nT) for given equatorial pitch angle
 % alpha, in deg, and L shell, in RE
+% Bunit - optional, if 'G' assumes K in RE*sqrt(G). Otherwise K in
+%   RE*sqrt(nT)
 %
-% alpha = KL2alpha(K,L)
+% alpha = KL2alpha(K,L,Bunit)
 % returns equatorial pitch angle alpha in degrees
 % for given K, L. K in RE*sqrt(nT)
+% Bunit - optional, if 'G' returns K in RE*sqrt(G). Otherwise K in
+%   RE*sqrt(nT)
 %
 % SI/mks constants
 % util.mks:
@@ -166,20 +170,31 @@ util.dipoleB = @dipoleB;
 util.dipoleIJ = @dipoleIJ;
 util.MBtoMeV = @MBtoMeV;
 util.alphaL2K = @alphaL2K;
-util.KL2alpha = @KL2alpha
+util.KL2alpha = @KL2alpha;
 
-function K = alphaL2K(alpha,L)
+function K = alphaL2K(alpha,L,Bunit)
 % returns K in RE*sqrt(nT) for given equatorial pitch angle
 % alpha, in deg, and L shell, in RE
+% Bunit - optional, if 'G' assumes K in RE*sqrt(G). Otherwise K in
+%   RE*sqrt(nT)
 global odc_constants
+
+if nargin < 3,
+    Bunit = 'nT';
+end
 
 y = sind(alpha);
 Bm = odc_constants.SL.B0*1e9./L.^3./y.^2; % mirror field, nT
+if any(Bunit=='G'),
+    Bm = Bm/1e5; % nT to G
+end
 K = SL_Y(y).*L.*sqrt(Bm);
 
-function alpha = KL2alpha(K,L)
+function alpha = KL2alpha(K,L,Bunit)
 % returns equatorial pitch angle alpha in degrees
 % for given K, L. K in RE*sqrt(nT)
+% Bunit - optional, if 'G' returns K in RE*sqrt(G). Otherwise K in
+%   RE*sqrt(nT)
 
 global odc_constants
 persistent table
@@ -187,6 +202,14 @@ if isempty(table),
     dy = 1e-4;
     table.y = dy:dy:1;
     table.Yy = SL_Y(table.y)./table.y;
+end
+
+if nargin < 3,
+    Bunit = 'nT';
+end
+
+if any(Bunit=='G'),
+    K = K*sqrt(1e5); % RE*sqrt(G) to RE*sqrt(nT)
 end
 
 % K*sqrt(L)/sqrt(B0) = Y(y)/y
