@@ -1,10 +1,11 @@
 function [DLLM,DLLE] = odc_DLL_Ozeke2013(L,param,value,alpha0_deg,MeV)
 % ********************************************
 % WARNING! This code uses prepublication values! WARNING!
+% Formulae were updated 28 Oct 2013, still pre-publication!
 % ********************************************
 % DLLM = odc_DLL_Ozeke2013(L,param,value)
 % DLLM = odc_DLL_Ozeke2013(L,param,value,alpha0_deg)
-% [DLLM,DLLE] = odc_DLL_Ozeke2012(L,param,value,alpha0_deg,MeV)
+% [DLLM,DLLE] = odc_DLL_Ozeke2013(L,param,value,alpha0_deg,MeV)
 % compute radial diffusion coefficient
 % according to Ozeke et al. 2013 (prepublication)
 % L - dipole L shell
@@ -51,8 +52,10 @@ end
 switch(lower(param)),
     case 'kp',
         Kp = value;
-        DLLM = 1.94e-6*L.^8.*10.^(L.^2*0.112 + L.*Kp.*0.0824 - L.*1.32+Kp.^2.*0.0291-Kp.*0.270); % eqn 18
-        DLLE = 5.75e-9*L.^6.*10.^(0.208.*L+0.457.*Kp); % eqn 21
+%        DLLM = 1.94e-6*L.^8.*10.^(L.^2*0.112 + L.*Kp.*0.0824 - L.*1.32+Kp.^2.*0.0291-Kp.*0.270); % original 2013 formula
+        DLLM = 6.62E-13*L.^8.*10.^(-0.0327*L.^2+0.625*L-0.0108*Kp.^2+0.499*Kp); % eqn 20, 2013 October update
+%        DLLE = 5.75e-9*L.^6.*10.^(0.208.*L+0.457.*Kp); % original 2013 formula
+        DLLE = 2.16E-8*L.^6.*10.^(0.217.*L+0.461.*Kp); % eqn 23, 2013 October update
     otherwise,
         error('Unknown parameter "%s"',param);
 end
