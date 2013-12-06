@@ -73,13 +73,15 @@ for ichan = 1:length(channels),
         warning('Species %s not found in %s',species,chan);
         continue
     end
-    if do_plot,
-        fig = figure;
-        results.(chan).fig = fig;        
-    end
     sp = inst_info.(chan).SPECIES{ispec};
     resp = inst_info.(chan).(sp);
     [hE,result_code] = resp.make_hE(resp,resp.E_GRID,[]);
+    
+    if do_plot,
+        fig = figure;
+        results.(chan).fig = fig;     
+    end
+
     C = nan(Nn,1);
     % find reference counts
     for iexp = 1:Nn,
@@ -144,8 +146,16 @@ for ichan = 1:length(channels),
     if do_plot,
         figure(fig);
         loglog(solution(1),solution(2),'rx','linew',3);
-        axmin = 10.^(ceil(log10(min(intersect)))-1);
-        axmax = 10.^(floor(log10(max(intersect)))+1);
+        yeff = hE./rfl_make_deltas(resp.E_GRID);
+        axmin = min(intersect);
+        axmax = max(intersect);
+        axmin(1) = min(axmin(1),resp.E_GRID(1));
+        axmax(1) = max(axmax(1),resp.E_GRID(end));
+        axmin(2) = min(axmin(2),min(yeff(yeff>0)));
+        axmax(2) = max(axmax(2),max(yeff));
+        axmin = 10.^(floor(-0.5+log10(axmin)));
+        axmax = 10.^(ceil(0.5+log10(axmax)));
+        loglog(resp.E_GRID,max(yeff,axmin(2)),'g-','linew',2); % epsdEG vs E
         axis([axmin(1) axmax(1) axmin(2) axmax(2)]);
         if intE,
             Gsym = 'G0';
@@ -156,7 +166,7 @@ for ichan = 1:length(channels),
         end
         title(sprintf('%s : E0=%g (%.1f%%), %s=%g (%.1f%%)',...
             chan,results.(chan).E0,results.(chan).E0err*100,...
-            Gsym,results.(chan).G0,results.(chan).G0err*100));
+            Gsym,results.(chan).G0,results.(chan).G0err*100),'interpreter','none');
         xlabel(sprintf('E0, %s',resp.E_UNIT));
         ylabel(sprintf('%s, %s',Gsym,G_UNIT));
         grid on;
