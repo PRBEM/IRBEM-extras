@@ -6,9 +6,8 @@ function results = rfl_bowtie(inst_info,type,species,exponents,channels,varargin
 %   'int' for integral channel
 %   'diff' for differential channel
 %   'wide' for wide differential channel
-%       a wide channel requires an E0 (lower threshold) provided a priori
-%       in an optional input 'E0' or 
-%       in the inst_info structure for each channel
+%       a wide channel requires an E0 (lower threshold) provided by the
+%       'E0' option
 % species - string giving species to study (e.g., 'PROT')
 % exponents - power law exponents for differential energy spectrum
 %   e.g., [3,4,5] for E^-3, E^-4, E^-5
@@ -22,7 +21,7 @@ function results = rfl_bowtie(inst_info,type,species,exponents,channels,varargin
 %   for int type, E0 is the effective energy threshold and
 %     E1 is infinity
 %     G0 the geometric-efficiency factor (e.g., cm^2 sr)
-%   for wide type, E0 is copied from the input inst_info
+%   for wide type, E0 is the lower energy threshold
 %     E1 is the effective upper energy limit for the channel and
 %     G0 is the geometric-efficiency factor (e.g., cm^2 sr)
 %   other fields:
@@ -33,8 +32,12 @@ function results = rfl_bowtie(inst_info,type,species,exponents,channels,varargin
 %   intersections determined in the bow tie analysis (no sqrt(N) factor)
 %
 % options:
-% 'E0',E0 - array of same length as CHANNEL_NAMES giving E0 in E_UNIT used
-%   by the inst_info structure
+% 'E0',[...] array of same length as CHANNEL_NAMES giving E0 in E_UNIT used
+% 'E0','50%' - determine E0 as the first time the response exceeds 50% max
+% 'E0','10%' - determine E0 as the first time the response exceeds 10% max
+% 'E0','struct' - from the inst_info structure (e.g., inst_info.Elec1.ELE.E0)
+%   (if E0 is omitted, 'struct' is assumed, and then '50%' is used if E0 is
+%   not in the inst_info structure)
 % 'plot' - make diagnostic plot
 
 if ischar(inst_info),
@@ -63,7 +66,7 @@ end
 
 type = strmatch(lower(type),types);
 
-E0s = [];
+E0mode = 'struct';
 i = 1;
 do_plot = false;
 while i <= length(varargin),
@@ -72,7 +75,7 @@ while i <= length(varargin),
             do_plot=true;
         case {'e0'},
             i = i+1;
-            E0s = varargin{i};
+            E0mode = varargin{i};
         otherwise
             error('Unknown option "%s"',varargin{i});
     end
@@ -83,7 +86,7 @@ if isempty(channels),
     channels = inst_info.CHANNEL_NAMES;
 end
 
-if ~isempty(E0s) && (numel(E0s) ~= numel(channels)),
+if isnumeric(E0mode) && (numel(E0mode) ~= numel(channels)),
     error('Supplied E0 array must have one entry per channel (%d)',numel(channels));
 end
 
@@ -102,21 +105,31 @@ for ichan = 1:length(channels),
     end
     sp = inst_info.(chan).SPECIES{ispec};
     resp = inst_info.(chan).(sp);
+    [hE,result_code] = resp.make_hE(resp,resp.E_GRID,[]);
+    R = hE./rfl_make_deltas(resp.E_GRID);
     if type == TYPE_WIDE,
-        if ~isempty(E0s),
-            E0 = E0s(ichan);
+        if isnumeric(E0mode),
+            E0 = E0mode(ichan);
         else
-            if isfield(resp,'E0'),
-                E0 = resp.E0;
-            else
-                error('E0 missing from %s (required for "wide" fit)',chan);
+            if strcmpi(E0mode,'struct'),
+                if isfield(resp,'E0'),
+                    E0 = resp.E0;
+                else
+                    fprintf('E0 not supplied for %s, defaulting to 50%% method\n',chan);
+                    E0mode = '50%';
+                end
+            end
+            if strcmp(E0mode,'50%'),
+                E0 = resp.E_GRID(min(find(R>=max(R)/2)));
+            end
+            if strcmp(E0mode,'10%'),
+                E0 = resp.E_GRID(min(find(R>=max(R)/10)));
             end
         end
         E_GRID = resp.E_GRID(resp.E_GRID>=E0);
     else
         E_GRID = resp.E_GRID;
     end
-    [hE,result_code] = resp.make_hE(resp,resp.E_GRID,[]);
     
     if do_plot,
         fig = figure;
@@ -227,16 +240,15 @@ for ichan = 1:length(channels),
     if do_plot,
         figure(fig);
         loglog(solution(1),solution(2),'rx','linew',3);
-        yeff = hE./rfl_make_deltas(resp.E_GRID);
         axmin = min(intersect);
         axmax = max(intersect);
         axmin(1) = min(axmin(1),E_GRID(1));
         axmax(1) = max(axmax(1),E_GRID(end));
-        axmin(2) = min(axmin(2),min(yeff(yeff>0)));
-        axmax(2) = max(axmax(2),max(yeff));
+        axmin(2) = min(axmin(2),min(R(R>0)));
+        axmax(2) = max(axmax(2),max(R));
         axmin = 10.^(floor(-0.5+log10(axmin)));
         axmax = 10.^(ceil(0.5+log10(axmax)));
-        loglog(resp.E_GRID,max(yeff,axmin(2)),'g-','linew',2); % epsdEG vs E
+        loglog(resp.E_GRID,max(R,axmin(2)),'g-','linew',2); % epsdEG vs E
         axis([axmin(1) axmax(1) axmin(2) axmax(2)]);
         switch(type),
             case {TYPE_INT,TYPE_WIDE},

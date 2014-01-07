@@ -1,6 +1,6 @@
 % demonstrate rfl bowtie on differential (diff and wide) channels
 
-MeV = linspace(0.1,30,1000);
+MeV = 10.^linspace(-1,log10(30),1000);
 
 % top-level info
 clear inst_info;
@@ -47,7 +47,8 @@ for i = 1:length(inst_info.CHANNEL_NAMES),
 end
 
 % wide fits
-results = rfl_bowtie(inst_info,'wide','ELE',2:5,[],'E0',wideE0s,'plot');
+%results = rfl_bowtie(inst_info,'wide','ELE',2:5,[],'E0',wideE0s,'plot');
+results = rfl_bowtie(inst_info,'wide','ELE',2:5,[],'E0','50%','plot');
 for i = 1:length(inst_info.CHANNEL_NAMES),
     chan = inst_info.CHANNEL_NAMES{i};
     ideal = inst_info.(chan).ELE;
