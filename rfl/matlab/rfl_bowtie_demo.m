@@ -1,4 +1,4 @@
-% demonstrate rfl bowtie on differential channels
+% demonstrate rfl bowtie on differential (diff and wide) channels
 
 MeV = linspace(0.1,30,1000);
 
@@ -18,6 +18,8 @@ inst_info.ELE.BIDIRECTIONAL = 'FALSE';
 inst_info.ELE.E_GRID = MeV;
 % Channel-specific info
 inst_info.CHANNEL_NAMES = {};
+wideE0s = []; % holds wide channel lower threshold
+wideE1s = []; % holds wide channel upper threshold
 for iE = [1,3,9],
     for dE = [0.1,0.5,1],
         chan = sprintf('E%dMEV_d%dkeV',iE,dE*1e3);
@@ -28,14 +30,27 @@ for iE = [1,3,9],
         inst_info.(chan).ELE.CROSSCALIB = 1;
         inst_info.(chan).ELE.CROSSCALIB_RMSE = log(2)/2;
         inst_info.(chan).ELE.EPS = double(abs(MeV-iE) < dE/2);
+        wideE0s(end+1) = iE-dE/2;
+        wideE1s(end+1) = iE+dE/2;
     end
 end
 
 inst_info = rfl_load_inst_info(inst_info); % populate
+
+% diff fits
 results = rfl_bowtie(inst_info,'diff','ELE',2:5,[],'plot');
 for i = 1:length(inst_info.CHANNEL_NAMES),
     chan = inst_info.CHANNEL_NAMES{i};
     ideal = inst_info.(chan).ELE;
     bowtie = results.(chan);
-    fprintf('%20s, ideal(bowtie): E0=%2.f(%.2f), dE = %.2f(%.2f)\n',chan,ideal.E0,bowtie.E0,ideal.DE,bowtie.G0/ideal.G);
+    fprintf('diff %15s, ideal(bowtie): E0=%.2f(%.2f), dE = %.2f(%.2f)\n',chan,ideal.E0,bowtie.E0,ideal.DE,bowtie.G0/ideal.G);
+end
+
+% wide fits
+results = rfl_bowtie(inst_info,'wide','ELE',2:5,[],'E0',wideE0s,'plot');
+for i = 1:length(inst_info.CHANNEL_NAMES),
+    chan = inst_info.CHANNEL_NAMES{i};
+    ideal = inst_info.(chan).ELE;
+    bowtie = results.(chan);
+    fprintf('wide %15s, ideal(bowtie): E1=%.2f(%.2f), G0 = %.2f(%.2f)\n',chan,wideE1s(i),bowtie.E1,ideal.G,bowtie.G0);
 end
