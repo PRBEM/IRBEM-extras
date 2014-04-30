@@ -284,7 +284,7 @@ mirror_lat = nan(size(sina0));
 for i = 1:numel(sina0),
     Px = [1, 0, 0, 0, 0, 3*sina0(i)^4, -4*sina0(i)^4];
     xroots = roots(Px);
-    xroot = xroots((imag(xroots)==0) & (xroots>0));
+    xroot = xroots((imag(xroots)==0) & (real(xroots)>0));
     mirror_lat(i) = acos(sqrt(xroot))/torad; % mirror latitude
 end
 function maglat = BB0toMagLat(BB0,units)
@@ -504,7 +504,7 @@ species = SelectSpecies(species);
 m0 = mks.(species).m0;
 
 % M = p^2/2/m0/Bm
-p2 = 2*m0*Bm*M; % (kg * nT * MeV/G) = (1e5)*(kg MeV)
+p2 = 2*m0*Bm.*M; % (kg * nT * MeV/G) = (1e5)*(kg MeV)
 p2 = 1e-5*p2*mks.MeV; % kg J = kg^2 m^2 / s^2
 gamma = sqrt(1+p2/m0^2/mks.c^2);
 E = (gamma-1)*m0*mks.c^2; % J

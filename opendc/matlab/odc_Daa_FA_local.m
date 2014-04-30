@@ -72,6 +72,10 @@ function [Daa,Dap,Dpp] = odc_Daa_FA_local(species,E,alpha,L,MLT,B,Beq,hemi,wave_
 %   (otherwise dipole magnetic latitude is computed from B/Beq)
 %   (note: sign of maglat is ignored in favor of hemi)
 
+if B < Beq,
+    Beq = B; % round-off happens sometimes ensure Beq <= B
+end
+
 method = 'auto';
 join_outputs = false;
 last_root_only = false; % this is for debugging only
@@ -318,7 +322,6 @@ end
 if join_outputs,
     Daa = [Daa,Dap,Dpp];
 end
-
 
 function y = y2005(x,b,s,epsilon)
 y = abs(x)*sqrt(1-b/((x-s)*(x+s*epsilon))); % (25), 2005 (also A2, A3)

@@ -102,13 +102,21 @@ function inst_info = read_from_cdf(FileName)
 % load inst_info from a CDF
 inst_info = [];
 
+
 info = cdfinfo(FileName);
 data = cdfread(FileName);
 for i = 1:length(info.Variables),
-    if ismember(info.Variables{i,1},{'CHANNEL_NAMES','SPECIES','REFERENCES'}),
+    var = info.Variables{i,1};
+    f = find(var == '.');
+    if isempty(f),
+        last_part = var;
+    else
+        last_part = var((f(end)+1):end);
+    end
+    if ismember(last_part,{'CHANNEL_NAMES','SPECIES','REFERENCES'});
         data{i} = cellstr(data{i}); % convert rows of strings to cell arrays of strings
     end
-    eval(['inst_info.',info.Variables{i,1},'=data{i};']);
+    eval(['inst_info.',var,'=data{i};']);
 end
 
 function var = recursive_rename(var,renames)

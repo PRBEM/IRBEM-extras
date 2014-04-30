@@ -73,8 +73,10 @@ end
 N = length(Bmag);
 if ~isfinite(Bm),
     Bm = max(Bmag); % mirror field strength
+else
+    Bm = max(Bm,max(Bmag)); % ensure Bm >= Blocal
 end
-Beq = min(Bmag);
+Beq = min(Bmag); % ensure Beq <= Blocal
 a0_deg = asind(sqrt(Beq./Bm));
 util = odc_util; % load utility functions and constants
 hemi(hemi==0) = +1; % put equator in northern hemisphere
