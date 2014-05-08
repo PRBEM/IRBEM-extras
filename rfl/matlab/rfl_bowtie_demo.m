@@ -33,12 +33,22 @@ for iE = [1,3,9],
         wideE0s(end+1) = iE-dE/2;
         wideE1s(end+1) = iE+dE/2;
     end
+    chan = sprintf('GT%dMEV',iE);
+    inst_info.CHANNEL_NAMES{end+1} = chan;
+    inst_info.(chan).ELE.G = 1;
+    inst_info.(chan).ELE.E0 = iE;
+    inst_info.(chan).ELE.DE = inf;
+    inst_info.(chan).ELE.CROSSCALIB = 1;
+    inst_info.(chan).ELE.CROSSCALIB_RMSE = log(2)/2;
+    inst_info.(chan).ELE.EPS = double(MeV>=iE);
+    wideE0s(end+1) = iE;
+    wideE1s(end+1) = inf;
 end
 
 inst_info = rfl_load_inst_info(inst_info); % populate
 
 % diff fits
-results = rfl_bowtie(inst_info,'diff','ELE',2:5,[],'plot');
+results = rfl_bowtie(inst_info,'diff','ELE',2:5,[],'plot','T',[0.1 0.5 1]);
 for i = 1:length(inst_info.CHANNEL_NAMES),
     chan = inst_info.CHANNEL_NAMES{i};
     ideal = inst_info.(chan).ELE;
@@ -47,11 +57,20 @@ for i = 1:length(inst_info.CHANNEL_NAMES),
 end
 
 % wide fits
-%results = rfl_bowtie(inst_info,'wide','ELE',2:5,[],'E0',wideE0s,'plot');
-results = rfl_bowtie(inst_info,'wide','ELE',2:5,[],'E0','50%','plot');
+results = rfl_bowtie(inst_info,'wide','ELE',2:5,[],'E0','50%','plot','T',[0.1 0.5 1]);
 for i = 1:length(inst_info.CHANNEL_NAMES),
     chan = inst_info.CHANNEL_NAMES{i};
     ideal = inst_info.(chan).ELE;
     bowtie = results.(chan);
     fprintf('wide %15s, ideal(bowtie): E1=%.2f(%.2f), G0 = %.2f(%.2f)\n',chan,wideE1s(i),bowtie.E1,ideal.G,bowtie.G0);
 end
+
+% int fits
+results = rfl_bowtie(inst_info,'int','ELE',2:5,[],'plot','T',[0.1 0.5 1]);
+for i = 1:length(inst_info.CHANNEL_NAMES),
+    chan = inst_info.CHANNEL_NAMES{i};
+    ideal = inst_info.(chan).ELE;
+    bowtie = results.(chan);
+    fprintf('int %15s, ideal(bowtie): E0=%.2f(%.2f), G0 = %.2f(%.2f)\n',chan,ideal.E0,bowtie.E0,ideal.G,bowtie.G0/ideal.G);
+end
+

@@ -1,5 +1,6 @@
 function results = rfl_bowtie(inst_info,type,species,exponents,channels,varargin)
 % results = rfl_bowtie(inst_info,type,species,exponents,channels)
+% results = rfl_bowtie(inst_info,type,species,exponents,channels)
 % perform bowtie analysis
 % inst_info  - string giving file name or structure containing inst_info
 % type - what type of channel to approximate with the bowtie
@@ -11,6 +12,9 @@ function results = rfl_bowtie(inst_info,type,species,exponents,channels,varargin
 % species - string giving species to study (e.g., 'PROT')
 % exponents - power law exponents for differential energy spectrum
 %   e.g., [3,4,5] for E^-3, E^-4, E^-5
+%   exp(-E/T) can be specified with 'T' option (see below). 
+%   Both power law and exponential types are allowed
+%   To do just exponentials, specify 'T' option and leave exponents empty
 % channels - cell array of strings, channel names
 %  (default or [] does all in inst_info.CHANNEL_NAMES)
 % results - struct with members given by channels or inst_info.CHANNEL_NAMES
@@ -38,6 +42,7 @@ function results = rfl_bowtie(inst_info,type,species,exponents,channels,varargin
 % 'E0','struct' - from the inst_info structure (e.g., inst_info.Elec1.ELE.E0)
 %   (if E0 is omitted, 'struct' is assumed, and then '50%' is used if E0 is
 %   not in the inst_info structure)
+% 'T',T - include exp(-E/T) type exponential spectra for one or more T's.
 % 'plot' - make diagnostic plot
 
 if ischar(inst_info),
@@ -57,7 +62,7 @@ if nargin < 3,
 end
 
 if nargin < 4,
-    error('Must specify exponents');
+    error('Must specify exponents or T''s');
 end
 
 if nargin < 5,
@@ -69,10 +74,14 @@ type = strmatch(lower(type),types);
 E0mode = 'struct';
 i = 1;
 do_plot = false;
+Ts = [];
 while i <= length(varargin),
     switch(lower(varargin{i})),
         case {'plot'},
             do_plot=true;
+        case {'t'},
+            i = i+1;
+            Ts = varargin{i};
         case {'e0'},
             i = i+1;
             E0mode = varargin{i};
@@ -82,15 +91,71 @@ while i <= length(varargin),
     i = i+1;
 end
 
+clear sinfo
+
+sinfo.PL = struct('type','PL','index',1,'linestyle','k-');
+sinfo.EXP = struct('type','EXP','index',2,'linestyle','k--');
+
+Nn = length(exponents);
+NT = length(Ts);
+Ns = NT+Nn;
+spectra = cell(Ns,1);
+for i = 1:Nn,
+    spectra{i} = setfield(sinfo.PL,'param',exponents(i));
+    n = exponents(i);
+    spectra{i}.j = @(E)E.^(-n);
+    switch(type),
+        case TYPE_INT,
+            spectra{i}.G = @(c,E,E0)c*E.^(n-1)*(n-1);
+        case TYPE_DIFF,
+            spectra{i}.G = @(c,E,E0)c*E.^n;
+        case TYPE_WIDE,
+            spectra{i}.G = @(c,E,E0)c*(n-1)./(E0^(1-n)-E.^(1-n));
+    end
+    
+end
+for i = 1:NT,
+    T = Ts(i);
+    spectra{Nn+i} = setfield(sinfo.EXP,'param',T);
+    spectra{Nn+i}.j = @(E)exp(-E/T);
+    switch(type),
+        case TYPE_INT,
+            spectra{Nn+i}.G = @(c,E,E0)c.*exp(E./T)./T;
+        case TYPE_DIFF,
+            spectra{Nn+i}.G = @(c,E,E0)c.*exp(E./T);
+        case TYPE_WIDE,
+            spectra{Nn+i}.G = @(c,E,E0)c./T.*(E-E0)./(exp(-E0./T)-exp(-E./T));
+    end    
+end
+
 if isempty(channels),
     channels = inst_info.CHANNEL_NAMES;
+end
+
+% build intersect function table
+intersect_func = cell(2,2);
+switch(type),
+    case TYPE_INT,
+        intersect_func{sinfo.PL.index,sinfo.PL.index} = @intersect_INT_PL_PL;
+        intersect_func{sinfo.PL.index,sinfo.EXP.index} = @intersect_INT_PL_EXP;
+        intersect_func{sinfo.EXP.index,sinfo.PL.index} = @intersect_INT_EXP_PL;
+        intersect_func{sinfo.EXP.index,sinfo.EXP.index} = @intersect_INT_EXP_EXP;
+    case TYPE_DIFF,
+        intersect_func{sinfo.PL.index,sinfo.PL.index} = @intersect_DIFF_PL_PL;
+        intersect_func{sinfo.PL.index,sinfo.EXP.index} = @intersect_DIFF_PL_EXP;
+        intersect_func{sinfo.EXP.index,sinfo.PL.index} = @intersect_DIFF_EXP_PL;
+        intersect_func{sinfo.EXP.index,sinfo.EXP.index} = @intersect_DIFF_EXP_EXP;
+    case TYPE_WIDE,
+        intersect_func{sinfo.PL.index,sinfo.PL.index} = @intersect_WIDE_PL_PL;
+        intersect_func{sinfo.PL.index,sinfo.EXP.index} = @intersect_WIDE_PL_EXP;
+        intersect_func{sinfo.EXP.index,sinfo.PL.index} = @intersect_WIDE_EXP_PL;
+        intersect_func{sinfo.EXP.index,sinfo.EXP.index} = @intersect_WIDE_EXP_EXP;
 end
 
 if isnumeric(E0mode) && (numel(E0mode) ~= numel(channels)),
     error('Supplied E0 array must have one entry per channel (%d)',numel(channels));
 end
 
-Nn = length(exponents);
 clear results
 for ichan = 1:length(channels),
     chan = channels{ichan};
@@ -128,6 +193,7 @@ for ichan = 1:length(channels),
         end
         E_GRID = resp.E_GRID(resp.E_GRID>=E0);
     else
+        E0 = nan;
         E_GRID = resp.E_GRID;
     end
     
@@ -136,84 +202,50 @@ for ichan = 1:length(channels),
         results.(chan).fig = fig;
     end
     
-    C = nan(Nn,1);
+    C = nan(Ns,1);
     % find reference counts
-    for iexp = 1:Nn,
-        n = exponents(iexp);
-        j = resp.E_GRID(:).^-n;
-        c = hE(:)'*j;
-        % for diff:
-        %   c = E0^-n*G0
-        %   G0 = c*E0^n
-        % for int:
-        %   c = E0^(1-n)/(n-1)*G0
-        %   G0 = c*E0^(n-1)*(n-1)
-        % for wide:
-        %   c = [E0^(1-n)-E1^(1-n)]/(n-1)*G0
-        %   G0 = c*(n-1)/[E0^(1-n)-E1^(1-n)]
-        C(iexp) = c;
+    for is = 1:Ns,
+        C(is) = hE(:)'*spectra{is}.j(resp.E_GRID(:));
     end
     % find intersections
     intersect = [];
-    for iexp1 = 1:Nn,
-        n1 = exponents(iexp1);
-        c1 = C(iexp1);
-        if do_plot,
-            figure(fig);
-            switch(type),
-                case TYPE_INT,
-                    loglog(E_GRID,c1*E_GRID.^(n1-1)*(n1-1),'k-'); % G0 vs E0
-                case TYPE_DIFF,
-                    loglog(E_GRID,c1*E_GRID.^n1,'k-'); % G0 vs E0
-                case TYPE_WIDE,
-                    loglog(E_GRID,c1*(n1-1)./(E0^(1-n1)-E_GRID.^(1-n1)),'k-'); % G0 vs E0
-            end
-            hold on;
+    for ipass = 1:2,
+        % pass 1: do same type
+        % pass 2: do hybrid type w/ guess since these can have multiple crossings
+        if ipass == 1,
+            Eguess = nan;
+        else
+            Eguess = median(intersect(:,1)); % initial guess from same-type intersections
         end
-        for iexp2 = (iexp1+1):Nn,
-            n2 = exponents(iexp2);
-            c2 = C(iexp2);
-            switch(type),
-                case TYPE_INT,
-                    % G0 = c1*E0^(n1-1)*(n1-1)
-                    % G0 = c2*E0^(n2-1)*(n2-1)
-                    % c1*E0^(n1-1)*(n1-1) = c2*E0^(n2-1)*(n2-1)
-                    % c1/c2*(n1-1)/(n2-1) = E0^(n2-n1)
-                    % E0 = (c1/c2*(n1-1)/(n2-1))^(1/(n2-n1))
-                    E = (c1/c2*(n1-1)/(n2-1))^(1/(n2-n1)); % E0
-                    G0 = c1*E^(n1-1)*(n1-1);
-                case TYPE_DIFF,
-                    % G0 = c1*E0^n1
-                    % G0 = c2*E0^n2
-                    % c1*E0^n1 = c2*E0^n2
-                    % c1/c2 = E0^(n2-n1)
-                    % E0 = (c1/c2)^(1/(n2-n1))
-                    E = (c1/c2)^(1/(n2-n1)); % E0
-                    G0 = c1*E^n1;
-                case TYPE_WIDE,
-                    % G0 = c1*(n1-1)/[E0^(1-n1)-E1^(1-n1)]
-                    % G0 = c2*(n2-1)/[E0^(1-n2)-E1^(1-n2)]
-                    % c1*(n1-1)/[E0^(1-n1)-E1^(1-n1)] = c2*(n2-1)/[E0^(1-n2)-E1^(1-n2)]
-                    % no analytical solution, solve numerically
-                    G0fun = @(E1,c,n)c*(n-1)./(E0.^(1-n)-E1.^(1-n));
-                    %E =
-                    %fzero(@(E1)G0fun(E1,c1,n1)-G0fun(E1,c2,n2),1.5*E0); % poor convergence
-                    %E =
-                    %fminsearch(@(E1)(G0fun(E1,c1,n1)-G0fun(E1,c2,n2)).^2,1.5*E0); % poor convergence
-                    % instead define E1 = E0+exp(dE1) and search in dE1
-                    dE1 = fzero(@(dE1)log(G0fun(E0+exp(dE1),c1,n1))-log(G0fun(E0+exp(dE1),c2,n2)),-2);
-                    E = E0+exp(dE1);
-                    G0 = c1*(n1-1)/(E0^(1-n1)-E^(1-n1));
-            end
-            if do_plot,
+        for is1 = 1:Ns,
+            s1 = spectra{is1};
+            c1 = C(is1);
+            if do_plot && (ipass==1),
                 figure(fig);
-                loglog(E,G0,'bo');
+                loglog(E_GRID,s1.G(c1,E_GRID,E0),s1.linestyle);
+                hold on;
             end
-            intersect = [intersect;E G0];
+            for is2 = (is1+1):Ns,
+                s2 = spectra{is2};
+                if (ipass==1) == isequal(s1.type,s2.type), % do this on pass 1 for same types, on pass 2 for hybrid types
+                    c2 = C(is2);
+                    E = intersect_func{s1.index,s2.index}(s1,s2,c1,c2,E0,Eguess);
+                    if ~isfinite(E),
+                        warning('No fit found for %s/%g - %s/%g',s1.type,s1.param,s2.type,s2.param);
+                        continue;
+                    end
+                    G0 = s1.G(c1,E,E0);
+                    intersect = [intersect;E G0 is1 is2];
+                end
+            end
         end
     end
-    solution = exp(median(log(intersect)));
-    sol_error = std(log(intersect));
+    if do_plot,
+        figure(fig);
+        loglog(intersect(:,1),intersect(:,2),'bo');
+    end
+    solution = exp(median(log(intersect(:,1:2))));
+    sol_error = std(log(intersect(:,1:2)));
     results.(chan).G0 = solution(2);
     results.(chan).G0err = sol_error(2);
     switch(type),
@@ -240,8 +272,8 @@ for ichan = 1:length(channels),
     if do_plot,
         figure(fig);
         loglog(solution(1),solution(2),'rx','linew',3);
-        axmin = min(intersect);
-        axmax = max(intersect);
+        axmin = min(intersect(:,1:2));
+        axmax = max(intersect(:,1:2));
         axmin(1) = min(axmin(1),E_GRID(1));
         axmax(1) = max(axmax(1),E_GRID(end));
         axmin(2) = min(axmin(2),min(R(R>0)));
@@ -266,3 +298,90 @@ for ichan = 1:length(channels),
         grid on;
     end
 end
+
+% intersect functions all have same syntax:
+% input two spectra and two counts
+% and E0 which is often ignored
+% Eguess is also often ignored
+function E = intersect_INT_PL_PL(s1,s2,c1,c2,E0,Eguess)
+n1 = s1.param;
+n2 = s2.param;
+% G0 = c1*E0^(n1-1)*(n1-1)
+% G0 = c2*E0^(n2-1)*(n2-1)
+% c1*E0^(n1-1)*(n1-1) = c2*E0^(n2-1)*(n2-1)
+% c1/c2*(n1-1)/(n2-1) = E0^(n2-n1)
+% E0 = (c1/c2*(n1-1)/(n2-1))^(1/(n2-n1))
+E = (c1/c2*(n1-1)/(n2-1))^(1/(n2-n1)); % E0
+
+function E = intersect_INT_PL_EXP(s1,s2,c1,c2,E0,Eguess)
+% c2/T2*exp(E/T2) = (n1-1)*c1*E^(n1-1)
+E = intersect_ID_PL_EXP(s1,s2,c1,c2,E0,Eguess);
+
+function E = intersect_INT_EXP_PL(s1,s2,c1,c2,E0,Eguess)
+E = intersect_INT_PL_EXP(s2,s1,c2,c1,E0,Eguess);
+
+function E = intersect_INT_EXP_EXP(s1,s2,c1,c2,E0,Eguess)
+T1 = s1.param;
+T2 = s2.param;
+E = (log(c2)-log(T2)-log(c1)+log(T1))/(1/T1-1/T2);
+
+function E = intersect_DIFF_PL_PL(s1,s2,c1,c2,E0,Eguess)
+n1 = s1.param;
+n2 = s2.param;
+% G0 = c1*E0^n1
+% G0 = c2*E0^n2
+% c1*E0^n1 = c2*E0^n2
+% c1/c2 = E0^(n2-n1)
+% E0 = (c1/c2)^(1/(n2-n1))
+E = (c1/c2)^(1/(n2-n1)); % E0
+
+function E = intersect_DIFF_PL_EXP(s1,s2,c1,c2,E0,Eguess)
+% log(c1)-log(c2) = E/T2-n1*log(E)
+E = intersect_ID_PL_EXP(s1,s2,c1,c2,E0,Eguess);
+
+function E = intersect_ID_PL_EXP(s1,s2,c1,c2,E0,Eguess)
+[logE,fval,exitflag] = fzero(@(logE)log(s1.G(c1,exp(logE),E0))-log(s2.G(c2,exp(logE),E0)),log(Eguess));
+if exitflag==1,
+    E = exp(logE);
+else
+    E = nan;
+end
+
+function E = intersect_DIFF_EXP_PL(s1,s2,c1,c2,E0,Eguess)
+E = intersect_DIFF_PL_EXP(s2,s1,c2,c1);
+
+function E = intersect_DIFF_EXP_EXP(s1,s2,c1,c2,E0,Eguess)
+T1 = s1.param;
+T2 = s2.param;
+E = (log(c1)-log(c2))/(1/T2-1/T1);
+
+function E = intersect_WIDE_PL_PL(s1,s2,c1,c2,E0,Eguess)
+% G0 = c1*(n1-1)/[E0^(1-n1)-E1^(1-n1)]
+% G0 = c2*(n2-1)/[E0^(1-n2)-E1^(1-n2)]
+% c1*(n1-1)/[E0^(1-n1)-E1^(1-n1)] = c2*(n2-1)/[E0^(1-n2)-E1^(1-n2)]
+% no analytical solution, solve numerically
+E = intersect_WIDE(s1,s2,c1,c2,E0,Eguess);
+
+function E = intersect_WIDE_PL_EXP(s1,s2,c1,c2,E0,Eguess)
+% no analytical solution
+E = intersect_WIDE(s2,s1,c2,c1,E0,Eguess);
+
+function E = intersect_WIDE(s1,s2,c1,c2,E0,Eguess) % generic
+if isfinite(Eguess),
+    logdE = log(Eguess-E0);
+else    
+    logdE = log(E0)-2;
+end
+[logdE,fval,exitflag] = fzero(@(logdE)log(s1.G(c1,E0+exp(logdE),E0))-log(s2.G(c2,E0+exp(logdE),E0)),logdE);
+if exitflag==1,
+    E = E0+exp(logdE);
+else
+    E = nan;
+end
+
+function E = intersect_WIDE_EXP_PL(s1,s2,c1,c2,E0,Eguess)
+E = intersect_WIDE_PL_EXP(s2,s1,c2,c1,E0,Eguess);
+
+function E = intersect_WIDE_EXP_EXP(s1,s2,c1,c2,E0,Eguess)
+% c1*(E-E0)/T1/(exp(-E0/T1)-exp(-E/T1)) = c2*(E-E0)/T2/(exp(-E0/T2)-exp(-E/T2));
+E = intersect_WIDE(s1,s2,c1,c2,E0,Eguess);
