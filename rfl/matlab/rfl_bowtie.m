@@ -12,7 +12,7 @@ function results = rfl_bowtie(inst_info,type,species,exponents,channels,varargin
 % species - string giving species to study (e.g., 'PROT')
 % exponents - power law exponents for differential energy spectrum
 %   e.g., [3,4,5] for E^-3, E^-4, E^-5
-%   exp(-E/T) can be specified with 'T' option (see below). 
+%   exp(-E/T) can be specified with 'T' option (see below).
 %   Both power law and exponential types are allowed
 %   To do just exponentials, specify 'T' option and leave exponents empty
 % channels - cell array of strings, channel names
@@ -93,8 +93,8 @@ end
 
 clear sinfo
 
-sinfo.PL = struct('type','PL','index',1,'linestyle','k-');
-sinfo.EXP = struct('type','EXP','index',2,'linestyle','k--');
+sinfo.PL = struct('type','PL','index',1,'linestyle','k-','special',false);
+sinfo.EXP = struct('type','EXP','index',2,'linestyle','k--','special',false);
 
 Nn = length(exponents);
 NT = length(Ts);
@@ -104,13 +104,24 @@ for i = 1:Nn,
     spectra{i} = setfield(sinfo.PL,'param',exponents(i));
     n = exponents(i);
     spectra{i}.j = @(E)E.^(-n);
+    spectra{i}.special = (n<=1) || (type==TYPE_WIDE);
     switch(type),
         case TYPE_INT,
-            spectra{i}.G = @(c,E,E0)c*E.^(n-1)*(n-1);
+            if n<1, % need to include Emax
+                spectra{i}.G = @(c,E,E0,Emax)c*(n-1)./(Emax.^(n-1)-E.^(n-1));
+            elseif n==1, % need to include Emax and special case n
+                spectra{i}.G = @(c,E,E0,Emax)c./(log(Emax)-log(E));
+            else % treate Emax as infinity
+                spectra{i}.G = @(c,E,E0,Emax)c*E.^(n-1)*(n-1);
+            end
         case TYPE_DIFF,
-            spectra{i}.G = @(c,E,E0)c*E.^n;
-        case TYPE_WIDE,
-            spectra{i}.G = @(c,E,E0)c*(n-1)./(E0^(1-n)-E.^(1-n));
+            spectra{i}.G = @(c,E,E0,Emax)c*E.^n;
+        case TYPE_WIDE,            
+            if n==1, % need to include Emax and special case n
+                spectra{i}.G = @(c,E,E0,Emax)c./(log(E)-log(E0));
+            else % treate Emax as infinity
+                spectra{i}.G = @(c,E,E0,Emax)c*(n-1)./(E0^(1-n)-E.^(1-n));
+            end
     end
     
 end
@@ -120,12 +131,12 @@ for i = 1:NT,
     spectra{Nn+i}.j = @(E)exp(-E/T);
     switch(type),
         case TYPE_INT,
-            spectra{Nn+i}.G = @(c,E,E0)c.*exp(E./T)./T;
+            spectra{Nn+i}.G = @(c,E,E0,Emax)c.*exp(E./T)./T;
         case TYPE_DIFF,
-            spectra{Nn+i}.G = @(c,E,E0)c.*exp(E./T);
+            spectra{Nn+i}.G = @(c,E,E0,Emax)c.*exp(E./T);
         case TYPE_WIDE,
-            spectra{Nn+i}.G = @(c,E,E0)c./T.*(E-E0)./(exp(-E0./T)-exp(-E./T));
-    end    
+            spectra{Nn+i}.G = @(c,E,E0,Emax)c./T./(exp(-E0./T)-exp(-E./T));
+    end
 end
 
 if isempty(channels),
@@ -196,6 +207,7 @@ for ichan = 1:length(channels),
         E0 = nan;
         E_GRID = resp.E_GRID;
     end
+    Emax = E_GRID(end);
     
     if do_plot,
         fig = figure;
@@ -218,23 +230,24 @@ for ichan = 1:length(channels),
             Eguess = median(intersect(:,1)); % initial guess from same-type intersections
         end
         for is1 = 1:Ns,
-            s1 = spectra{is1};
+            s1 = spectra{is1};            
             c1 = C(is1);
             if do_plot && (ipass==1),
                 figure(fig);
-                loglog(E_GRID,s1.G(c1,E_GRID,E0),s1.linestyle);
+                loglog(E_GRID,s1.G(c1,E_GRID,E0,Emax),s1.linestyle);
                 hold on;
             end
             for is2 = (is1+1):Ns,
                 s2 = spectra{is2};
-                if (ipass==1) == isequal(s1.type,s2.type), % do this on pass 1 for same types, on pass 2 for hybrid types
+                ishybrid = isequal(s1.type,s2.type);
+                if (ipass==1) == (ishybrid || s1.special || s2.special), % do this on pass 1 for same types, on pass 2 for hybrid types
                     c2 = C(is2);
-                    E = intersect_func{s1.index,s2.index}(s1,s2,c1,c2,E0,Eguess);
-                    if ~isfinite(E),
-                        warning('No fit found for %s/%g - %s/%g',s1.type,s1.param,s2.type,s2.param);
+                    E = intersect_func{s1.index,s2.index}(s1,s2,c1,c2,E0,Emax,Eguess);
+                    G0 = s1.G(c1,E,E0,Emax);
+                    if (E<=0) || ~isreal(E) || ~isfinite(E) || (G0<=0) || ~isreal(G0) || ~isfinite(G0),
+                        warning('No real, positive, finite fit found for %s/%g - %s/%g',s1.type,s1.param,s2.type,s2.param);
                         continue;
                     end
-                    G0 = s1.G(c1,E,E0);
                     intersect = [intersect;E G0 is1 is2];
                 end
             end
@@ -267,8 +280,8 @@ for ichan = 1:length(channels),
             results.(chan).E1err = sol_error(1);
             results.(chan).E0 = E0;
             results.(chan).E0err = 0;
-    end            
-            
+    end
+    
     if do_plot,
         figure(fig);
         loglog(solution(1),solution(2),'rx','linew',3);
@@ -303,29 +316,57 @@ end
 % input two spectra and two counts
 % and E0 which is often ignored
 % Eguess is also often ignored
-function E = intersect_INT_PL_PL(s1,s2,c1,c2,E0,Eguess)
+function E = intersect_INT_PL_PL(s1,s2,c1,c2,E0,Emax,Eguess)
 n1 = s1.param;
 n2 = s2.param;
-% G0 = c1*E0^(n1-1)*(n1-1)
-% G0 = c2*E0^(n2-1)*(n2-1)
-% c1*E0^(n1-1)*(n1-1) = c2*E0^(n2-1)*(n2-1)
-% c1/c2*(n1-1)/(n2-1) = E0^(n2-n1)
-% E0 = (c1/c2*(n1-1)/(n2-1))^(1/(n2-n1))
-E = (c1/c2*(n1-1)/(n2-1))^(1/(n2-n1)); % E0
+if n1 > n2, % try again with n1 < n2
+    E = intersect_INT_PL_PL(s2,s1,c2,c1,E0,Emax,Eguess);
+    return
+end
+if n1<1, % have to deal with Emax
+    % non-analytic cases
+    % n2 < 1 cases
+    % G0 = c1*(n1-1)/(E^(n1-1)-Emax^(n1-1))
+    % G0 = c2*(n2-1)/(E^(n2-1)-Emax^(n2-1))
+    % c1*(n1-1)/(E^(n1-1)-Emax(n2-1)) = c2*(n2-1)/(E^(n2-1)-Emax^(n1-1))
+    % n2 = 1, n2>1 cases also not analytic
+    if ~isfinite(Eguess),
+        Eguess = Emax*0.95;
+    end
+    E = intersect_ID_PL_EXP(s1,s2,c1,c2,E0,Emax,Eguess); % non-analytic
+elseif n1 == 1, % n1 = 1, n2 > 1
+    
+    % G0 = c1/(log(Emax)-log(E))
+    % G0 = c2*E0^(n2-1)*(n2-1)
+    % c1*E0^(n1-1)*(n1-1) = c1/(log(Emax)-log(E))
+    % no analytical solution
+    if ~isfinite(Eguess), % guess at n=1.01 or half-way to n2
+        n1 = min(1.01,(n1+n2)/2);
+        Eguess = (c1/c2*(n1-1)/(n2-1))^(1/(n2-n1)); % E0
+    end
+    E = intersect_ID_PL_EXP(s1,s2,c1,c2,E0,Emax,Eguess); % non-analytic
+else
+    % G0 = c1*E0^(n1-1)*(n1-1)
+    % G0 = c2*E0^(n2-1)*(n2-1)
+    % c1*E0^(n1-1)*(n1-1) = c2*E0^(n2-1)*(n2-1)
+    % c1/c2*(n1-1)/(n2-1) = E0^(n2-n1)
+    % E0 = (c1/c2*(n1-1)/(n2-1))^(1/(n2-n1))
+    E = (c1/c2*(n1-1)/(n2-1))^(1/(n2-n1)); % E0
+end
 
-function E = intersect_INT_PL_EXP(s1,s2,c1,c2,E0,Eguess)
+function E = intersect_INT_PL_EXP(s1,s2,c1,c2,E0,Emax,Eguess)
 % c2/T2*exp(E/T2) = (n1-1)*c1*E^(n1-1)
-E = intersect_ID_PL_EXP(s1,s2,c1,c2,E0,Eguess);
+E = intersect_ID_PL_EXP(s1,s2,c1,c2,E0,Emax,Eguess);
 
-function E = intersect_INT_EXP_PL(s1,s2,c1,c2,E0,Eguess)
-E = intersect_INT_PL_EXP(s2,s1,c2,c1,E0,Eguess);
+function E = intersect_INT_EXP_PL(s1,s2,c1,c2,E0,Emax,Eguess)
+E = intersect_INT_PL_EXP(s2,s1,c2,c1,E0,Emax,Eguess);
 
-function E = intersect_INT_EXP_EXP(s1,s2,c1,c2,E0,Eguess)
+function E = intersect_INT_EXP_EXP(s1,s2,c1,c2,E0,Emax,Eguess)
 T1 = s1.param;
 T2 = s2.param;
 E = (log(c2)-log(T2)-log(c1)+log(T1))/(1/T1-1/T2);
 
-function E = intersect_DIFF_PL_PL(s1,s2,c1,c2,E0,Eguess)
+function E = intersect_DIFF_PL_PL(s1,s2,c1,c2,E0,Emax,Eguess)
 n1 = s1.param;
 n2 = s2.param;
 % G0 = c1*E0^n1
@@ -335,53 +376,53 @@ n2 = s2.param;
 % E0 = (c1/c2)^(1/(n2-n1))
 E = (c1/c2)^(1/(n2-n1)); % E0
 
-function E = intersect_DIFF_PL_EXP(s1,s2,c1,c2,E0,Eguess)
+function E = intersect_DIFF_PL_EXP(s1,s2,c1,c2,E0,Emax,Eguess)
 % log(c1)-log(c2) = E/T2-n1*log(E)
-E = intersect_ID_PL_EXP(s1,s2,c1,c2,E0,Eguess);
+E = intersect_ID_PL_EXP(s1,s2,c1,c2,E0,Emax,Eguess);
 
-function E = intersect_ID_PL_EXP(s1,s2,c1,c2,E0,Eguess)
-[logE,fval,exitflag] = fzero(@(logE)log(s1.G(c1,exp(logE),E0))-log(s2.G(c2,exp(logE),E0)),log(Eguess));
+function E = intersect_ID_PL_EXP(s1,s2,c1,c2,E0,Emax,Eguess)
+[logE,fval,exitflag] = fzero(@(logE)log(s1.G(c1,exp(logE),E0,Emax))-log(s2.G(c2,exp(logE),E0,Emax)),log(Eguess));
 if exitflag==1,
     E = exp(logE);
 else
     E = nan;
 end
 
-function E = intersect_DIFF_EXP_PL(s1,s2,c1,c2,E0,Eguess)
+function E = intersect_DIFF_EXP_PL(s1,s2,c1,c2,E0,Emax,Eguess)
 E = intersect_DIFF_PL_EXP(s2,s1,c2,c1);
 
-function E = intersect_DIFF_EXP_EXP(s1,s2,c1,c2,E0,Eguess)
+function E = intersect_DIFF_EXP_EXP(s1,s2,c1,c2,E0,Emax,Eguess)
 T1 = s1.param;
 T2 = s2.param;
 E = (log(c1)-log(c2))/(1/T2-1/T1);
 
-function E = intersect_WIDE_PL_PL(s1,s2,c1,c2,E0,Eguess)
+function E = intersect_WIDE_PL_PL(s1,s2,c1,c2,E0,Emax,Eguess)
 % G0 = c1*(n1-1)/[E0^(1-n1)-E1^(1-n1)]
 % G0 = c2*(n2-1)/[E0^(1-n2)-E1^(1-n2)]
 % c1*(n1-1)/[E0^(1-n1)-E1^(1-n1)] = c2*(n2-1)/[E0^(1-n2)-E1^(1-n2)]
 % no analytical solution, solve numerically
-E = intersect_WIDE(s1,s2,c1,c2,E0,Eguess);
+E = intersect_WIDE(s1,s2,c1,c2,E0,Emax,Eguess);
 
-function E = intersect_WIDE_PL_EXP(s1,s2,c1,c2,E0,Eguess)
+function E = intersect_WIDE_PL_EXP(s1,s2,c1,c2,E0,Emax,Eguess)
 % no analytical solution
-E = intersect_WIDE(s2,s1,c2,c1,E0,Eguess);
+E = intersect_WIDE(s2,s1,c2,c1,E0,Emax,Eguess);
 
-function E = intersect_WIDE(s1,s2,c1,c2,E0,Eguess) % generic
+function E = intersect_WIDE(s1,s2,c1,c2,E0,Emax,Eguess) % generic
 if isfinite(Eguess),
     logdE = log(Eguess-E0);
-else    
+else
     logdE = log(E0)-2;
 end
-[logdE,fval,exitflag] = fzero(@(logdE)log(s1.G(c1,E0+exp(logdE),E0))-log(s2.G(c2,E0+exp(logdE),E0)),logdE);
+[logdE,fval,exitflag] = fzero(@(logdE)log(s1.G(c1,E0+exp(logdE),E0,Emax))-log(s2.G(c2,E0+exp(logdE),E0,Emax)),logdE);
 if exitflag==1,
     E = E0+exp(logdE);
 else
     E = nan;
 end
 
-function E = intersect_WIDE_EXP_PL(s1,s2,c1,c2,E0,Eguess)
-E = intersect_WIDE_PL_EXP(s2,s1,c2,c1,E0,Eguess);
+function E = intersect_WIDE_EXP_PL(s1,s2,c1,c2,E0,Emax,Eguess)
+E = intersect_WIDE_PL_EXP(s2,s1,c2,c1,E0,Emax,Eguess);
 
-function E = intersect_WIDE_EXP_EXP(s1,s2,c1,c2,E0,Eguess)
+function E = intersect_WIDE_EXP_EXP(s1,s2,c1,c2,E0,Emax,Eguess)
 % c1*(E-E0)/T1/(exp(-E0/T1)-exp(-E/T1)) = c2*(E-E0)/T2/(exp(-E0/T2)-exp(-E/T2));
-E = intersect_WIDE(s1,s2,c1,c2,E0,Eguess);
+E = intersect_WIDE(s1,s2,c1,c2,E0,Emax,Eguess);

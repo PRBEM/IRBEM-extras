@@ -71,6 +71,6 @@ for i = 1:length(inst_info.CHANNEL_NAMES),
     chan = inst_info.CHANNEL_NAMES{i};
     ideal = inst_info.(chan).ELE;
     bowtie = results.(chan);
-    fprintf('int %15s, ideal(bowtie): E0=%.2f(%.2f), G0 = %.2f(%.2f)\n',chan,ideal.E0,bowtie.E0,ideal.G,bowtie.G0/ideal.G);
+    fprintf('int %15s, ideal(bowtie): E0=%.2f(%.2f), G0 = %.2f(%.2f)\n',chan,ideal.E0,bowtie.E0,ideal.G,bowtie.G0);
 end
 
