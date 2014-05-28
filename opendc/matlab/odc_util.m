@@ -60,6 +60,12 @@ function util = odc_util
 %   PitchAngle: in degrees (equatorial pitch angle)
 %   L: dimensionless dipole L value
 %
+% r = util.GyroRadius(Species,Energy,B)
+%   Species - 'e', 'p', etc
+%   Energy - particle kinetic energy MeV
+%   B - local magnetic field strength, nT
+%   r = gyroradius in m
+%
 % B = util.dipoleB(L,MagLat,phi_deg)
 % [B,Bvec] = util.dipoleB(L,MagLat,phi_deg)
 % [B,Bvec,XYZ] = util.dipoleB(L,MagLat,phi_deg)
@@ -166,6 +172,7 @@ util.fce2B = @fce2B;
 util.GyroPeriod = @GyroPeriod;
 util.BouncePeriod = @BouncePeriod;
 util.DriftPeriod = @DriftPeriod;
+util.GyroRadius = @GyroRadius;
 util.dipoleB = @dipoleB;
 util.dipoleIJ = @dipoleIJ;
 util.MBtoMeV = @MBtoMeV;
@@ -510,5 +517,15 @@ gamma = sqrt(1+p2/m0^2/mks.c^2);
 E = (gamma-1)*m0*mks.c^2; % J
 MeV = E/mks.MeV;
 
-
-
+function r = GyroRadius(Species,Energy,B)
+% r = GyroRadius(Species,Energy,B)
+% Species - 'e', 'p', etc
+% Energy - particle kinetic energy MeV
+% B - local magnetic field strength, nT
+% r = gyroradius in m
+global odc_constants
+species = SelectSpecies(Species);
+Bsi = B/1e9; % B in Tesla
+[gamma,vmag,m] = MeVtogamma(Energy,species); % gamma, speed (m/s), m (kg)
+q = abs(odc_constants.mks.(species).q); % charge, C
+r = m.*vmag./q./Bsi; % kg * m/s / C / T = m
