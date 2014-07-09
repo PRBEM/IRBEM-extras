@@ -36,6 +36,10 @@ function results = rfl_bowtie(inst_info,type,species,exponents,channels,varargin
 %   intersections determined in the bow tie analysis (no sqrt(N) factor)
 %
 % options:
+% 'method','mindG' - Choose E0 or E1 that minimizes spread of G0 
+%     Recommended method for determining E0 or E1
+%    (default is 'intersection', which is probably not as good)
+%     E0err or E1err will be 0
 % 'E0',[...] array of same length as CHANNEL_NAMES giving E0 in E_UNIT used
 % 'E0','50%' - determine E0 as the first time the response exceeds 50% max
 % 'E0','10%' - determine E0 as the first time the response exceeds 10% max
@@ -48,6 +52,11 @@ function results = rfl_bowtie(inst_info,type,species,exponents,channels,varargin
 if ischar(inst_info),
     inst_info = rfl_load_inst_info(inst_info);
 end
+
+METHOD_INTERSECT = 1;
+METHOD_MINDG = 2;
+methods = {'intersect','mindg'};
+method = METHOD_INTERSECT;
 
 TYPE_DIFF = 1;
 TYPE_WIDE = 2;
@@ -85,10 +94,23 @@ while i <= length(varargin),
         case {'e0'},
             i = i+1;
             E0mode = varargin{i};
+        case {'method'},
+            i = i+1;
+            method = varargin{i};
         otherwise
             error('Unknown option "%s"',varargin{i});
     end
     i = i+1;
+end
+
+if ischar(method),
+    tmp = find(strcmpi(method,methods));
+    if isempty(tmp),
+        error('Unknown Method: %d',method);
+    end
+    method = tmp;
+elseif ~ismember(method,1:length(methods)),
+    error('Unknown Method: %d',method);
 end
 
 clear sinfo
@@ -221,37 +243,56 @@ for ichan = 1:length(channels),
     end
     % find intersections
     intersect = [];
-    for ipass = 1:2,
-        % pass 1: do same type
-        % pass 2: do hybrid type w/ guess since these can have multiple crossings
-        if ipass == 1,
-            Eguess = nan;
-        else
-            Eguess = median(intersect(:,1)); % initial guess from same-type intersections
-        end
-        for is1 = 1:Ns,
-            s1 = spectra{is1};            
-            c1 = C(is1);
-            if do_plot && (ipass==1),
-                figure(fig);
-                loglog(E_GRID,s1.G(c1,E_GRID,E0,Emax),s1.linestyle);
-                hold on;
+    if method == METHOD_INTERSECT,
+        for ipass = 1:2,
+            % pass 1: do same type
+            % pass 2: do hybrid type w/ guess since these can have multiple crossings
+            if ipass == 1,
+                Eguess = nan;
+            else
+                Eguess = median(intersect(:,1)); % initial guess from same-type intersections
             end
-            for is2 = (is1+1):Ns,
-                s2 = spectra{is2};
-                ishybrid = isequal(s1.type,s2.type);
-                if (ipass==1) == (ishybrid || s1.special || s2.special), % do this on pass 1 for same types, on pass 2 for hybrid types
-                    c2 = C(is2);
-                    E = intersect_func{s1.index,s2.index}(s1,s2,c1,c2,E0,Emax,Eguess);
-                    G0 = s1.G(c1,E,E0,Emax);
-                    if (E<=0) || ~isreal(E) || ~isfinite(E) || (G0<=0) || ~isreal(G0) || ~isfinite(G0),
-                        warning('No real, positive, finite fit found for %s/%g - %s/%g',s1.type,s1.param,s2.type,s2.param);
-                        continue;
+            for is1 = 1:Ns,
+                s1 = spectra{is1};
+                c1 = C(is1);
+                if do_plot && (ipass==1),
+                    figure(fig);
+                    loglog(E_GRID,s1.G(c1,E_GRID,E0,Emax),s1.linestyle);
+                    hold on;
+                end
+                for is2 = (is1+1):Ns,
+                    s2 = spectra{is2};
+                    ishybrid = isequal(s1.type,s2.type);
+                    if (ipass==1) == (ishybrid || s1.special || s2.special), % do this on pass 1 for same types, on pass 2 for hybrid types
+                        c2 = C(is2);
+                        E = intersect_func{s1.index,s2.index}(s1,s2,c1,c2,E0,Emax,Eguess);
+                        G0 = s1.G(c1,E,E0,Emax);
+                        if (E<=0) || ~isreal(E) || ~isfinite(E) || (G0<=0) || ~isreal(G0) || ~isfinite(G0),
+                            warning('No real, positive, finite fit found for %s/%g - %s/%g',s1.type,s1.param,s2.type,s2.param);
+                            continue;
+                        end
+                        intersect = [intersect;E G0 is1 is2];
                     end
-                    intersect = [intersect;E G0 is1 is2];
                 end
             end
         end
+    else % method == METHOD_MINDG
+        G0 = nan(length(E_GRID),Ns);
+        for is = 1:Ns,
+            G0(:,is) = spectra{is}.G(C(is),E_GRID,E0,Emax);
+            if do_plot,
+                figure(fig);
+                loglog(E_GRID,G0(:,is),spectra{is}.linestyle);
+                hold on;
+            end
+        end
+        [stdG,imin] = min(std(log(G0),[],2)); % find best guess
+        imin = imin(1);
+        intersect = nan(Ns,4);
+        intersect(:,1) = E_GRID(imin);
+        intersect(:,2) = G0(imin,:)';
+        intersect(:,3) = 1:Ns;
+        intersect(:,4) = 1:Ns;
     end
     if do_plot,
         figure(fig);
