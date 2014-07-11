@@ -95,7 +95,7 @@ while i <= length(varargin),
             usenu = true;
         case 'maglat',
             i = i+1;
-            maglat = lower(varargin{i});
+            maglat = varargin{i};
         otherwise
             error('Unknown argument "%s"',varargin{i});
     end

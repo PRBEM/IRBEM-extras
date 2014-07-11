@@ -99,6 +99,20 @@ function util = odc_util
 % Bunit - optional, if 'G' returns K in RE*sqrt(G). Otherwise K in
 %   RE*sqrt(nT)
 %
+% psd = flux2psd(flux,energy,species,energy_unit)
+% psd = flux2psd(flux,energy,'e','MeV');
+% species is:
+% electrons: 'electron','e','e-'
+% protons: 'p','H+','p+'
+% flux is expected to be a matrix Nt x NE
+% flux is in units of #/cm^2/s/sr/(energy_unit)
+% energy is expected to be a vector of length NE
+% psd is in units of (MeV s)^(-3)
+%
+% inMeV = EnergyUnitInMeV(energy_unit)
+% returns the MeV equivalent of 1 energy_unit
+% e.g., EnergyUnitInMeV('GeV') = 1000
+%
 % SI/mks constants
 % util.mks:
 % mks.e = 1.602176487e-19; % Coulombs per fundamental charge
@@ -178,6 +192,8 @@ util.dipoleIJ = @dipoleIJ;
 util.MBtoMeV = @MBtoMeV;
 util.alphaL2K = @alphaL2K;
 util.KL2alpha = @KL2alpha;
+util.flux2psd = @flux2psd;
+util.EnergyUnitInMeV = @EnergyUnitInMeV;
 
 function K = alphaL2K(alpha,L,Bunit)
 % returns K in RE*sqrt(nT) for given equatorial pitch angle
@@ -516,6 +532,55 @@ p2 = 1e-5*p2*mks.MeV; % kg J = kg^2 m^2 / s^2
 gamma = sqrt(1+p2/m0^2/mks.c^2);
 E = (gamma-1)*m0*mks.c^2; % J
 MeV = E/mks.MeV;
+
+function psd = flux2psd(flux,energy,species,energy_unit)
+% psd = flux2psd(flux,energy,species,energy_unit)
+% psd = flux2psd(flux,energy,'e','MeV');
+% species is:
+% electrons: 'electron','e','e-'
+% protons: 'p','H+','p+'
+% flux is expected to be a matrix Nt x NE
+% flux is in units of #/cm^2/s/sr/(energy_unit)
+% energy is expected to be a vector of length NE
+% psd is in units of (MeV s)^(-3)
+
+global odc_constants
+
+c_cm = odc_constants.mks.c*100; % speed of light in cm/s
+
+species = SelectSpecies(species);
+m0c2 = odc_constants.mks.(species).m0*odc_constants.mks.c^2/odc_constants.mks.MeV;
+
+inMeV = EnergyUnitInMeV(energy_unit);
+
+W = energy*inMeV; % energy, MeV
+gamma = W/m0c2+1; % relativistic factor
+p2 = (gamma.^2-1)*m0c2^2/c_cm^2; % p^2 = (gamma^2-1)*m0^2*c^2; units of (MeV/cm*s)^2
+psd = flux/inMeV*diag(sparse(1./p2)); % psd = flux/p^2
+% #/cm^2/s/sr/MeV / (MeV/cm*s)^2
+% cm^2 / (cm^2 s sr MeV MeV^3 s^2)
+% # / (MeV^3 s^3)
+if ~issparse(flux),
+    psd = full(flux);
+end
+
+
+function inMeV = EnergyUnitInMeV(energy_unit)
+% inMeV = EnergyUnitInMeV(energy_unit)
+% returns the MeV equivalent of 1 energy_unit
+% e.g., EnergyUnitInMeV('GeV') = 1000
+switch(energy_unit),
+    case 'eV',
+        inMeV = 1e-6;
+    case 'keV',
+        inMeV = 1e-3;
+    case 'MeV',
+        inMeV = 1;
+    case 'GeV',
+        inMeV = 1e3;
+    otherwise
+        error('Unknown energy unit %s',energy_unit);
+end
 
 function r = GyroRadius(Species,Energy,B)
 % r = GyroRadius(Species,Energy,B)
