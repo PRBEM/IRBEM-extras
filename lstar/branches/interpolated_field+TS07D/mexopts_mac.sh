@@ -255,23 +255,24 @@ echo "Error: Did not imbed 'options.sh' code"; exit 1 #imbed options.sh mac 12
             # CkeyManufacturer: GNU
             # CkeyLanguage: C
             # CkeyVersion:
-            CC='gcc'
+            CC='xcrun -sdk macosx clang'
             SDKROOT=`xcodebuild -version -sdk macosx Path`
-            MACOSX_DEPLOYMENT_TARGET='10.5'
+            MACOSX_DEPLOYMENT_TARGET='10.9'
             ARCHS='x86_64'
-            CFLAGS="-fno-common -no-cpp-precomp -arch $ARCHS -isysroot $SDKROOT -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
+            CFLAGS="-fno-common -no-cpp-precomp -arch $ARCHS -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
             CFLAGS="$CFLAGS  -fexceptions"
             CLIBS="$MLIBS"
             COPTIMFLAGS='-O2 -DNDEBUG'
             CDEBUGFLAGS='-g'
 #
+            CLIBS="$CLIBS"
             # C++keyName: GNU C++
             # C++keyManufacturer: GNU
             # C++keyLanguage: C++
             # C++keyVersion: 
-            CXX='g++'
-            CXXFLAGS="-fno-common -no-cpp-precomp -fexceptions -arch $ARCHS -isysroot $SDKROOT -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
-            CXXLIBS="$MLIBS -lc++"
+            CXX='xcrun -sdk macosx clang++'
+            CXXFLAGS="-fno-common -no-cpp-precomp -fexceptions -arch $ARCHS -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
+            CXXLIBS="$MLIBS"
             CXXOPTIMFLAGS='-O2 -DNDEBUG'
             CXXDEBUGFLAGS='-g'
 #
@@ -306,23 +307,25 @@ echo "Error: Did not imbed 'options.sh' code"; exit 1 #imbed options.sh mac 12
 #
 #----------------------------------------------------------------------------
 #           CC="$CC"
-           CC="xcrun clang"
-           CXX="xcrun clang++"
-           CFLAGS="$CFLAGS -Wall"
-           CXXFLAGS="$CXXFLAGS -Wall"
+           CC="xcrun -sdk macosx clang"
+           CXX="xcrun -sdk macosx clang++"
+#           CFLAGS="$CFLAGS -I/usr/include -I/usr/include/c++/4.2.1 -Wall"
+#           CXXFLAGS="$CXXFLAGS -I/usr/include -I/usr/include/c++/4.2.1 -Wall"
+           CFLAGS="$CFLAGS -Wall -O3"
+           CXXFLAGS="$CXXFLAGS -Wall -std=c++11 -stdlib=libc++ -O3"
 #           COPTIMFLAGS="$COPTIMFLAGS"
 #           CDEBUGFLAGS="$CDEBUGFLAGS"
-#           CLIBS="$CLIBS"
+           CLIBS="$CLIBS -std=c++11 -stdlib=libc++ -O3"
 #
 #           FC="$FC"
-#           FC="gfortran"
+           FC="gfortran"
 #           FFLAGS="$FFLAGS"
 #           FOPTIMFLAGS="$FOPTIMFLAGS"
 #           FDEBUGFLAGS="$FDEBUGFLAGS"
 #           FLIBS="$FLIBS"
 #
-           LD="xcrun clang++"
-#           LDFLAGS="$LDFLAGS"
+           LD="xcrun -sdk macosx clang++"
+           LDFLAGS="$LDFLAGS -flto"
 #           LDOPTIMFLAGS="$LDOPTIMFLAGS"
 #           LDDEBUGFLAGS="$LDDEBUGFLAGS"
 #----------------------------------------------------------------------------
