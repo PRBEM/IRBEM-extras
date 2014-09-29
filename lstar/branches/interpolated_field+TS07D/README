@@ -7,7 +7,6 @@ FreeBSD license (See license.txt).
 
 * PRE-BUILT BINARY
 	./bin/maci64		<-- Intel mac 64 bit MEX/DLM (may not work on all platforms)
-	./bin/linuxa64		<-- 64 bit linux MEX/DLM (may not work on all distributions)
 
 
 * BUILD INSTRUCTION
@@ -17,7 +16,7 @@ Set MEX, MEXOPTS, CC, CXX and AR environment variables, and invoke make. For exa
 	make MEX=/opt/MATLAB/bin/mex MEXOPTS=$(pwd)/mexopts.sh CC=gcc CXX=g++ AR=ar INSTALL_DIR=$(pwd)/local install
 
 	or, for Mac,
-	xcrun make CXX="xcrun -sdk macosx clang++" AR="xcrun -sdk macosx ar" MEX=/Applications/MATLAB_R2013a.app/bin/mex MEXOPTS=$(pwd)/mexopts_mac.sh INSTALL_DIR=$(pwd)/local clean install
+	make CXX="xcrun -sdk macosx clang++" AR="xcrun -sdk macosx ar" MEX=/Applications/MATLAB_R2013a.app/bin/mex MEXOPTS=$(pwd)/mexopts_mac.sh INSTALL_DIR=$(pwd)/local clean install
 
 To build documentation,
 	make doc
@@ -32,7 +31,7 @@ To build documentation,
 
 
 * CONTACT
-	Kyungguk Min (km224@njit.edu)
+	Kyungguk Min (kmin@auburn.edu)
 
 
 * REFERENCES
@@ -47,6 +46,7 @@ To build documentation,
 	Tsyganenko, N. A. (2002a), A model of the near magnetosphere with a dawn-dusk asymmetry: 1. Mathematical structure, J. Geophys. Res., 107 (A8), 1179, doi:10.1029/2001JA000219.
 	Tsyganenko, N. A. (2002b), A model of the near magnetosphere with a dawn-dusk asymmetry: 2. Parameterization and fitting to observations, J. Geophys. Res., 107(A8), 1176, doi:10.1029/2001JA000220.
 	Tsyganenko, N. A., and M. I. Sitnov (2005), Modeling the dynamics of the inner magnetosphere during strong geomagnetic storms, J. Geophys. Res., 110, A03208, doi:10.1029/2004JA010798.
+	Sitnov, M. I., N. A. Tsyganenko, A. Y. Ukhorskiy, and P. C. Brandt (2008), Dynamical data-based modeling of the storm- time geomagnetic field with enhanced spatial resolution, J. Geophys. Res., 113, A07218, doi:10.1029/2007JA013003.
 
 - Electric field model:
 

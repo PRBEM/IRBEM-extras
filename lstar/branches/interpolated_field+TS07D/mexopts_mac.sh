@@ -257,7 +257,7 @@ echo "Error: Did not imbed 'options.sh' code"; exit 1 #imbed options.sh mac 12
             # CkeyVersion:
             CC='xcrun -sdk macosx clang'
             SDKROOT=`xcodebuild -version -sdk macosx Path`
-            MACOSX_DEPLOYMENT_TARGET='10.9'
+            MACOSX_DEPLOYMENT_TARGET='10.7'
             ARCHS='x86_64'
             CFLAGS="-fno-common -no-cpp-precomp -arch $ARCHS -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
             CFLAGS="$CFLAGS  -fexceptions"
