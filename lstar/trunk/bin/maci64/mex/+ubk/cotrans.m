@@ -36,17 +36,17 @@ MxN = size(xin);
 
 % Size check
 if ~isequal(size(xin), size(yin), size(zin), [MxN(1) length(datenum_)])
-    error('cotrans:InvalidArgument',...
+    error('ubkL8:InvalidArgument',...
         'size of xin, yin and zin is different.')
 end
 
 % Date check
 if ~isnumeric(datenum_)
-    error('cotrans:InvalidArgument',...
+    error('ubkL8:InvalidArgument',...
         'Non-numeric datenum_ input.')
 end
 if length(datenum_)~=numel(datenum_)
-    error('cotrans:InvalidArgument',...
+    error('ubkL8:InvalidArgument',...
         'Invalid datenum_ dimension.')
 end
 [Y, ~, ~, H, MN, S] = datevec(datenum_);
@@ -55,7 +55,7 @@ DOY = floor( datenum_ - reshape(tmp, size(datenum_)) ) + 1;
 
 % from_to check
 if ~ischar(from_to)
-    error('cotrans:InvalidArgument',...
+    error('ubkL8:InvalidArgument',...
         'from_to is not character array.')
 end
 switch lower(from_to)
@@ -64,7 +64,7 @@ switch lower(from_to)
     case 'sm2gsm'
         to_co_system = 0;
     otherwise
-        error('cotrans:InvalidArgument',...
+        error('ubkL8:InvalidArgument',...
         '%s is unknown.', from_to)
 end
 
@@ -76,7 +76,7 @@ if nargin<6 || isempty(opts.M_THREADS)
     opts.M_THREADS = 8;
 end
 if opts.M_THREADS < 1
-    warning('cotrans:InvalidArgument',...
+    warning('ubkL8:InvalidArgument',...
         'M_THREADS should be greater than or equal to 1. Set to default value.')
     opts.M_THREADS = 8;
 end

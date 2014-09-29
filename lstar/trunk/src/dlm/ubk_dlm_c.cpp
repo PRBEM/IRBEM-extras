@@ -137,9 +137,9 @@ UBK_C_EXTERN int IDL_Load(void)
 	 */
 	static IDL_SYSFUN_DEF2 procedure_addr[] = {
 		{ (IDL_SYSRTN_GENERIC)ubk_cotrans, "UBK_COTRANS_C", 9, 9, 0, 0},
-        { (IDL_SYSRTN_GENERIC)ubk_ts_field, "UBK_TS_FIELD_C", 12, 12, 0, 0},
-        { (IDL_SYSRTN_GENERIC)ubk_field_line, "UBK_FIELD_LINE_C", 20, 20, 0, 0},
-        { (IDL_SYSRTN_GENERIC)ubk_lstar, "UBK_LSTAR_C", 23, 23, 0, 0},
+        { (IDL_SYSRTN_GENERIC)ubk_ts_field, "UBK_TS_FIELD_C", 13, 13, 0, 0},
+        { (IDL_SYSRTN_GENERIC)ubk_field_line, "UBK_FIELD_LINE_C", 21, 21, 0, 0},
+        { (IDL_SYSRTN_GENERIC)ubk_lstar, "UBK_LSTAR_C", 24, 24, 0, 0},
 	};
 
 	/*
@@ -280,7 +280,7 @@ UBK_C_EXTERN void ubk_cotrans(int argc, IDL_VPTR *argv,char *argk)
 }
 
 //
-// PRO UBK_TS_FIELD_C, TILTOUT, XOUT, YOUT, ZOUT, XIN, YIN, ZIN, YEAR, DOY, HOUR, MIN, SEC, TO_CO_SYSTEM, N_THREADS
+// PRO UBK_TS_FIELD_C, TILTOUT, XOUT, YOUT, ZOUT, XIN, YIN, ZIN, YEAR, DOY, HOUR, MIN, SEC, TO_CO_SYSTEM, N_THREADS, USE_INTERP_FIELD_WITH_POLY_ORDER
 //
 UBK_C_EXTERN void ubk_ts_field(int argc, IDL_VPTR *argv,char *argk)
 {
@@ -307,6 +307,7 @@ UBK_C_EXTERN void ubk_ts_field(int argc, IDL_VPTR *argv,char *argk)
 
     MagneticFieldCoordinateSystem co_system = IDL_LongScalar(argv[10]); // 0: To GSM, 1: To SM
     unsigned long n_threads = IDL_ULongScalar(argv[11]);
+    unsigned long interpolationOrder = IDL_ULongScalar(argv[12]);
 
     //
     // Minimal validation
@@ -323,16 +324,19 @@ UBK_C_EXTERN void ubk_ts_field(int argc, IDL_VPTR *argv,char *argk)
            (kTS89Model==external) ||
            (kTS96Model==external) ||
            (kTS02Model==external) ||
+           (kTS07Model==external) ||
            (kTS05Model==external),
            "Invalid external field model flag.");
     ASSERT((kTSNone==external) ||
            (kTS89Model==external && 1==ioptparmod.size()) ||
+           (kTS07Model==external && 102==ioptparmod.size()) ||
            (10==ioptparmod.size()),
            "Invalid ioptparmod parameter.");
     ASSERT(kMagneticFieldGSM==co_system || kMagneticFieldSM==co_system,
            "CO_SYSTEM should be either 0 (GSM) or 1 (SM).");
     ASSERT(n_threads >= 1,
            "N_THREADS parameter should be greater than 0.");
+    ASSERT(0==interpolationOrder || 1==interpolationOrder || 2==interpolationOrder, "0!=interpolationOrder and 1!=interpolationOrder and 2!=interpolationOrder.");
 
     //
     // Log
@@ -345,6 +349,7 @@ UBK_C_EXTERN void ubk_ts_field(int argc, IDL_VPTR *argv,char *argk)
     fprintf(stderr, "\tEXTERNAL = %ld\n", external);
     fprintf(stderr, "\tCO_SYSTEM = %ld\n", co_system);
     fprintf(stderr, "\tN_THREADS = %ld\n", n_threads);
+    fprintf(stderr, "\tinterpolationOrder = %ld\n", interpolationOrder);
 #endif
 
     //
@@ -383,8 +388,15 @@ UBK_C_EXTERN void ubk_ts_field(int argc, IDL_VPTR *argv,char *argk)
         Date date(d[0], d[1], d[2], d[3], d[4]);
         int iopt = (kTS89Model==external ? ioptparmod[0] : 1);
         double const* parmod = (kTS89Model==external && kTSNone==external ? NULL : &ioptparmod.front());
-        TSFieldModel fm(date, vsw, internal, iopt, parmod, external);
-        _ c(fm);
+
+        TSFieldModel fm1(date, vsw, internal, iopt, parmod, external);
+        InterpolatedFieldModel fm2(fm1, (interpolationOrder ? interpolationOrder : k1st));
+        FieldModel const* fm = &fm1;
+        if (interpolationOrder) {
+            fm = &fm2;
+        }
+
+        _ c(*fm);
         c.setNThreads(n_threads);
         c.setCoSystem(co_system);
 
@@ -444,6 +456,7 @@ UBK_C_EXTERN void ubk_field_line(int argc, IDL_VPTR *argv,char *argk)
     double ds = IDL_DoubleScalar(argv[18]);
 
     unsigned long n_threads = IDL_ULongScalar(argv[19]);
+    unsigned long interpolationOrder = IDL_ULongScalar(argv[20]);
 
     //
     // Minimal validation
@@ -460,10 +473,12 @@ UBK_C_EXTERN void ubk_field_line(int argc, IDL_VPTR *argv,char *argk)
            (kTS89Model==external) ||
            (kTS96Model==external) ||
            (kTS02Model==external) ||
+           (kTS07Model==external) ||
            (kTS05Model==external),
            "Invalid external field model flag.");
     ASSERT((kTSNone==external) ||
            (kTS89Model==external && 1==ioptparmod.size()) ||
+           (kTS07Model==external && 102==ioptparmod.size()) ||
            (10==ioptparmod.size()),
            "Invalid ioptparmod parameter.");
     ASSERT(ionoR >= 1.,
@@ -472,6 +487,7 @@ UBK_C_EXTERN void ubk_field_line(int argc, IDL_VPTR *argv,char *argk)
            "ds <= 0.");
     ASSERT(n_threads >= 1,
            "N_THREADS parameter should be greater than 0.");
+    ASSERT(0==interpolationOrder || 1==interpolationOrder || 2==interpolationOrder, "0!=interpolationOrder and 1!=interpolationOrder and 2!=interpolationOrder.");
 
     //
     // Log
@@ -485,6 +501,7 @@ UBK_C_EXTERN void ubk_field_line(int argc, IDL_VPTR *argv,char *argk)
     fprintf(stderr, "\tIONOR = %f\n", ionoR);
     fprintf(stderr, "\tDS = %f\n", ds);
     fprintf(stderr, "\tN_THREADS = %ld\n", n_threads);
+    fprintf(stderr, "\tinterpolationOrder = %ld\n", interpolationOrder);
 #endif
 
     //
@@ -537,9 +554,15 @@ UBK_C_EXTERN void ubk_field_line(int argc, IDL_VPTR *argv,char *argk)
         Date date(d[0], d[1], d[2], d[3], d[4]);
         int iopt = (kTS89Model==external ? ioptparmod[0] : 1);
         double const* parmod = (kTS89Model==external && kTSNone==external ? NULL : &ioptparmod.front());
-        TSFieldModel fm(date, vsw, internal, iopt, parmod, external);
 
-        _ c(fm);
+        TSFieldModel fm1(date, vsw, internal, iopt, parmod, external);
+        InterpolatedFieldModel fm2(fm1, (interpolationOrder ? interpolationOrder : k1st));
+        FieldModel const* fm = &fm1;
+        if (interpolationOrder) {
+            fm = &fm2;
+        }
+
+        _ c(*fm);
         c.setNThreads(n_threads);
         c.setIonoR(ionoR);
         c.setDs(ds);
@@ -629,6 +652,7 @@ UBK_C_EXTERN void ubk_lstar(int argc, IDL_VPTR *argv,char *argk)
     unsigned long isCartesianGrid = IDL_ULongScalar(argv[21]);
 
     unsigned long n_threads = IDL_ULongScalar(argv[22]);
+    unsigned long interpolationOrder = IDL_ULongScalar(argv[23]);
 
     //
     // Minimal validation
@@ -645,10 +669,12 @@ UBK_C_EXTERN void ubk_lstar(int argc, IDL_VPTR *argv,char *argk)
            (kTS89Model==external) ||
            (kTS96Model==external) ||
            (kTS02Model==external) ||
+           (kTS07Model==external) ||
            (kTS05Model==external),
            "Invalid external field model flag.");
     ASSERT((kTSNone==external) ||
            (kTS89Model==external && 1==ioptparmod.size()) ||
+           (kTS07Model==external && 102==ioptparmod.size()) ||
            (10==ioptparmod.size()),
            "Invalid ioptparmod parameter.");
     ASSERT(ionoR >= 1.,
@@ -665,6 +691,7 @@ UBK_C_EXTERN void ubk_lstar(int argc, IDL_VPTR *argv,char *argk)
            "n_theta < 10.");
     ASSERT(n_threads >= 1,
            "N_THREADS parameter should be greater than 0.");
+    ASSERT(0==interpolationOrder || 1==interpolationOrder || 2==interpolationOrder, "0!=interpolationOrder and 1!=interpolationOrder and 2!=interpolationOrder.");
 
     //
     // Log
@@ -684,6 +711,7 @@ UBK_C_EXTERN void ubk_lstar(int argc, IDL_VPTR *argv,char *argk)
     fprintf(stderr, "\tSHOULDKEEPCONTOUR = %d\n", !!shouldKeepContour);
     fprintf(stderr, "\tISCARTESIANGRID = %d\n", !!isCartesianGrid);
     fprintf(stderr, "\tN_THREADS = %ld\n", n_threads);
+    fprintf(stderr, "\tinterpolationOrder = %ld\n", interpolationOrder);
 #endif
     
     //
@@ -733,9 +761,15 @@ UBK_C_EXTERN void ubk_lstar(int argc, IDL_VPTR *argv,char *argk)
         Date date(d[0], d[1], d[2], d[3], d[4]);
         int iopt = (kTS89Model==external ? ioptparmod[0] : 1);
         double const* parmod = (kTS89Model==external && kTSNone==external ? NULL : &ioptparmod.front());
-        TSFieldModel fm(date, vsw, internal, iopt, parmod, external);
 
-        _ c(fm, !isCartesianGrid);
+        TSFieldModel fm1(date, vsw, internal, iopt, parmod, external);
+        InterpolatedFieldModel fm2(fm1, (interpolationOrder ? interpolationOrder : k1st));
+        FieldModel const* fm = &fm1;
+        if (interpolationOrder) {
+            fm = &fm2;
+        }
+
+        _ c(*fm, !isCartesianGrid);
         c.setNThreads(n_threads);
         c.setIonoR(ionoR);
         c.setDs(ds);

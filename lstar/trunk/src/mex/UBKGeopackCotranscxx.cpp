@@ -25,6 +25,8 @@ using namespace std;
 //
 // Log facility
 //
+static Mutex log_key;
+
 class MsgId {
 public:
     string id;
@@ -41,7 +43,7 @@ public:
 static MsgId msgid;
 
 UBK_INLINE void ASSERT(BOOL test, const char *msg) {
-    if (!test) {
+    if (!test) {Locker _(log_key);
         mexErrMsgIdAndTxt(msgid.id.c_str(), msg);
     }
 }
@@ -104,7 +106,7 @@ public:
         ASSERT(4==nlhs && 7==nrhs, "Wrong number of input/output.");
 
         //
-        // (xin [np, nt], yin [np, nt], zin [np, nt], [year, doy, hour, min, sec] (5, nt), to_co_system, M_threads, N_threads)
+        // (xin [np, nt], yin [np, nt], zin [np, nt], [year, doy, hour, min, sec] (5, nt), to_co_system, M_threads, N_threads, shouldUseInterpolatedField)
         //
         M = mxGetM(prhs[0]);
         N = mxGetN(prhs[3]);
@@ -150,11 +152,13 @@ public:
         }
 
 #ifdef DEBUG
-        mexPrintf("%%%% DEBUG:%s:%d:\n", __FUNCTION__, __LINE__);
-        mexPrintf("\t[M, N] = [%ld, %ld]\n", M, N);
-        mexPrintf("\tto_co_system = %ld\n", to_co_system);
-        mexPrintf("\tM_threads = %ld\n", M_threads);
-        mexPrintf("\tN_threads = %ld\n", N_threads);
+        {Locker _(log_key);
+            mexPrintf("%%%% DEBUG:%s:%d:\n", __FUNCTION__, __LINE__);
+            mexPrintf("\t[M, N] = [%ld, %ld]\n", M, N);
+            mexPrintf("\tto_co_system = %ld\n", to_co_system);
+            mexPrintf("\tM_threads = %ld\n", M_threads);
+            mexPrintf("\tN_threads = %ld\n", N_threads);
+        }
 #endif
 
         //
@@ -162,13 +166,17 @@ public:
         //
         if (N) {
 #ifdef DEBUG
-            mexPrintf("%%%% DEBUG:%s:%d: Outer loop start.\n", __FUNCTION__, __LINE__);
+            {Locker _(log_key);
+                mexPrintf("%%%% DEBUG:%s:%d: Outer loop start.\n", __FUNCTION__, __LINE__);
+            }
 #endif
 
             ThreadFor<Main &> t(N_threads, N, *this);
 
 #ifdef DEBUG
-            mexPrintf("%%%% DEBUG:%s:%d: Outer loop end.\n", __FUNCTION__, __LINE__);
+            {Locker _(log_key);
+                mexPrintf("%%%% DEBUG:%s:%d: Outer loop end.\n", __FUNCTION__, __LINE__);
+            }
 #endif
         }
     };
@@ -185,7 +193,9 @@ public:
         psi[jdx] = fm.dipoleTiltAngleRadian();
 
 #ifdef DEBUG
-        mexPrintf("%%%% DEBUG:%s:%d: date = [%d, %d, %d, %d, %d].\n", __FUNCTION__, __LINE__, d.year, d.doy, d.hour, d.min, d.sec);
+        {Locker _(log_key);
+            mexPrintf("%%%% DEBUG:%s:%d: date = [%d, %d, %d, %d, %d].\n", __FUNCTION__, __LINE__, d.year, d.doy, d.hour, d.min, d.sec);
+        }
 #endif
 
         //
@@ -193,7 +203,9 @@ public:
         //
         if (M) {
 #ifdef DEBUG
-            mexPrintf("%%%% DEBUG:%s:%d: Inner loop start.\n", __FUNCTION__, __LINE__);
+            {Locker _(log_key);
+                mexPrintf("%%%% DEBUG:%s:%d: Inner loop start.\n", __FUNCTION__, __LINE__);
+            }
 #endif
 
             Submain sub(fm);
@@ -213,7 +225,9 @@ public:
             sub.start();
 
 #ifdef DEBUG
-            mexPrintf("%%%% DEBUG:%s:%d: Inner loop end.\n", __FUNCTION__, __LINE__);
+            {Locker _(log_key);
+                mexPrintf("%%%% DEBUG:%s:%d: Inner loop end.\n", __FUNCTION__, __LINE__);
+            }
 #endif
         }
     };

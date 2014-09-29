@@ -39,6 +39,7 @@
 // L* Framework
 //
 #include "FieldModel.h"
+#include "InterpolatedFieldModel.h"
 #include "Contour.h"
 #include "AffineTransform.h"
 #include "FieldLine.h"

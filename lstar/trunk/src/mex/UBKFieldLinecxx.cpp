@@ -25,6 +25,8 @@ using namespace std;
 //
 // Log facility
 //
+static Mutex log_key;
+
 class MsgId {
 public:
     string id;
@@ -41,7 +43,7 @@ public:
 static MsgId msgid;
 
 UBK_INLINE void ASSERT(BOOL test, const char *msg) {
-    if (!test) {
+    if (!test) {Locker _(log_key);
         mexErrMsgIdAndTxt(msgid.id.c_str(), msg);
     }
 }
@@ -159,6 +161,7 @@ class Main {
     double ds;
     long M_threads;
     long N_threads;
+    signed interpolationOrder;
     // Outputs
     mxArray *K;
     mxArray *Bm;
@@ -182,10 +185,10 @@ public:
         //
         // Check for nargin and nargout
         //
-        ASSERT(16==nlhs && 11==nrhs, "Wrong number of input/output.");
+        ASSERT(16==nlhs && 12==nrhs, "Wrong number of input/output.");
 
         //
-        // (xin [np, nt], yin [np, nt], zin [np, nt], [year, doy, hour, min, sec] (5, nt), ioptparmod [1 or 10, nt], external, internal, ionoR, ds, M_threads, N_threads)
+        // (xin [np, nt], yin [np, nt], zin [np, nt], [year, doy, hour, min, sec] (5, nt), ioptparmod [1 or 10, nt], external, internal, ionoR, ds, M_threads, N_threads, shouldUseInterpolatedField)
         //
         M = mxGetM(prhs[0]);
         N = mxGetN(prhs[3]);
@@ -201,6 +204,7 @@ public:
         ds = mxGetScalar(prhs[8]);
         M_threads = round( mxGetScalar(prhs[9]) );
         N_threads = round( mxGetScalar(prhs[10]) );
+        interpolationOrder = round( mxGetScalar(prhs[11]) );
 
         //
         // Validity
@@ -212,14 +216,17 @@ public:
                (kTS89Model==external) ||
                (kTS96Model==external) ||
                (kTS02Model==external) ||
+               (kTS07Model==external) ||
                (kTS05Model==external), "Invalid external magnetic field component.");
         ASSERT((external==kTSNone) ||
                (external==kTS89Model && 1==mxGetM(prhs[4])) ||
+               (external==kTS07Model && 102==mxGetM(prhs[4])) ||
                (10==mxGetM(prhs[4])), "Invalid ioptparmod dimension.");
         ASSERT(ionoR >= 1., "ionoR < 1.");
         ASSERT(ds > 0., "ds <= 0.");
         ASSERT(M_threads > 0, "M_threads <= 0.");
         ASSERT(N_threads > 0, "N_threads <= 0.");
+        ASSERT(0==interpolationOrder || 1==interpolationOrder || 2==interpolationOrder, "0!=interpolationOrder and 1!=interpolationOrder and 2!=interpolationOrder.");
 
         //
         // Output buffer
@@ -279,14 +286,17 @@ public:
         // Log
         //
 #ifdef DEBUG
-        mexPrintf("%%%% DEBUG:%s:%d:\n", __FUNCTION__, __LINE__);
-        mexPrintf("\t[M, N] = [%ld, %ld]\n", M, N);
-        mexPrintf("\tinternal = %ld\n", internal);
-        mexPrintf("\texternal = %ld\n", external);
-        mexPrintf("\tionoR = %f\n", ionoR);
-        mexPrintf("\tds = %f\n", ds);
-        mexPrintf("\tM_threads = %ld\n", M_threads);
-        mexPrintf("\tN_threads = %ld\n", N_threads);
+        {Locker _(log_key);
+            mexPrintf("%%%% DEBUG:%s:%d:\n", __FUNCTION__, __LINE__);
+            mexPrintf("\t[M, N] = [%ld, %ld]\n", M, N);
+            mexPrintf("\tinternal = %ld\n", internal);
+            mexPrintf("\texternal = %ld\n", external);
+            mexPrintf("\tionoR = %f\n", ionoR);
+            mexPrintf("\tds = %f\n", ds);
+            mexPrintf("\tM_threads = %ld\n", M_threads);
+            mexPrintf("\tN_threads = %ld\n", N_threads);
+            mexPrintf("\tinterpolationOrder = %d\n", interpolationOrder);
+        }
 #endif
 
         //
@@ -294,13 +304,17 @@ public:
         //
         if ( M*N ) {
 #ifdef DEBUG
-            mexPrintf("%%%% DEBUG:%s:%d: Outer loop start.\n", __FUNCTION__, __LINE__);
+            {Locker _(log_key);
+                mexPrintf("%%%% DEBUG:%s:%d: Outer loop start.\n", __FUNCTION__, __LINE__);
+            }
 #endif
 
             ThreadFor<Main &> t(N_threads, N, *this);
 
 #ifdef DEBUG
-            mexPrintf("%%%% DEBUG:%s:%d: Outer loop end.\n", __FUNCTION__, __LINE__);
+            {Locker _(log_key);
+                mexPrintf("%%%% DEBUG:%s:%d: Outer loop end.\n", __FUNCTION__, __LINE__);
+            }
 #endif
         }
     };
@@ -308,7 +322,7 @@ public:
     void operator()(long jdx) {
         const double vsw = 400.;
         long d_offset = jdx * 5;
-        long iopt_offset = jdx * 10;
+        long iopt_offset = jdx * (kTS07Model==external ? 102 : 10);
 
         //
         // Make TS field model
@@ -316,10 +330,18 @@ public:
         int iopt = (kTS89Model==external ? round(ioptparmod[jdx]) : 1);
         double const* parmod = ioptparmod + iopt_offset;
         Date d(date[d_offset + 0], date[d_offset + 1], date[d_offset + 2], date[d_offset + 3], date[d_offset + 4]);
-        TSFieldModel fm(d, vsw, internal, iopt, parmod, external);
+
+        TSFieldModel fm1(d, vsw, internal, iopt, parmod, external);
+        InterpolatedFieldModel fm2(fm1, (interpolationOrder ? interpolationOrder : k1st));
+        FieldModel const* fm = &fm1;
+        if (interpolationOrder) {
+            fm = &fm2;
+        }
 
 #ifdef DEBUG
-        mexPrintf("%%%% DEBUG:%s:%d: date = [%d, %d, %d, %d, %d].\n", __FUNCTION__, __LINE__, d.year, d.doy, d.hour, d.min, d.sec);
+        {Locker _(log_key);
+            mexPrintf("%%%% DEBUG:%s:%d: date = [%d, %d, %d, %d, %d].\n", __FUNCTION__, __LINE__, d.year, d.doy, d.hour, d.min, d.sec);
+        }
 #endif
 
         //
@@ -327,10 +349,12 @@ public:
         //
         {
 #ifdef DEBUG
-            mexPrintf("%%%% DEBUG:%s:%d: Inner loop start.\n", __FUNCTION__, __LINE__);
+            {Locker _(log_key);
+                mexPrintf("%%%% DEBUG:%s:%d: Inner loop start.\n", __FUNCTION__, __LINE__);
+            }
 #endif
 
-            Submain sub(fm);
+            Submain sub(*fm);
             sub.key = &key;
 
             sub.setNThreads(M_threads);
@@ -366,7 +390,9 @@ public:
             sub.start();
 
 #ifdef DEBUG
-            mexPrintf("%%%% DEBUG:%s:%d: Inner loop end.\n", __FUNCTION__, __LINE__);
+            {Locker _(log_key);
+                mexPrintf("%%%% DEBUG:%s:%d: Inner loop end.\n", __FUNCTION__, __LINE__);
+            }
 #endif
         }
     };

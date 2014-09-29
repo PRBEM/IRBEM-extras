@@ -97,6 +97,7 @@ namespace UBK {
     _shouldKeepFootPoints(shouldKeepFootPoint),
     _shouldKeepContourCoordinates(shouldKeepContourCoordinate),
     _closed(NO),
+    _orbitType(kOrbitTypeUnknown),
     _Lstar(NAN),
     _K(NAN),
     _coordinates(),
@@ -124,8 +125,16 @@ namespace UBK {
         FieldLine const* fl;
         if (NULL == (fl=(*_table)[xy])) {
             *lvlOut = NAN;
+            _orbitType = kOrbitTypeOutOfBound;
         } else {
             *lvlOut = fl->mirrorMagnitudeAtInvariant(_K);
+            if (!fl->isValid()) {
+                _orbitType = kOrbitTypeTraceFailed;
+            } else if (this->K()>=fl->modifiedInvariants().back()) { // Precipitation
+                _orbitType = kOrbitTypePrecipitation;
+            } else if (isnan(*lvlOut)) {
+                _orbitType = kOrbitTypeBifurcation;
+            }
         }
     }
 
@@ -136,27 +145,55 @@ namespace UBK {
     //
     // Helper 1
     //
-    static void Table_BmAndKForKey_coordinate_pitchAngle (FieldLineTable *table, double *BmOut, double *KOut, Key const key, Point const coord, double const pa)
+    static OrbitType Table_BmAndKForKey_coordinate_pitchAngle (FieldLineTable *table, double *BmOut, double *KOut, Key const key, Point const coord, double const pa)
     {
         *BmOut = *KOut = NAN;
 
         FieldLine const* fl;
 
-        if (NULL == (fl=(*table)[key])) return;
+        if (NULL == (fl=(*table)[key])) return kOrbitTypeOutOfBound;
         double Bmbl = fl->mirrorMagnitudeOfPitchAngle(pa);
         double Kbl = fl->invariantAtMirrorMagnitude(Bmbl);
+        if (!fl->isValid()) {
+            return kOrbitTypeTraceFailed;
+        } else if (Kbl>=fl->modifiedInvariants().back()) { // Precipitation
+            return kOrbitTypePrecipitation;
+        } else if (isnan(Bmbl)) {
+            return kOrbitTypeBifurcation;
+        }
 
-        if (NULL == (fl=(*table)[Key(key.x+1, key.y, 0)])) return;
+        if (NULL == (fl=(*table)[Key(key.x+1, key.y, 0)])) return kOrbitTypeOutOfBound;
         double Bmbr = fl->mirrorMagnitudeOfPitchAngle(pa);
         double Kbr = fl->invariantAtMirrorMagnitude(Bmbr);
+        if (!fl->isValid()) {
+            return kOrbitTypeTraceFailed;
+        } else if (Kbr>=fl->modifiedInvariants().back()) { // Precipitation
+            return kOrbitTypePrecipitation;
+        } else if (isnan(Bmbr)) {
+            return kOrbitTypeBifurcation;
+        }
 
-        if (NULL == (fl=(*table)[Key(key.x+1, key.y+1, 0)])) return;
+        if (NULL == (fl=(*table)[Key(key.x+1, key.y+1, 0)])) return kOrbitTypeOutOfBound;
         double Bmtr = fl->mirrorMagnitudeOfPitchAngle(pa);
         double Ktr = fl->invariantAtMirrorMagnitude(Bmtr);
+        if (!fl->isValid()) {
+            return kOrbitTypeTraceFailed;
+        } else if (Ktr>=fl->modifiedInvariants().back()) { // Precipitation
+            return kOrbitTypePrecipitation;
+        } else if (isnan(Bmtr)) {
+            return kOrbitTypeBifurcation;
+        }
 
-        if (NULL == (fl=(*table)[Key(key.x, key.y+1, 0)])) return;
+        if (NULL == (fl=(*table)[Key(key.x, key.y+1, 0)])) return kOrbitTypeOutOfBound;
         double Bmtl = fl->mirrorMagnitudeOfPitchAngle(pa);
         double Ktl = fl->invariantAtMirrorMagnitude(Bmtl);
+        if (!fl->isValid()) {
+            return kOrbitTypeTraceFailed;
+        } else if (Ktl>=fl->modifiedInvariants().back()) { // Precipitation
+            return kOrbitTypePrecipitation;
+        } else if (isnan(Bmtl)) {
+            return kOrbitTypeBifurcation;
+        }
 
         double dx = coord.x - key.x;
         double dy = coord.y - key.y;
@@ -166,6 +203,8 @@ namespace UBK {
         //
         *BmOut = (dx-1.)*(dy-1.)*Bmbl + dy*Bmtl + dx*(Bmbr + (Bmtr-Bmtl-Bmbr)*dy);
         *KOut = (dx-1.)*(dy-1.)*Kbl + dy*Ktl + dx*(Kbr + (Ktr-Ktl-Kbr)*dy);
+
+        return kOrbitTypeClosed;
     }
 
     //
@@ -176,16 +215,22 @@ namespace UBK {
         // Conserved quantities
         Point normal = _affineTransform->pointConvertedToNormal(_origin);
         double Bm = 0.;
-        Table_BmAndKForKey_coordinate_pitchAngle(_table, &Bm, &_K, Key((int)floor(normal.x), (int)floor(normal.y), 0), normal, _pitchAngle);
+        OrbitType ot = Table_BmAndKForKey_coordinate_pitchAngle(_table, &Bm, &_K, Key((int)floor(normal.x), (int)floor(normal.y), 0), normal, _pitchAngle);
 
         // Contour trace
         ContourTermination closed = cPtr->enumerateCoordinatesStartingAtPoint_usingCallback(normal, this);
         _closed = (closed==kContourClosed);
 
+        if (ot) {
+            _orbitType = ot;
+        }
+
         // Evaluate L*
         if (_closed) {
             _Lstar = _magneticFlux->fluxClosedByFootPoints_count(&_footPoints.front(), _footPoints.size());
             _Lstar = _magneticFlux->coreFlux() / _Lstar;
+
+            _orbitType = kOrbitTypeClosed;
         }
 
         if (_shouldKeepContourCoordinates) {

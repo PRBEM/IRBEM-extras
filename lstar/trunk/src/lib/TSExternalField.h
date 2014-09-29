@@ -37,7 +37,8 @@ namespace UBK {
         kTS89Model, //!< T89 model.
         kTS96Model, //!< T96 model.
         kTS02Model, //!< T02 model.
-        kTS05Model //!< TS05 model.
+        kTS05Model, //!< TS05 model.
+        kTS07Model //!< TS07 model.
     };
     //!
     //! External field flag type.
@@ -70,8 +71,8 @@ namespace UBK {
         //!
         //! PARMOD parameter.
         //!
-        double const* parmod () const {return _parmod;};
-        void setParmod (double const parmod[]) {if (parmod) std::copy(parmod, parmod+10, _parmod);};
+        virtual double const* parmod () const {return _parmod;};
+        virtual void setParmod (double const parmod[]) {if (parmod) std::copy(parmod, parmod+10, _parmod);};
         //@}
 
         //!

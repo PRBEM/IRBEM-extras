@@ -155,7 +155,8 @@ namespace UBK {
         GeopackInternalFieldModel internal = kGeopackIGRFField;
         TSExternalFieldModel external = kTS05Model;
 
-        TSFieldModel fm(date, vsw, internal, iopt, parmod, external);
+        TSFieldModel fm_tmp(date, vsw, internal, iopt, parmod, external);
+        InterpolatedFieldModel fm(fm_tmp);
         {
             class _ : public FieldLineCoordinator {
             public:
@@ -208,26 +209,27 @@ namespace UBK {
         int iopt = 2;
         double parmod[10] = {2, -10, 3, -10, };
         GeopackInternalFieldModel internal = kGeopackDipoleField;
-        TSExternalFieldModel external = kTS96Model;
+        TSExternalFieldModel external = kTSNone;
 
-        TSFieldModel fm(date, vsw, internal, iopt, parmod, external);
+        TSFieldModel fm_tmp(date, vsw, internal, iopt, parmod, external);
+        InterpolatedFieldModel fm(fm_tmp, k2nd);
         {
             class _ : public LstarCoordinator {
             public:
-                _(FieldModel const& fm) : LstarCoordinator(fm, NO) {};
+                _(FieldModel const& fm) : LstarCoordinator(fm, YES) {};
 
                 unsigned long count() const {return 18;};
-                Point from(long idx) const {return Point(6., 0., (idx/(this->count()-1.)*80+10.) * M_PI/180.);};
+                Point from(long idx) const {return Point(6.1, 2.5 * M_PI/180., (idx/(this->count()-1.)*80+10.) * M_PI/180.);};
                 void callback(long idx, Particle const& ptl) const {
                     fprintf(stderr, "idx = %ld, L* = %f, K = %f\n", idx, ptl.Lstar(), ptl.K());
                 };
             };
 
             _ f(fm);
-            f.setNPhi(180);
+            f.setNPhi(360/5);
             //f.setD(Point(.1, M_PI*2./MagneticFlux::nPhi()));
-            f.setD(Point(.1, .1));
-            f.setDs(.05);
+            f.setD(Point(.2, 2.*M_PI/MagneticFlux::nPhi()));
+            f.setDs(.1);
             f.start();
         }
         

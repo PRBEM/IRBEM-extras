@@ -28,13 +28,14 @@ HEADERS = AffineTransform.h Contour.h Coordinator.h Definitions.h \
 		  FieldLine.h FieldLineTable.h FieldModel.h Geopack.h Key.h \
 		  MagneticFlux.h ODESolver.h Particle.h ParticleTemplate.h \
 		  Point.h T02.h T89.h T96.h TS05.h TSExternalField.h \
-		  TSFieldComponent.h TSFieldModel.h Thread.h UBKLstarxx.h
+		  TSFieldComponent.h TSFieldModel.h Thread.h UBKLstarxx.h \
+		InterpolatedFieldModel.h TS07.h
 
 SOURCES	= AffineTransform.cpp Contour.cpp Coordinator.cpp FieldLine.cpp \
 		  FieldLineTable.cpp FieldModel.cpp Geopack.cpp Key.cpp \
 		  MagneticFlux.cpp ODESolver.cpp Particle.cpp ParticleTemplate.cpp \
 		  Point.cpp T02.cpp T89.cpp T96.cpp TS05.cpp TSExternalField.cpp \
-		  TSFieldModel.cpp Thread.cpp
+		  TSFieldModel.cpp Thread.cpp InterpolatedFieldModel.cpp TS07.cpp
 
 OBJECTS =$(SOURCES:.cpp=.o)
 

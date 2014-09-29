@@ -10,6 +10,7 @@
 ;       YDHMS, IOPT_PARMOD, EXTERNAL, INTERNAL, $
 ;       IONOR=IONOR, DS=DS, DXorDR=DXorDR, DYorDPHI=DYorDPHI, $
 ;       N_PHI=N_PHI, N_THETA=N_THETA, /CARTESIAN_GRID, /PRESERVE_DRIFT_CONTOUR, N_THREADS=N_THREADS, $
+;       USE_INTERP_FIELD_WITH_POLY_ORDER=USE_INTERP_FIELD_WITH_POLY_ORDER, $
 ;       LSTAR=LSTAR, K=K, PHI0=PHI0, $
 ;       DRIFTSHELL_CONTOUR=DRIFTSHELL, FOOTPOINTS_CONTOUR=FOOTPOINTS
 ;
@@ -25,12 +26,15 @@
 ;           T89 input equivalent to Kp.
 ;           IOPT= 1       2        3        4        5        6        7
 ;           KP  = 0,0+  1-,1,1+  2-,2,2+  3-,3,3+  4-,4,4+  5-,5,5+  >=6-
-;       ELSEIF EXTERNAL>='T96' THEN IOPT_PARMOD = PARMOD:
+;       ELSEIF EXTERNAL>='T96' AND EXTERNAL<='TS05' THEN IOPT_PARMOD = PARMOD:
 ;           10 element array for T96 model and above.
 ;           PARMOD=[PDYN (nPa), DST (nT), BYIMF, BZIMF (nT), W1, W2, W3, W4, W5, W6]
+;       ELSEIF EXTERNAL=='TS07' THEN IOPT_PARMOD = PARMOD:
+;           102 element array for TS07D model.
+;           PARMOD=[PDYN (nPa), 101 element fitting coefficients]
 ;       ELSE IOPT_PARMOD is not used.
 ;   EXTERNAL:
-;       External field model. Currently, "T89", "T96", "T02" and "TS05" models are built in. Pass "none" not to use the external field model.
+;       External field model. Currently, "T89", "T96", "T02", "TS05", "TS07" models are built in. Pass "none" not to use the external field model.
 ;   INTERNAL:
 ;       Internal magnetic field model. Either "DIP" or "IGRF" (case-insensitive). Required.
 ;
@@ -44,6 +48,13 @@
 ;   /CARTESIAN_GRID: If set, the routine uses the cartesian grid. Otherwise cylindrical grid. The inputs/outputs should follow the same coordinate system except for FOOTPOINTS_CONTOUR which is always in spherical coordinate system.
 ;   /PRESERVE_DRIFT_CONTOUR: If set, the routine calculates the drift contours and returns the result through FOOTPOINTS_CONTOUR and DRIFTSHELL_CONTOUR.
 ;   N_THREADS = Integer value of the number of threads to assign the load. Default is 8. If set, the value should be an integer of value greater than or equal to 1.
+;   USE_INTERP_FIELD_WITH_POLY_ORDER = Either 1 (linear) or 2 (2nd order).
+;       If set, caches the field vectors at discrete points and interpolates the
+;       field vector at the given location from the cached vectors.
+;       The interpolation may increase the calculation speed if the underlying
+;       field model is expensive, but the result includes the numerical error
+;       from the interpolation and the interpolated vector violates divergence
+;       free condition. Default is unset (equivalently pass 0).
 ;
 ;   LSTAR = Named variable in which to return the calculated L*. The dimensions are the same as XorR0.
 ;   K = Named variable in which to return the modified second invariants. The dimensions are the same as XorR0. nT^.5 RE.
@@ -79,6 +90,7 @@ PRO UBK_LSTAR, XorR0, YorPHI0, PA0, $
     IONOR=IONOR, DS=DS, DXorDR=DXorDR, DYorDPHI=DYorDPHI, $
     N_PHI=N_PHI, N_THETA=N_THETA, CARTESIAN_GRID=CARTESIAN_GRID, N_THREADS=N_THREADS, $
     PRESERVE_DRIFT_CONTOUR=PRESERVE_DRIFT_CONTOUR, $
+    USE_INTERP_FIELD_WITH_POLY_ORDER=USE_INTERP_FIELD_WITH_POLY_ORDER, $
     LSTAR=LSTAR, K=K, PHI0=PHI0, $
     DRIFTSHELL_CONTOUR=DRIFTSHELL, FOOTPOINTS_CONTOUR=FOOTPOINTS
 
@@ -119,6 +131,10 @@ PRO UBK_LSTAR, XorR0, YorPHI0, PA0, $
             EXTERNAL1 = 4
             break
             end
+        "ts07": begin
+            EXTERNAL1 = 5
+            break
+            end
         else: begin
             message, "Invalid EXTERNAL parameter."
             break
@@ -129,8 +145,11 @@ PRO UBK_LSTAR, XorR0, YorPHI0, PA0, $
         if (n_elements(IOPT_PARMOD) ne 1) or $
             (IOPT_PARMOD lt 1 or IOPT_PARMOD gt 7) then $
             message, "Invalid IOPT parameter."
-    endif else if (EXTERNAL1 ge 2) then begin
+    endif else if (EXTERNAL1 ge 2 and EXTERNAL1 le 4) then begin
         if (n_elements(IOPT_PARMOD) ne 10) then $
+            message, "Invalid PARMOD parameter."
+    endif else if (EXTERNAL1 eq 5) then begin
+        if (n_elements(IOPT_PARMOD) ne 102) then $
             message, "Invalid PARMOD parameter."
     endif
 
@@ -165,13 +184,17 @@ PRO UBK_LSTAR, XorR0, YorPHI0, PA0, $
     if (n_elements(N_THREADS) ne 1 or N_THREADS lt 1) then $
         message, "N_THREADS should be an integer greater than 0."
 
+    if not keyword_set(USE_INTERP_FIELD_WITH_POLY_ORDER) then USE_INTERP_FIELD_WITH_POLY_ORDER = 0
+    if (n_elements(USE_INTERP_FIELD_WITH_POLY_ORDER) ne 1 or (USE_INTERP_FIELD_WITH_POLY_ORDER lt 0 or USE_INTERP_FIELD_WITH_POLY_ORDER gt 2)) then $
+        message, "USE_INTERP_FIELD_WITH_POLY_ORDER should be between 0 and 2."
+
     ; Call DLM
     ubk_lstar_c, LSTAR,K,PHI0,XorRc,YorPhic, PF,TF, $
             XorR0,YorPHI0,PA0, $
             YDHMS,IOPT_PARMOD,EXTERNAL1,INTERNAL1, $
             IONOR,DS,DXorDR,DYorDPHI,N_PHI,N_THETA, $
             keyword_set(PRESERVE_DRIFT_CONTOUR), $
-            keyword_set(CARTESIAN_GRID), N_THREADS
+            keyword_set(CARTESIAN_GRID), N_THREADS, USE_INTERP_FIELD_WITH_POLY_ORDER
         
     ; Reform
     dim = size(XorR0, /dim)

@@ -55,33 +55,33 @@ all :
 			echo "binary you are using. Otherwise the DLM will" ;\
 			echo "fail to load." ;\
 		    else \
-			make $(DLM_TARGET) \
+			$(MAKE) $(DLM_TARGET) \
 			"X_CFLAGS=-K pic" \
 			"X_LD_FLAGS=-B symbolic -z nodefs -G" ; \
 		    fi \
 		;; \
-	   "AIX") make $(DLM_TARGET) \
+	   "AIX") $(MAKE) $(DLM_TARGET) \
 			"LD=cc" \
 			"SO_EXT=a" \
 			"X_CFLAGS=-qro -qroconst" \
 			"X_LD_FLAGS= -bM:SRE -bnoentry -btextro -bE:$(DLM_TARGET).export -bI:$(IDL_DIR)/external/idl.export" ;;\
-	   "Darwin" ) make $(DLM_TARGET) \
+	   "Darwin" ) $(MAKE) $(DLM_TARGET) \
 			"X_CFLAGS= -fPIC" \
 			"X_LD_FLAGS= -flat_namespace -undefined suppress -bundle" ;; \
-	   "HP-UX") make $(DLM_TARGET)  \
+	   "HP-UX") $(MAKE) $(DLM_TARGET)  \
 			"SO_EXT= sl" \
 			"X_CFLAGS=+z +e -Aa -D_HPUX_SOURCE" \
 			"X_LD_FLAGS= -b -Brestricted +s" ;; \
-	   "IRIX" )  make $(DLM_TARGET) \
+	   "IRIX" )  $(MAKE) $(DLM_TARGET) \
 			"X_CFLAGS=-n32 -mips3" \
 		       "X_LD_FLAGS=-Bsymbolic -n32 -mips3 -shared -all -rdata_shared" ;;\
-	   "IRIX64" )  make $(DLM_TARGET) \
+	   "IRIX64" )  $(MAKE) $(DLM_TARGET) \
 		       "X_CFLAGS=-n32 -mips3" \
 		       "X_LD_FLAGS=-Bsymbolic -n32 -mips3 -shared -all -rdata_shared" ;;\
-	   "OSF1" )  make $(DLM_TARGET) \
+	   "OSF1" )  $(MAKE) $(DLM_TARGET) \
 			"X_CFLAGS=-float" \
 			"X_LD_FLAGS=-expect_unresolved '*' -shared -all" ;;\
-	   "Linux" ) make $(DLM_TARGET) \
+	   "Linux" ) $(MAKE) $(DLM_TARGET) \
 			"X_CFLAGS= -fPIC" \
 			"X_LD_FLAGS= -shared -Bsymbolic --warn-once -noinhibit-exec " ; \
 		;; \
@@ -95,10 +95,10 @@ all :
 # force you to specify the target on the make command line, leading you to
 # here
 sun32 :
-	make $(DLM_TARGET) "X_CFLAGS=-K pic" "X_LD_FLAGS=-B symbolic -z nodefs -G"
+	$(MAKE) $(DLM_TARGET) "X_CFLAGS=-K pic" "X_LD_FLAGS=-B symbolic -z nodefs -G"
 
 sun64 :
-	make $(DLM_TARGET) "X_CFLAGS=-K pic -xtarget=ultra -xarch=v9" \
+	$(MAKE) $(DLM_TARGET) "X_CFLAGS=-K pic -xtarget=ultra -xarch=v9" \
 		"X_LD_FLAGS=-B symbolic -z nodefs -G"
 
 

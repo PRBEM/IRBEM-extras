@@ -1,0 +1,11 @@
+* Version 1.0.2: 2014-09-29 Kyungguk Min
+	- Linux version of DLM/MEX binaries removed.
+	- T89 model bug fix.
+	- Orbit type property added to Particle class.
+
+* Version 1.0.1: 2013-07-10 Kyungguk Min
+	- TS07D model is added.
+	- Implemented interpolated field model.
+
+* Version 1.0.0: 2013-04-26 Kyungguk Min
+	- Created.

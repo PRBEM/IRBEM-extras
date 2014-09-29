@@ -19,6 +19,7 @@
 #include "T96.h"
 #include "T02.h"
 #include "TS05.h"
+#include "TS07.h"
 #include <cmath>
 #include <cassert>
 #include <cstdio>
@@ -34,17 +35,20 @@ namespace UBK {
 #ifdef DEBUG
     void TSFieldModel::test()
     {
-        Date date(2007, 1, 12, 00, 00);
+        // Hard coded model parameter for specific time moment. THIS IS AN EXAMPLE!!
+        double const A[101] = {1.00000,-17.2196,-43.8456,-73.3322,-97.5089,-119.160,44.1685,-28.3264,-10.0919,-6.92003,-9.75857,15.2687,-34.5620,-4.25799,-24.7348,-2.83235,-0.496528,-24.5300,-24.1017,17.9590,18.7953,10.5520,11.1135,-15.2804,-0.598420,4.85943,-10.3045,-6.15506,13.5167,-3.53762,-5.13419,5.62481,11.6524,4.45178,14.5666,-19.2603,-11.6760,5.27181,16.2248,-4.03140,-10.1715,-9.40554,-8.63108,19.2596,8.45173,5.43871,-7.09198,-5.21992,5.06120,8.87807,15.7564,46.7266,-48.0707,-8.33984,1.25046,-23.5229,0.877495,-31.7131,4.87073,-8.23912,1.57636,-33.3436,-21.1656,-3.80171,-14.3754,6.42494,-2.94579,-18.7112,37.4036,10.8904,-1.33068,6.50348,1.51085,-6.63102,4.40149,-2.77839,-3.40469,-4.87805,17.3867,-7.80144,0.872749,9.48005,5.42796,-2.30417,17.9994,0.485395,-8.85228,1.79156,-9.94661,0.396798E-01,7.30606,0.421574,0.575977E-01,-0.246429,0.678498E-01,2.63071,9.15388,32.1001,0.820630,1.71374,0.141481E-01};
+
+        Date date(2007, 1, 1, 1, 1);
         double vsw = 400;
-        int iopt = 1;
-        double parmod[10] = {2, -10, 3, -10, };
+        int iopt = 2;
+        Parmod parmod(1., A);
 
         {
-            TSFieldModel fm(date, vsw, kGeopackDipoleField, iopt, parmod, kTS96Model);
+            TSFieldModel fm(date, vsw, kGeopackDipoleField, iopt, parmod, kTS07Model);
 
-            Point pt(6.);
+            Point pt(-6., 0., 0.);
             Point b;
-            fm.getCartesianFieldInGSM_atCartesianPoint(&b, pt);
+            fm.getCartesianFieldInSM_atCartesianPoint(&b, pt);
             printf("B(%s) = %s\n", pt.desc().c_str(), b.desc().c_str());
         }
 
@@ -86,6 +90,9 @@ namespace UBK {
             case kTS05Model:
                 _external = new TS05(_geopack, parmod);
                 break;
+            case kTS07Model:
+                _external = new TS07(_geopack, parmod);
+                break;
             default:
                 throw invalid_argument("Invalid external model name.");
                 break;
@@ -109,6 +116,9 @@ namespace UBK {
                 break;
             case kTS05Model:
                 _external = new TS05(_geopack, parmod.parmod);
+                break;
+            case kTS07Model:
+                _external = new TS07(_geopack, parmod.parmod);
                 break;
             default:
                 throw invalid_argument("Invalid external model name.");
