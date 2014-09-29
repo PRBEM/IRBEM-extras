@@ -36,6 +36,19 @@ namespace UBK {
     class AffineTransform;
 
     //!
+    //! Orbit type.
+    //!
+    enum _OrbitType {
+        kOrbitTypeClosed = 0, //!< Drift orbit closed.
+        kOrbitTypeTraceFailed = 1, //!< Tracing failed.
+        kOrbitTypeOutOfBound = 2, //!< Particle crossed domain.
+        kOrbitTypePrecipitation = 3, //!< Ionospheric precipitation.
+        kOrbitTypeBifurcation = 4, //!< Took bifurcated orbit. Trace halted.
+        kOrbitTypeUnknown = 127 //!< Unknown issue.
+    };
+    typedef long OrbitType;
+
+    //!
     //! Representation of a particle.
     //! Given the initial values of a particle, traces a drift shell and calculates L* if defined.
     //!
@@ -71,6 +84,7 @@ namespace UBK {
         BOOL _shouldKeepFootPoints; // Flag to keep foot point coordinates of the contour. Be caucious for memory if set to YES.
 
         BOOL _closed;
+        OrbitType _orbitType;
         double _Lstar;
         double _K;
 
@@ -112,6 +126,13 @@ namespace UBK {
         //! Flag for contour connectivity. If it's NO, Lstar property returns NAN.
         //!
         BOOL const& isClosed () const {return _closed;};
+
+        //!
+        //! Flag for drift orbit type.
+        //!
+        //! TODO: This property is added later time and supersedes the isClosed property. It may need to change implementation of the isClosed property to simply check whether the orbit type is closed.
+        //!
+        OrbitType const& orbitType () const {return _orbitType;};
 
         //!
         //! Calculated Lstar. NAN value is returned unless Lstar is found.
