@@ -1,4 +1,4 @@
-function [DLLM,DLLE] = odc_DLL_Ozeke2013(L,param,value,alpha0_deg,MeV)
+function [DLLM,DLLE] = odc_DLL_Ozeke2013(L,param,value,alpha0_deg,MeV,QDoption)
 % ********************************************
 % WARNING! This code uses prepublication values! WARNING!
 % Formulae were updated 28 Oct 2013, still pre-publication!
@@ -6,6 +6,7 @@ function [DLLM,DLLE] = odc_DLL_Ozeke2013(L,param,value,alpha0_deg,MeV)
 % DLLM = odc_DLL_Ozeke2013(L,param,value)
 % DLLM = odc_DLL_Ozeke2013(L,param,value,alpha0_deg)
 % [DLLM,DLLE] = odc_DLL_Ozeke2013(L,param,value,alpha0_deg,MeV)
+% [DLLM,DLLE] = odc_DLL_Ozeke2013(L,param,value,alpha0_deg,MeV,QDoption)
 % compute radial diffusion coefficient
 % according to Ozeke et al. 2013 (prepublication)
 % L - dipole L shell
@@ -13,6 +14,9 @@ function [DLLM,DLLE] = odc_DLL_Ozeke2013(L,param,value,alpha0_deg,MeV)
 % value - Kp
 % alpha0_deg - equatorial pitch angle, degrees (default is 90)
 % MeV - particle energy, MeV
+% QDoption - 'M' -- apply Q/D angular factor only to M
+%          - 'EM' -- apply it to both (default - these are electromagnetic waves)
+%          - '' -- apply it to neither
 %
 % DLLM - magnetic radial diffusion coefficient (1/day)
 % DLLE - electric radial diffusion coefficient (1/day)
@@ -49,6 +53,10 @@ else
     QD2 = (util.Q(y)./util.D(y)).^2/(util.Q(1)/util.D(1))^2;
 end
 
+if nargin < 5,
+    QDoption = 'EM';
+end
+
 switch(lower(param)),
     case 'kp',
         Kp = value;
@@ -60,7 +68,16 @@ switch(lower(param)),
         error('Unknown parameter "%s"',param);
 end
 
-DLLM = DLLM.*QD2; % apply angular correction
+switch(lower(QDoption)),
+    case '',
+    case 'm',
+        DLLM = DLLM.*QD2; % apply angular correction
+    case 'em',
+        DLLM = DLLM.*QD2; % apply angular correction
+        DLLE = DLLE.*QD2; % apply angular correction
+    otherwise,
+        error('Unknown value for QDoption "%s"',QDoption);
+end
 
 function test
 Ms = [500, 2000, 3500, 5000]; % MeV/G
