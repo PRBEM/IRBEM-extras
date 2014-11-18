@@ -1,7 +1,7 @@
-function [DLLM,DLLE] = odc_DLL_Ozeke2012(L,param,value,alpha0_deg,MeV,m)
-% DLLM = odc_DLL_Ozeke2012(L,param,value)
-% DLLM = odc_DLL_Ozeke2012(L,param,value,alpha0_deg)
-% [DLLM,DLLE] = odc_DLL_Ozeke2012(L,param,value,alpha0_deg,MeV,m)
+function [DLLB,DLLE] = odc_DLL_Ozeke2012(L,param,value,alpha0_deg,MeV,m)
+% DLLB = odc_DLL_Ozeke2012(L,param,value)
+% DLLB = odc_DLL_Ozeke2012(L,param,value,alpha0_deg)
+% [DLLB,DLLE] = odc_DLL_Ozeke2012(L,param,value,alpha0_deg,MeV,m)
 % compute radial diffusion coefficient
 % according to Ozeke et al. 2012
 % L - dipole L shell
@@ -11,7 +11,7 @@ function [DLLM,DLLE] = odc_DLL_Ozeke2012(L,param,value,alpha0_deg,MeV,m)
 % MeV - particle energy, MeV
 % m - assumed m number (default is 1)
 %
-% DLLM - magnetic radial diffusion coefficient (1/day)
+% DLLB - magnetic radial diffusion coefficient (1/day)
 % DLLE - electric radial diffusion coefficient (1/day)
 %
 %
@@ -28,7 +28,7 @@ function [DLLM,DLLE] = odc_DLL_Ozeke2012(L,param,value,alpha0_deg,MeV,m)
 
 if nargin == 0,
     test;
-    DLLM = [];
+    DLLB = [];
     DLLE = [];
     return
 end
@@ -57,16 +57,16 @@ M = p_perp.^2.*L.^3./(2.*util.mks.electron.m0.*BE); % equation (4)
 % M ~ (kg m /s )^2 / (kg * nT) = kg m^2 / s^2 / nT
 
 PSDM = PSD{1};
-DLLM = M.^2./(8.*util.mks.electron.q.^2.*ele.gamma.^2.*BE^2.*util.mks.RE^4).*L.^4.*m.^2.*PSDM; % equation (3)
-% DLLM ~ (kg m^2 / s^2 / nT)^2 / (C^2 nT^2 m^4) * (nT^2/mHz)
-% DLLM ~  nT^2 kg ^2 m^4 /s^4 / nT^2 / C^2 / nT^2 / m^4 / mHz
-% DLLM ~  kg ^2 /s^4 / nT^2 / C^ 2 / mHz
+DLLB = M.^2./(8.*util.mks.electron.q.^2.*ele.gamma.^2.*BE^2.*util.mks.RE^4).*L.^4.*m.^2.*PSDM; % equation (3)
+% DLLB ~ (kg m^2 / s^2 / nT)^2 / (C^2 nT^2 m^4) * (nT^2/mHz)
+% DLLB ~  nT^2 kg ^2 m^4 /s^4 / nT^2 / C^2 / nT^2 / m^4 / mHz
+% DLLB ~  kg ^2 /s^4 / nT^2 / C^ 2 / mHz
 % T = kg / C / s
-% DLLM ~  (1/1e-21) s kg ^2 /s^4 / (kg/C/s)^2 / C^2
-% DLLM ~  (1/1e-21) s C^2 s^2 kg^2 /s^4 / kg^2 / C^2
-% DLLM ~  (1/1e-21) / s
-DLLM = DLLM * 1e+21; % /s
-DLLM = DLLM * 24*60*60; % /day
+% DLLB ~  (1/1e-21) s kg ^2 /s^4 / (kg/C/s)^2 / C^2
+% DLLB ~  (1/1e-21) s C^2 s^2 kg^2 /s^4 / kg^2 / C^2
+% DLLB ~  (1/1e-21) / s
+DLLB = DLLB * 1e+21; % /s
+DLLB = DLLB * 24*60*60; % /day
 
 if nargout >=2,
     PSDE = PSD{2};
@@ -77,7 +77,7 @@ if nargout >=2,
     DLLE = DLLE * 1e15; % /s
     DLLE = DLLE * 24*60*60; % /day
 else
-    DLLE = nan(size(DLLM));
+    DLLE = nan(size(DLLB));
 end
 
 
@@ -100,7 +100,7 @@ for iM = 1:length(Ms),
     M = Ms(iM);
     for iKp = 1:length(Kps),
         Kp = Kps(iKp);
-        DLLM = nan(length(Ls),length(ms));
+        DLLB = nan(length(Ls),length(ms));
         for im = 1:length(ms),
             m = ms(im);
             for iL = 1:length(Ls),
@@ -108,13 +108,13 @@ for iM = 1:length(Ms),
                 % compute MeV from M and B
                 B = util.SL.B0*1e9/L^3;
                 MeV = util.MBtoMeV(M,B,alpha0_deg,'e-');
-                DLLM(iL,im) = odc_DLL_Ozeke2012(L,'Kp',Kp,alpha0_deg,MeV,m);
+                DLLB(iL,im) = odc_DLL_Ozeke2012(L,'Kp',Kp,alpha0_deg,MeV,m);
             end
             
             subplot(length(Kps),length(Ms),(iKp-1)*length(Ms)+iM);
-            h(im) = loglog(Ls,DLLM(:,im),styles{im});
+            h(im) = loglog(Ls,DLLB(:,im),styles{im});
             hold on;
-            P = polyfit(log(Ls),log(DLLM(:,im)),1);
+            P = polyfit(log(Ls),log(DLLB(:,im)),1);
             loglog(Ls,exp(polyval(P,log(Ls))),pl_styles{im});
             
             leg{im} = sprintf('m=%g',m);
@@ -151,7 +151,7 @@ for iM = 1:length(Ms),
     M = Ms(iM);
     for iKp = 1:length(Kps),
         Kp = Kps(iKp);
-        DLLM = nan(length(Ls),length(ms));
+        DLLB = nan(length(Ls),length(ms));
         DLLE = nan(length(Ls),length(ms));
         for im = 1:length(ms),
             m = ms(im);
@@ -160,7 +160,7 @@ for iM = 1:length(Ms),
                 % compute MeV from M and B
                 B = util.SL.B0*1e9/L^3;
                 MeV = util.MBtoMeV(M,B,alpha0_deg,'e-');
-                [DLLM(iL,im),DLLE(iL,im)] = odc_DLL_Ozeke2012(L,'Kp',Kp,alpha0_deg,MeV,m);
+                [DLLB(iL,im),DLLE(iL,im)] = odc_DLL_Ozeke2012(L,'Kp',Kp,alpha0_deg,MeV,m);
             end
             
             figure(10);
@@ -203,7 +203,7 @@ for iM = 1:length(Ms),
         DLLE_BA = nan(length(Ls),1);
         DLLM_BA = nan(length(Ls),1);
         DLLE = nan(length(Ls),1);
-        DLLM = nan(length(Ls),1);
+        DLLB = nan(length(Ls),1);
         
         for iL = 1:length(Ls),
             L = Ls(iL);
@@ -211,7 +211,7 @@ for iM = 1:length(Ms),
             B = util.SL.B0*1e9/L^3;
             MeV = util.MBtoMeV(M,B,alpha0_deg,'e-');
             [DLLM_BA(iL),DLLE_BA(iL)] = odc_DLL_BA2000(L,Kp,alpha0_deg,MeV);
-            [DLLM(iL),DLLE(iL)] = odc_DLL_Ozeke2012(L,'Kp',Kp,alpha0_deg,MeV,m);
+            [DLLB(iL),DLLE(iL)] = odc_DLL_Ozeke2012(L,'Kp',Kp,alpha0_deg,MeV,m);
         end
         
         subplot(length(Kps),length(Ms),(iKp-1)*length(Ms)+iM);
@@ -219,7 +219,7 @@ for iM = 1:length(Ms),
         hold on;
         loglog(Ls,DLLM_BA,'k:');
         loglog(Ls,DLLE,'rs-');
-        loglog(Ls,DLLM,'g-.','linew',2);
+        loglog(Ls,DLLB,'g-.','linew',2);
         if iKp==1,
             title(sprintf('M=%g MeV/g',M));
         end

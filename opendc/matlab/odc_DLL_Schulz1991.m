@@ -1,5 +1,5 @@
-function [DLLE,DLLM] = odc_DLL_Schulz1991(L,alpha0_deg,MeV)
-% [DLLE,DLLM] = odc_DLL_Schulz1991(L,alpha0_deg,MeV)
+function [DLLM,DLLE] = odc_DLL_Schulz1991(L,alpha0_deg,MeV)
+% [DLLM,DLLE] = odc_DLL_Schulz1991(L,alpha0_deg,MeV)
 % returns electrostatic (DLLE) and electromagnetic (DLLM)
 % diffusion coefficients from Schulze 1991 (Geomagnetism)
 % in units of 1/day, for electrons
