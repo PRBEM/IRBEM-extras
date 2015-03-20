@@ -1,19 +1,18 @@
-function [DLLB,DLLE] = odc_DLL_Ozeke2014(L,param,value,alpha0_deg,MeV,QDoption)
+function [DLLB,DLLE] = odc_DLL_Ozeke2014(L,param,value,alpha0_deg,QDoption)
 % ********************************************
 % These coefficients were published in Ozeke et al, 2014, JGR
 % this routine is now a wrapper for that one
 % ********************************************
 % DLLB = odc_DLL_Ozeke2014(L,param,value)
 % DLLB = odc_DLL_Ozeke2014(L,param,value,alpha0_deg)
-% [DLLB,DLLE] = odc_DLL_Ozeke2014(L,param,value,alpha0_deg,MeV)
-% [DLLB,DLLE] = odc_DLL_Ozeke2014(L,param,value,alpha0_deg,MeV,QDoption)
+% [DLLB,DLLE] = odc_DLL_Ozeke2014(L,param,value,alpha0_deg)
+% [DLLB,DLLE] = odc_DLL_Ozeke2014(L,param,value,alpha0_deg,QDoption)
 % compute radial diffusion coefficient
 % according to Ozeke et al. 2014 (prepublication)
 % L - dipole L shell
 % param - 'Kp' (at a later date, this might include an option for 'Vsw')
 % value - Kp
 % alpha0_deg - equatorial pitch angle, degrees (default is 90)
-% MeV - particle energy, MeV
 % QDoption - 'M' -- apply Q/D angular factor only to M
 %          - 'EM' -- apply it to both (default - these are electromagnetic waves)
 %          - '' -- apply it to neither

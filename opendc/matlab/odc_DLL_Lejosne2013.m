@@ -66,15 +66,20 @@ figure;
 colors = {'k','r','g','b','m'};
 hba = nan(5,1);
 hlj = nan(5,1);
+hom = nan(5,1);
 for Kp=0:4,
     DLLM_BA = odc_DLL_BA2000(L,Kp);
     DLLM_BA = repmat(DLLM_BA,size(MeV));
     DLLM_LJ = odc_DLL_Lejosne2013(L,Kp,alpha0_deg,MeV);
+    [DLLB_OM,DLLE_OM] = odc_DLL_Ozeke2014(L,'Kp',Kp,alpha0_deg);
+    DLLM_OM = DLLB_OM+DLLE_OM;
+    DLLM_OM = repmat(DLLM_OM,size(MeV));
     hba(Kp+1) = loglog(keV,DLLM_BA,'-','color',colors{1+Kp},'linew',2);
     hold on;
     hlj(Kp+1) = loglog(keV,DLLM_LJ,'--','color',colors{1+Kp},'linew',2);
+    hom(Kp+1) = loglog(keV,DLLM_OM,'-.','color',colors{1+Kp},'linew',2);
 end
 grid on;
 xlabel('keV');
 ylabel('D_{LL} 1/day');
-legend([hba;hlj(1)],'Kp=0 BA2K','Kp=1','Kp=2','Kp=3','Kp=4','Kp=0 L13','location','eo');
+legend([hba;hlj(1);hom(1)],'Kp=0 BA2K','Kp=1','Kp=2','Kp=3','Kp=4','L13','OM14','location','eo');
