@@ -1,12 +1,18 @@
-function [DLLM,DLLE] = odc_DLL_Schulz1991(L,alpha0_deg,MeV)
+function [DLLM,DLLE] = odc_DLL_Schulz1991(L,alpha0_deg,MeV,tau)
 % [DLLM,DLLE] = odc_DLL_Schulz1991(L,alpha0_deg,MeV)
+% [DLLM,DLLE] = odc_DLL_Schulz1991(L,alpha0_deg,MeV,tau)
 % returns electrostatic (DLLE) and electromagnetic (DLLM)
 % diffusion coefficients from Schulze 1991 (Geomagnetism)
 % in units of 1/day, for electrons
 % L - L shell
 % alpha0_deg - equatorial pitch angle, degrees
 % MeV - particle energy, MeV
+% tau - decay time of electrostatic impulse, seconds (default is 1200)
 % (note sizes must be compatible so that L.*alpha0_deg.*MeV is valid)
+
+if nargin < 4,
+    tau = 1200; % seconds, decay time of electrostatic impulse
+end
 
 util = odc_util;
 
@@ -18,7 +24,6 @@ T = util.T(y);
 % equation 203
 DLLM = 7E-9.*(Q./D./180).^2.*L.^10; 
 
-tau = 1200; % seconds, decay time of electrostatic impulse
 Td = util.DriftPeriod('e-',MeV,alpha0_deg,L);
 Omega3tau = 2*pi./Td.*tau;
 

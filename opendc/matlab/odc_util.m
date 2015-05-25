@@ -556,9 +556,9 @@ inMeV = EnergyUnitInMeV(energy_unit);
 W = energy*inMeV; % energy, MeV
 gamma = W/m0c2+1; % relativistic factor
 p2 = (gamma.^2-1)*m0c2^2/c_cm^2; % p^2 = (gamma^2-1)*m0^2*c^2; units of (MeV/cm*s)^2
-psd = flux/inMeV./p2; % psd = flux/p^2
+psd = flux./inMeV./p2; % psd = flux/p^2
 % #/cm^2/s/sr/MeV / (MeV/cm*s)^2
-% cm^2 / (cm^2 s sr MeV MeV^3 s^2)
+% cm^2 / (cm^2 s sr MeV MeV^2 s^2)
 % # / (MeV^3 s^3)
 
 
