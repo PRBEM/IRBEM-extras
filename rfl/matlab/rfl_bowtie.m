@@ -325,17 +325,22 @@ for ichan = 1:length(channels),
     
     if do_plot,
         figure(fig);
-        loglog(solution(1),solution(2),'rx','linew',3);
-        axmin = min(intersect(:,1:2));
-        axmax = max(intersect(:,1:2));
-        axmin(1) = min(axmin(1),E_GRID(1));
-        axmax(1) = max(axmax(1),E_GRID(end));
-        axmin(2) = min(axmin(2),min(R(R>0)));
-        axmax(2) = max(axmax(2),max(R));
-        axmin = 10.^(floor(-0.5+log10(axmin)));
-        axmax = 10.^(ceil(0.5+log10(axmax)));
-        loglog(resp.E_GRID,max(R,axmin(2)),'g-','linew',2); % epsdEG vs E
-        axis([axmin(1) axmax(1) axmin(2) axmax(2)]);
+        if any(R(:)>0),
+            loglog(solution(1),solution(2),'rx','linew',3);
+            axmin = min(intersect(:,1:2));
+            axmax = max(intersect(:,1:2));
+            axmin(1) = min(axmin(1),E_GRID(1));
+            axmax(1) = max(axmax(1),E_GRID(end));
+            axmin(2) = min(axmin(2),min(R(R>0)));
+            axmax(2) = max(axmax(2),max(R));
+            axmin = 10.^(floor(-0.5+log10(axmin)));
+            axmax = 10.^(ceil(0.5+log10(axmax)));
+            loglog(resp.E_GRID,max(R,axmin(2)),'g-','linew',2); % epsdEG vs E
+            axis([axmin(1) axmax(1) axmin(2) axmax(2)]);
+        else
+            axis([0,1,0,1]);
+            text(0.5,0.5,'No positive entries in response','horiz','center','vert','mid');
+        end
         switch(type),
             case {TYPE_INT,TYPE_WIDE},
                 Gsym = 'G0';
