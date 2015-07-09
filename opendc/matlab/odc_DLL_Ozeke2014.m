@@ -1,8 +1,4 @@
 function [DLLB,DLLE] = odc_DLL_Ozeke2014(L,param,value,alpha0_deg,QDoption)
-% ********************************************
-% These coefficients were published in Ozeke et al, 2014, JGR
-% this routine is now a wrapper for that one
-% ********************************************
 % DLLB = odc_DLL_Ozeke2014(L,param,value)
 % DLLB = odc_DLL_Ozeke2014(L,param,value,alpha0_deg)
 % [DLLB,DLLE] = odc_DLL_Ozeke2014(L,param,value,alpha0_deg)
