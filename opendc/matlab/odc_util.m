@@ -99,6 +99,31 @@ function util = odc_util
 % Bunit - optional, if 'G' returns K in RE*sqrt(G). Otherwise K in
 %   RE*sqrt(nT)
 %
+% [M,K] = Ealpha2MK(E,alpha,L,species,Bunit)
+% for E in MeV, alpha in degrees
+% species is 'e' for electrons, 'p' for protons
+% Bunit is 'nT' or 'G' (default is 'G')
+% returns dipole M,K
+% M in MeV/G (or MeV/nT if Bunit='nT')
+% K in RE*sqrt(G)(or RE*sqrt(nT) if Bunit='nT')
+%
+% [E,alpha] = MK2Ealpha(M,K,L,species,Bunit)
+% for M in MeV/G and K in RE*sqrt(G)
+%  (or MeV/nT and RE*sqrt(nT) if Bunit = 'nT')
+% returns E in MeV, alpha in degrees
+% using dipole field
+% species is 'e' for electrons, 'p' for protons
+% Bunit = 'G' by default
+%
+% dfdL = dbydL(f,E,alpha,L,species)
+% dfdL = dbydL(f,E,alpha,L,species,dL)
+% returns df/dL at constant M,K
+% f is a function handle with 3 arguments: E,alpha,L
+% performs numerical derivative with dL=0.001 or specified by user
+% E in MeV, alpha in degrees
+% assumes dipole field
+% species is 'e' for electrons, 'p' for protons
+%
 % psd = flux2psd(flux,energy,species,energy_unit)
 % psd = flux2psd(flux,energy,'e','MeV');
 % species is:
@@ -194,6 +219,9 @@ util.alphaL2K = @alphaL2K;
 util.KL2alpha = @KL2alpha;
 util.flux2psd = @flux2psd;
 util.EnergyUnitInMeV = @EnergyUnitInMeV;
+util.Ealpha2MK = @Ealpha2MK;
+util.MK2Ealpha = @MK2Ealpha;
+util.dbydL = @dbydL;
 
 function K = alphaL2K(alpha,L,Bunit)
 % returns K in RE*sqrt(nT) for given equatorial pitch angle
@@ -592,3 +620,69 @@ Bsi = B/1e9; % B in Tesla
 [gamma,vmag,m] = MeVtogamma(Energy,species); % gamma, speed (m/s), m (kg)
 q = abs(odc_constants.mks.(species).q); % charge, C
 r = m.*vmag./q./Bsi; % kg * m/s / C / T = m
+
+
+function [M,K] = Ealpha2MK(E,alpha,L,species,Bunit)
+% for E in MeV, alpha in degrees
+% Bunit is 'nT' or 'G' (default is 'G')
+% returns dipole M,K
+% M in MeV/G (or MeV/nT if Bunit='nT')
+% K in RE*sqrt(G)(or RE*sqrt(nT) if Bunit='nT')
+global odc_constants
+mks = odc_constants.mks;
+if nargin < 5,
+    Bunit = 'G';
+end
+sp = SelectSpecies(species);
+K = alphaL2K(alpha,L,Bunit);
+BnT = dipoleB(L,0,0);
+if isequal(Bunit,'G'),
+    Beq = BnT/1e5; % 1 nT = 1E-5 G
+else
+    Beq = BnT;
+end
+m0 = mks.(sp).m0; % kg
+c = mks.c; % m/s
+EJ = E*mks.MeV; % J = kg (m/s)^2
+p2 = (EJ.^2+2*EJ*m0*c^2)/c^2;  % (kg m/s)^2
+M = p2.*sind(alpha).^2./(2*m0*Beq)/mks.MeV; % J/G
+
+
+function [E,alpha] = MK2Ealpha(M,K,L,species,Bunit)
+% for M in MeV/G and K in RE*sqrt(G)
+%  (or MeV/nT and RE*sqrt(nT) if Bunit = 'nT')
+% returns E in MeV, alpha in degrees
+% using dipole field
+% Bunit = 'G' by default
+if nargin < 5,
+    Bunit = 'G';
+end
+
+alpha = KL2alpha(K,L,Bunit);
+B = dipoleB(L,0,0); % nT
+if isequal(Bunit,'G'),
+    MG = M;
+else
+    MG = M*1e5; % MeV/nT -> MeV/G
+end
+
+E = MBtoMeV(MG,B,alpha,species);
+
+function dfdL = dbydL(f,E,alpha,L,species,dL)
+% returns df/dL at constant M,K
+% f is a function handle with 3 arguments: E,alpha,L
+% performs numerical derivative with dL=0.001 or specified by user
+% E in MeV, alpha in degrees
+% f is evaluated at L and at L+dL, 
+%  at L+dL, E and alpha are adjusted to preserve M,K
+% assumes dipole field for E,alpha <-> M,K conversions
+if nargin < 6,
+    dL = 0.001;
+end
+
+f1 = f(E,alpha,L);
+[M1,K1] = Ealpha2MK(E,alpha,L,species,'G');
+L2 = L+dL;
+[E2,alpha2] = MK2Ealpha(M1,K1,L2,species,'G');
+f2 = f(E2,alpha2,L2);
+dfdL = (f2-f1)/(L2-L);
