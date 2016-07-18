@@ -46,7 +46,7 @@ if nargout >= 2,
     Erms_mks = 0.26*(Kp-1)+0.1; % rms E field mV/m
     Erms = Erms_mks/util.mks.c*10; % mV/m to statV/cm
     c = util.mks.c*100; % c in cm/s
-    RE = 6378e5; % cm
+    RE = 6371.2e5; % cm
     
     % use equation 3 from Albert et al., 2009 in cgs
     

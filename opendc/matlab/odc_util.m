@@ -151,7 +151,7 @@ function util = odc_util
 % mks.electron.m0 = 9.10938215e-31; % rest mass, kg
 % mks.proton.m0 = 1.672621637e-27; % rest mass, kg
 % mks.proton.q = +mks.e; % charge, Coulombs
-% mks.RE =  6378.136e3; % Earth Radius, m
+% mks.RE =  6371.2 % Earth Radius, km (IAU 1966 mean?, used by IRBEM lib GDZ)
 
 %
 % Schulz & Lanzerotti constants
@@ -177,7 +177,7 @@ if isempty(odc_constants),
     mks.GeV = mks.eV*1e9; % Joules
     mks.epsilon0 = 8.854187817e-12; % F/m = C^2 s^2  / kg / m^3 - permitivity of free space
     mks.mu0 = 4*pi*1e-7; % H/m = N/A^2 = kg m/C^2 - permeability of free space
-    mks.RE =  6378.136e3; % Earth Radius, m
+    mks.RE =  6371.2; % km, IAU 1966? IBEM GDZ value
     
     
     mks.electron.q = -mks.e; % charge
