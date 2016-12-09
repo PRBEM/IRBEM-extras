@@ -15,6 +15,8 @@ function util = odc_util
 % and Bmin is the minimum (i.e., equatorial) magnetic field strength on the
 % same field line.%
 % maglat is the unsigned dipole latitude
+% 
+% R = util.rigidity(MeV,species) % returns rigidity (p/q) in GV
 %
 % [gamma,v,m] = util.MeVtogamma(MeV,species)
 % convert Energy in MeV to gamma factor
@@ -215,6 +217,7 @@ util.GyroRadius = @GyroRadius;
 util.dipoleB = @dipoleB;
 util.dipoleIJ = @dipoleIJ;
 util.MBtoMeV = @MBtoMeV;
+util.rigidity = @rigidity;
 util.alphaL2K = @alphaL2K;
 util.KL2alpha = @KL2alpha;
 util.flux2psd = @flux2psd;
@@ -561,6 +564,19 @@ gamma = sqrt(1+p2/m0^2/mks.c^2);
 E = (gamma-1)*m0*mks.c^2; % J
 MeV = E/mks.MeV;
 
+function R = rigidity(MeV,species) 
+% returns rigidity (p/q) in GV/c (/c is usually dropped)
+global odc_constants
+mks = odc_constants.mks;
+
+[~,v,m] = MeVtogamma(MeV,species);
+% v in m/s
+% m in kg
+
+R = m.*v/mks.e*mks.c; % kg m^2 /s^2 / C = V 
+R = R*1e-9; % R in GV
+
+
 function psd = flux2psd(flux,energy,species,energy_unit)
 % psd = flux2psd(flux,energy,species,energy_unit)
 % psd = flux2psd(flux,energy,'e','MeV');
@@ -686,3 +702,5 @@ L2 = L+dL;
 [E2,alpha2] = MK2Ealpha(M1,K1,L2,species,'G');
 f2 = f(E2,alpha2,L2);
 dfdL = (f2-f1)/(L2-L);
+
+
