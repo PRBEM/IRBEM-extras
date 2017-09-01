@@ -36,10 +36,11 @@ TARFILES=$(CFILES) $(HFILES) $(MFILES) $(TARMISC)
 ifneq (,$(findstring 64,$(MACHTYPE)))
 # 64-bit case
   OCTDEFS=-DLINUX64
+  # as of Feb 2017, OpenMP doesn't work. undefined symbol: GOMP_parallel_start
   # enable use of OpenMP in octfile
-  export XTRA_CFLAGS=-fopenmp -DUSEOMP
-  export XTRA_CXXFLAGS=-fopenmp -DUSEOMP
-  export LDFLAGS=-fopenmp -DUSEOMP
+  #export XTRA_CFLAGS=-fopenmp -DUSEOMP
+  #export XTRA_CXXFLAGS=-fopenmp -DUSEOMP
+  #export LDFLAGS=-fopenmp -DUSEOMP
 else
 # 32-bit case
   OCTDEFS=

@@ -257,7 +257,7 @@ for ichan = 1:length(channels),
                 c1 = C(is1);
                 if do_plot && (ipass==1),
                     figure(fig);
-                    loglog(E_GRID,s1.G(c1,E_GRID,E0,Emax),s1.linestyle);
+                    loglog(E_GRID,s1.G(c1,E_GRID,E0,Emax),s1.linestyle,'tag',sprintf('%s: %g',spectra{is}.type,spectra{is}.param));
                     hold on;
                 end
                 for is2 = (is1+1):Ns,
@@ -282,7 +282,7 @@ for ichan = 1:length(channels),
             G0(:,is) = spectra{is}.G(C(is),E_GRID,E0,Emax);
             if do_plot,
                 figure(fig);
-                loglog(E_GRID,G0(:,is),spectra{is}.linestyle);
+                loglog(E_GRID,G0(:,is),spectra{is}.linestyle,'tag',sprintf('%s: %g',spectra{is}.type,spectra{is}.param));
                 hold on;
             end
         end
