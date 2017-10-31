@@ -101,6 +101,11 @@ function util = odc_util
 % Bunit - optional, if 'G' returns K in RE*sqrt(G). Otherwise K in
 %   RE*sqrt(nT)
 %
+% M = EBalpha2M(E,B,alpha,species)
+% for E in MeV, alpha in degrees
+% species is 'e' for electrons, 'p' for protons
+% returns M in MeV/G or MeV/nT, using same B unit as input
+%
 % [M,K] = Ealpha2MK(E,alpha,L,species,Bunit)
 % for E in MeV, alpha in degrees
 % species is 'e' for electrons, 'p' for protons
@@ -222,6 +227,7 @@ util.alphaL2K = @alphaL2K;
 util.KL2alpha = @KL2alpha;
 util.flux2psd = @flux2psd;
 util.EnergyUnitInMeV = @EnergyUnitInMeV;
+util.EBalpha2M = @EBalpha2M;
 util.Ealpha2MK = @Ealpha2MK;
 util.MK2Ealpha = @MK2Ealpha;
 util.dbydL = @dbydL;
@@ -637,6 +643,17 @@ Bsi = B/1e9; % B in Tesla
 q = abs(odc_constants.mks.(species).q); % charge, C
 r = m.*vmag./q./Bsi; % kg * m/s / C / T = m
 
+function M = EBalpha2M(E,B,alpha,species)
+% for E in MeV, alpha in degrees
+% returns M in MeV/G or MeV/nT, using same B unit as input
+global odc_constants
+mks = odc_constants.mks;
+sp = SelectSpecies(species);
+m0 = mks.(sp).m0; % kg
+c = mks.c; % m/s
+EJ = E*mks.MeV; % J = kg (m/s)^2
+p2 = (EJ.^2+2*EJ*m0*c^2)/c^2;  % (kg m/s)^2
+M = p2.*sind(alpha).^2./(2*m0*B)/mks.MeV; % J/G -> MeV/G
 
 function [M,K] = Ealpha2MK(E,alpha,L,species,Bunit)
 % for E in MeV, alpha in degrees
@@ -661,7 +678,7 @@ m0 = mks.(sp).m0; % kg
 c = mks.c; % m/s
 EJ = E*mks.MeV; % J = kg (m/s)^2
 p2 = (EJ.^2+2*EJ*m0*c^2)/c^2;  % (kg m/s)^2
-M = p2.*sind(alpha).^2./(2*m0*Beq)/mks.MeV; % J/G
+M = p2.*sind(alpha).^2./(2*m0*Beq)/mks.MeV; % J/G -> MeV/G
 
 
 function [E,alpha] = MK2Ealpha(M,K,L,species,Bunit)
