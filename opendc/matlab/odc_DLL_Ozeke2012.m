@@ -57,7 +57,7 @@ M = p_perp.^2.*L.^3./(2.*util.mks.electron.m0.*BE); % equation (4)
 % M ~ (kg m /s )^2 / (kg * nT) = kg m^2 / s^2 / nT
 
 PSDM = PSD{1};
-DLLB = M.^2./(8.*util.mks.electron.q.^2.*ele.gamma.^2.*BE^2.*util.mks.RE^4).*L.^4.*m.^2.*PSDM; % equation (3)
+DLLB = M.^2./(8.*util.mks.electron.q.^2.*ele.gamma.^2.*BE^2.*util.mks.R_E^4).*L.^4.*m.^2.*PSDM; % equation (3)
 % DLLB ~ (kg m^2 / s^2 / nT)^2 / (C^2 nT^2 m^4) * (nT^2/mHz)
 % DLLB ~  nT^2 kg ^2 m^4 /s^4 / nT^2 / C^2 / nT^2 / m^4 / mHz
 % DLLB ~  kg ^2 /s^4 / nT^2 / C^ 2 / mHz
@@ -70,7 +70,7 @@ DLLB = DLLB * 24*60*60; % /day
 
 if nargout >=2,
     PSDE = PSD{2};
-    DLLE = 1./(8.*BE^2.*util.mks.RE^2).*L.^6.*PSDE; % equation (2)
+    DLLE = 1./(8.*BE^2.*util.mks.R_E^2).*L.^6.*PSDE; % equation (2)
     % DLLE ~ 1/(nT^2 m^2) * (mV/m)^2/mHz =
     % DLLE ~ (1e-3 V)^2 / m^2 / (1e-3 / s) / m^2 * m^4 / (1e-9 V)^2 / s ^2
     % DLLE ~ (1e-6 / 1e-3 / 1e-18) / s
