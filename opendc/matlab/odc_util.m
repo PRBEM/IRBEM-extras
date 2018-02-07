@@ -145,6 +145,9 @@ function util = odc_util
 % returns the MeV equivalent of 1 energy_unit
 % e.g., EnergyUnitInMeV('GeV') = 1000
 %
+% species = SelectSpecies(Species)
+% convert various alternatives to standard species name
+%
 % SI/mks constants
 % util.mks:
 % mks.e = 1.602176487e-19; % Coulombs per fundamental charge
@@ -228,6 +231,7 @@ util.alphaL2K = @alphaL2K;
 util.KL2alpha = @KL2alpha;
 util.flux2psd = @flux2psd;
 util.EnergyUnitInMeV = @EnergyUnitInMeV;
+util.SelectSpecies = @SelectSpecies;
 util.EBalpha2M = @EBalpha2M;
 util.Ealpha2MK = @Ealpha2MK;
 util.MK2Ealpha = @MK2Ealpha;
@@ -499,6 +503,7 @@ end
 
 
 function species = SelectSpecies(Species)
+% species = SelectSpecies(Species)
 % convert various alternatives to standard species name
 
 switch(lower(Species)),
@@ -580,7 +585,8 @@ mks = odc_constants.mks;
 % v in m/s
 % m in kg
 
-R = m.*v/mks.e*mks.c; % kg m^2 /s^2 / C = V 
+sp = SelectSpecies(species);
+R = m.*v/abs(mks.(sp).q)*mks.c; % kg m^2 /s^2 / C = V 
 R = R*1e-9; % R in GV
 
 
