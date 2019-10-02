@@ -495,6 +495,7 @@ if nargout >= 2, % Bvec or Bx, By, Bz
         Z = R.*smlat;
         
         if nargout==3, % [B, Bvec, XYZ] XYZ style output
+            Bx = [Bx(:), By(:), Bz(:)]; % Bvec output
             By = [X(:), Y(:), Z(:)]; % XYZ output
         end
     end
