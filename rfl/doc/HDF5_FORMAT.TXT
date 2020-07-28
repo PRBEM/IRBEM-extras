@@ -1,0 +1,24 @@
+Information on HDF5 format 3-D response files.
+
+The Response Function Library 3-D response files contain tabulated
+responses for each energy channel and one or more species. These are
+provided in hierarchical form in the HDF5 files (or CDF or .mat save
+sets). For HDF5 format 3-D response files (.h5 extension) produced by
+Matlab, the following information can be helpful:
+
+HDF5 does not store strings. So, strings are stored in UTF-8 encoding
+as uint8 data. String variables have an attribute isString.
+
+Boolean variables are stored as uint8 and have an attribute isBoolean.
+
+Matlab stores arrays of strings as "cell arrays" these are captured in
+HDF5 as groups with an isArray attribute. Members of the group have
+variable names 0, 1, 2, ...
+
+Most of the data are stored in groups and sub-groups, with isStruct
+attribute set.
+
+Matlab treats all variables as double precision and matrix by
+default. So, even scalars will have size 1x1, and many integers will
+be stored as double precision.
+
