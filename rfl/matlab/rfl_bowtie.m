@@ -47,16 +47,18 @@ function results = rfl_bowtie(inst_info,type,species,exponents,channels,varargin
 %   (if E0 is omitted, 'struct' is assumed, and then '50%' is used if E0 is
 %   not in the inst_info structure)
 % 'T',T - include exp(-E/T) type exponential spectra for one or more T's.
+% 'tail' - struct('E',E_MeV,'fun',@tail)
+%    splice high energy tail: j(E) ~tail(E) for E>=E_MeV
+%    NOTE: this only works for diff or int bowties
+%    and the @tail spectrum is differential
 % 'plot' - make diagnostic plot
-
-if ischar(inst_info),
-    inst_info = rfl_load_inst_info(inst_info);
-end
 
 METHOD_INTERSECT = 1;
 METHOD_MINDG = 2;
 methods = {'intersect','mindg'};
 method = METHOD_INTERSECT;
+
+tail = false;
 
 TYPE_DIFF = 1;
 TYPE_WIDE = 2;
@@ -88,6 +90,9 @@ while i <= length(varargin),
     switch(lower(varargin{i})),
         case {'plot'},
             do_plot=true;
+        case {'tail'},
+            i = i+1;
+            tail = varargin{i};
         case {'t'},
             i = i+1;
             Ts = varargin{i};
@@ -113,6 +118,14 @@ elseif ~ismember(method,1:length(methods)),
     error('Unknown Method: %d',method);
 end
 
+if ~isequal(tail,false) && (method ~= METHOD_MINDG),
+    error('tail option only supported for method mindG');
+end
+
+if ~isequal(tail,false) && ~ismember(type,[TYPE_DIFF,TYPE_INT]),
+    error('tail option only supported for type int or diff');
+end
+
 clear sinfo
 
 sinfo.PL = struct('type','PL','index',1,'linestyle','k-','special',false);
@@ -125,19 +138,14 @@ spectra = cell(Ns,1);
 for i = 1:Nn,
     spectra{i} = setfield(sinfo.PL,'param',exponents(i));
     n = exponents(i);
-    spectra{i}.j = @(E)E.^(-n);
+    spectra{i}.j = @(E)flux_PL(E,n,tail);
     spectra{i}.special = (n<=1) || (type==TYPE_WIDE);
     switch(type),
         case TYPE_INT,
-            if n<1, % need to include Emax
-                spectra{i}.G = @(c,E,E0,Emax)c*(n-1)./(Emax.^(n-1)-E.^(n-1));
-            elseif n==1, % need to include Emax and special case n
-                spectra{i}.G = @(c,E,E0,Emax)c./(log(Emax)-log(E));
-            else % treate Emax as infinity
-                spectra{i}.G = @(c,E,E0,Emax)c*E.^(n-1)*(n-1);
-            end
+            spectra{i}.G = @(c,E,E0,Emax)G_PL_int_tail(c,E,E0,Emax,n,tail);
         case TYPE_DIFF,
-            spectra{i}.G = @(c,E,E0,Emax)c*E.^n;
+            %spectra{i}.G = @(c,E,E0,Emax)c*E.^n;
+            spectra{i}.G = @(c,E,E0,Emax)G_PL_diff_tail(c,E,E0,Emax,n,tail);
         case TYPE_WIDE,            
             if n==1, % need to include Emax and special case n
                 spectra{i}.G = @(c,E,E0,Emax)c./(log(E)-log(E0));
@@ -150,19 +158,17 @@ end
 for i = 1:NT,
     T = Ts(i);
     spectra{Nn+i} = setfield(sinfo.EXP,'param',T);
-    spectra{Nn+i}.j = @(E)exp(-E/T);
+    spectra{Nn+i}.j = @(E)flux_EXP(E,T,tail);
     switch(type),
         case TYPE_INT,
-            spectra{Nn+i}.G = @(c,E,E0,Emax)c.*exp(E./T)./T;
+            %spectra{Nn+i}.G = @(c,E,E0,Emax)c.*exp(E./T)./T;
+            spectra{Nn+i}.G = @(c,E,E0,Emax)G_EXP_int_tail(c,E,E0,Emax,T,tail);
         case TYPE_DIFF,
-            spectra{Nn+i}.G = @(c,E,E0,Emax)c.*exp(E./T);
+            %spectra{Nn+i}.G = @(c,E,E0,Emax)c.*exp(E./T);
+            spectra{Nn+i}.G = @(c,E,E0,Emax)G_EXP_diff_tail(c,E,E0,Emax,T,tail);
         case TYPE_WIDE,
             spectra{Nn+i}.G = @(c,E,E0,Emax)c./T./(exp(-E0./T)-exp(-E./T));
     end
-end
-
-if isempty(channels),
-    channels = inst_info.CHANNEL_NAMES;
 end
 
 % build intersect function table
@@ -183,6 +189,14 @@ switch(type),
         intersect_func{sinfo.PL.index,sinfo.EXP.index} = @intersect_WIDE_PL_EXP;
         intersect_func{sinfo.EXP.index,sinfo.PL.index} = @intersect_WIDE_EXP_PL;
         intersect_func{sinfo.EXP.index,sinfo.EXP.index} = @intersect_WIDE_EXP_EXP;
+end
+
+if ischar(inst_info),
+    inst_info = rfl_load_inst_info(inst_info);
+end
+
+if isempty(channels),
+    channels = inst_info.CHANNEL_NAMES;
 end
 
 if isnumeric(E0mode) && (numel(E0mode) ~= numel(channels)),
@@ -472,3 +486,105 @@ E = intersect_WIDE_PL_EXP(s2,s1,c2,c1,E0,Emax,Eguess);
 function E = intersect_WIDE_EXP_EXP(s1,s2,c1,c2,E0,Emax,Eguess)
 % c1*(E-E0)/T1/(exp(-E0/T1)-exp(-E/T1)) = c2*(E-E0)/T2/(exp(-E0/T2)-exp(-E/T2));
 E = intersect_WIDE(s1,s2,c1,c2,E0,Emax,Eguess);
+
+
+function G = G_PL_diff_tail(c,E,E0,Emax,n,tail)
+G = c*E.^n;
+if ~isequal(tail,false),
+    iE = E>tail.E;
+    if any(iE),
+        G(iE) = c./tail.fun(E(iE))*tail.E^n*tail.fun(tail.E);
+    end
+end
+
+function G = G_EXP_diff_tail(c,E,E0,Emax,T,tail)
+G = c.*exp(E./T);
+if ~isequal(tail,false),
+    iE = E>tail.E;
+    if any(iE),
+        G(iE) = c./tail.fun(E(iE))*exp(tail.E/T)*tail.fun(tail.E);
+    end
+end
+
+function G = G_PL_int_tail(c,E,E0,Emax,n,tail)
+% jdiff = E^-n
+% G = c/Jint
+Elim = Emax;
+if ~isequal(tail,false),
+    if tail.E>Emax,
+        tail = false;
+    else
+        Elim = tail.E; % Elim serves as Emax
+    end
+end
+% integrals up to Elim~Emax or tail.E
+if n<1, 
+    %G = c*(n-1)./(Emax.^(n-1)-E.^(n-1));
+    Jint = (Elim.^(n-1)-E.^(n-1))/(n-1);
+elseif n==1, 
+    %G = c./(log(Emax)-log(E));
+    Jint = log(Elim)-log(E);
+else 
+    % G = c*E.^(n-1)*(n-1);
+    Jint = (E.^(1-n)-Elim.^(1-n))/(n-1);
+end
+% now do tail integral if needed
+if ~isequal(tail,false),
+    J0int = Jint;
+    jtail = tail.fun(tail.E);
+    j0Etail = tail.E^-n;
+    itail = E>tail.E;
+    if any(~itail),
+        JprimeEtail = j0Etail/jtail*quad(tail.fun,tail.E,Emax);
+        Jint(~itail) = J0int(~itail)+JprimeEtail;
+    end
+    if any(itail),
+        for i = find(itail(:))'
+            Jint(i) = j0Etail/jtail*quad(tail.fun,E(i),Emax);
+        end
+    end
+end
+
+G = c./Jint;
+
+function G = G_EXP_int_tail(c,E,E0,Emax,T,tail)
+% jdiff = exp(-E/T)
+% G = c/Jint
+% G = c.*exp(E./T)./T;
+Jint = T.*exp(-E./T);
+% now do tail integral if needed
+if ~isequal(tail,false),
+    J0int = Jint;
+    jtail = tail.fun(tail.E);
+    j0Etail = exp(-tail.E./T);
+    itail = E>tail.E;
+    if any(~itail),
+        JprimeEtail = j0Etail/jtail*quad(tail.fun,tail.E,Emax);
+        Jint(~itail) = J0int(~itail)+JprimeEtail;
+    end
+    if any(itail),
+        for i = find(itail(:))'
+            Jint(i) = j0Etail/jtail*quad(tail.fun,E(i),Emax);
+        end
+    end
+end
+
+G = c./Jint;
+
+function flux = flux_PL(E,n,tail)
+flux = E.^(-n);
+if ~isequal(tail,false),
+    itail = E>tail.E;
+    if any(itail),
+        flux(itail) = tail.fun(E(itail))/tail.fun(tail.E)*tail.E.^(-n);
+    end
+end
+
+function flux = flux_EXP(E,T,tail)
+flux = exp(-E./T);
+if ~isequal(tail,false),
+    itail = E>tail.E;
+    if any(itail),
+        flux(itail) = tail.fun(E(itail))/tail.fun(tail.E)*exp(-tail.E./T);
+    end
+end

@@ -1,7 +1,7 @@
 function [inst_info,result_code] = rfl_load_inst_info(FileName,FileType)
 % [inst_info,result_code] = rfl_load_inst_info(FileName,FileType);
 % Populates an inst_info object from file FileName.
-% Supported file types are .cdf, .hd5, .xml (and native, e.g., .mat)
+% Supported file types are .cdf, .h5, .xml (and native, e.g., .mat)
 % FileType can be specified with or without the .
 % if FileType is omitted, the extension of FileName will be used to
 % determine what file type it is.
@@ -15,15 +15,21 @@ result_code = 1; % assume success! (error handling isn't really implemented yet)
 if isstruct(FileName),
     inst_info = FileName;
 else
-    f = find(FileName=='.');
-    ext = FileName((f(end)+1):end);
-    switch(lower(ext)),
+    if nargin == 1,
+        f = find(FileName=='.');
+        ext = FileName((f(end)+1):end);
+    else
+        ext = replace(lower(FileType),'.','');
+    end
+    switch(ext),
         case 'cdf',
             inst_info = read_from_cdf(FileName);
+        case 'h5',
+            inst_info = read_from_h5(FileName);
         case 'mat',
             inst_info = load(FileName);
         otherwise
-            error('Extension "%s" not yet supported',ext);
+            error('FileType "%s" not yet supported',ext);
     end
 end
 
@@ -137,3 +143,67 @@ elseif iscell(var),
         var{i} = recursive_rename(var{i});
     end
 end
+
+
+function inst_info = read_from_h5(FileName)
+
+info = h5info(FileName);
+inst_info = struct();
+for igroup = 1:length(info.Groups)
+    inst_info.(h5leaf(info.Groups(igroup).Name)) = read_h5_group(FileName,info.Groups(igroup));
+end
+
+for iset = 1:length(info.Datasets)
+    inst_info.(h5leaf(info.Datasets(iset).Name)) = read_h5_dataset(FileName,'',info.Datasets(iset));
+end
+
+function out = read_h5_group(FileName,info)
+atts = h5atts(info);
+
+if atts.isArray
+    if isempty(info.Groups), % array of datasets
+        out = cell(1,length(info.Datasets));
+        for i = 1:length(out),
+            out{i} = read_h5_dataset(FileName,info.Name,info.Datasets(i));
+        end
+    else % array of groups
+        out = cell(length(info.Groups));
+        for i = 1:length(out),
+            out{i} = read_h5_group(FileName,info.Group(i));
+        end
+    end
+elseif atts.isStruct
+    out = struct();
+    for igroup = 1:length(info.Groups)
+        out.(h5leaf(info.Groups(igroup).Name)) = read_h5_group(FileName,info.Groups(igroup));
+    end
+    for iset = 1:length(info.Datasets)
+        out.(info.Datasets(iset).Name) = read_h5_dataset(FileName,info.Name,info.Datasets(iset));
+    end
+end
+
+function out = read_h5_dataset(FileName,path,dataset)
+atts = h5atts(dataset);
+out = h5read(FileName,[path,'/',dataset.Name]);
+if atts.isBoolean,
+    out = logical(out);
+elseif atts.isString,
+    out = char(out);
+end
+
+function atts = h5atts(info)
+atts = struct('isBoolean',false,'isStruct',false,'isArray',false,'isString',false);
+for iatt = 1:length(info.Attributes)
+    atts.(info.Attributes(iatt).Name) = info.Attributes(iatt).Value;
+end
+
+function leaf = h5leaf(name)
+% return last name after /
+f = find(name == '/',1,'last');
+if isempty(f),
+    leaf = name;
+else
+    leaf = name((f+1):end);
+end
+
+
