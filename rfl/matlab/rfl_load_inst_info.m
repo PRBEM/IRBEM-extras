@@ -161,17 +161,22 @@ function out = read_h5_group(FileName,info)
 atts = h5atts(info);
 
 if atts.isArray
+    names = {}; % will sort by name
     if isempty(info.Groups), % array of datasets
         out = cell(1,length(info.Datasets));
         for i = 1:length(out),
             out{i} = read_h5_dataset(FileName,info.Name,info.Datasets(i));
+            names{i} = info.Name;
         end
     else % array of groups
         out = cell(length(info.Groups));
         for i = 1:length(out),
-            out{i} = read_h5_group(FileName,info.Group(i));
+            out{i} = read_h5_group(FileName,info.Groups(i));
+            names{i} = info.Groups(i).Name;
         end
     end
+    [names,isort] = sort(names);
+    out = out(isort);
 elseif atts.isStruct
     out = struct();
     for igroup = 1:length(info.Groups)

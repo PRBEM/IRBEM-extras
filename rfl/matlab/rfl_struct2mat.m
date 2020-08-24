@@ -1,4 +1,4 @@
-function rfl_struct2mat(matname,inst_info)
+function rfl_struct2mat(matname,inst_info,version_switch)
 % rfl_struct2mat(matname,inst_info)
 % save an instrument response structure to a .mat file readable by Octave
 % the saved file will contain all the fields of inst_info as separate variables

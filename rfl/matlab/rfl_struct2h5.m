@@ -29,8 +29,10 @@ if isstruct(var)
         h5writeatt(h5name,prefix,'isStruct',1,options{:});
     end
 elseif iscell(var)
+    n = sprintf('%d',1+ceil(log10(length(var))));
+    fmt = ['%s/%0',n,'d']; % e.g., %s/%05d
     for i = 1:length(var)
-        writeVar(h5name,sprintf('%s/%d',prefix,i-1),var{i});
+        writeVar(h5name,sprintf(fmt,prefix,i-1),var{i});
     end
     h5writeatt(h5name,prefix,'isArray',1,options{:});
 elseif ischar(var)
@@ -47,7 +49,11 @@ elseif islogical(var)
     h5write(h5name,prefix,var);
 elseif ismember(class(var),{'double', 'single','uint64', 'int64', 'uint32', 'int32', 'uint16','int16', 'uint8','int8'})
     %fprintf('Writing %s size [%s]\n',prefix,num2str(size(var)));
-    h5create(h5name,prefix,size(var),'Datatype',class(var),options{:});
+    deflateOptions = {};
+    if numel(var)>1000,
+        deflateOptions = {'Deflate',9,'ChunkSize',size(var)};
+    end
+    h5create(h5name,prefix,size(var),'Datatype',class(var),options{:},deflateOptions{:});
     h5write(h5name,prefix,var);
 else
     %fprintf('Not writing %s, class %s\n',prefix,class(var));

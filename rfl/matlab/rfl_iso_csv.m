@@ -1,5 +1,5 @@
-function [R,E_GRID,R_UNIT,E_UNIT] = rfl_iso_csv(inst_info,species,outfile,channels,varargin)
-% [R,E_GRID,R_UNIT,E_UNIT] = rfl_iso_csv(inst_info,species,outfile,channels,...)
+function [R,E_GRID,R_UNIT,E_UNIT,inst_info] = rfl_iso_csv(inst_info,species,outfile,channels,varargin)
+% [R,E_GRID,R_UNIT,E_UNIT,inst_info] = rfl_iso_csv(inst_info,species,outfile,channels,...)
 % write isotropic response to csv output file
 % inst_info  - string giving file name or structure containing inst_info
 % species - string giving species to study (e.g., 'PROT')
@@ -13,6 +13,9 @@ function [R,E_GRID,R_UNIT,E_UNIT] = rfl_iso_csv(inst_info,species,outfile,channe
 % E_GRID - energy
 % R_UNIT - units for R (usually cm^2 sr)
 % E_UNIT - units of E_GRID (usually MeV)
+% inst_info - loaded inst_info structure
+
+inst_info = rfl_load_inst_info(inst_info);
 
 if ~ismember(species,inst_info.SPECIES)
     error('Species %s not found in inst_info',species);
