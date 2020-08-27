@@ -13,7 +13,10 @@ Boolean variables are stored as uint8 and have an attribute isBoolean.
 
 Matlab stores arrays of strings as "cell arrays" these are captured in
 HDF5 as groups with an isArray attribute. Members of the group have
-variable names 0, 1, 2, ...
+variable names 000, 001, 002, ... The variable names are zero padded
+to a suitable length so that they can be alphabetically sorted before
+reading. This allows them to be easily put back into the proper order
+on read whether sorted alphabetically or numerically.
 
 Most of the data are stored in groups and sub-groups, with isStruct
 attribute set.
