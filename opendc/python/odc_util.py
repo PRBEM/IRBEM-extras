@@ -1,5 +1,5 @@
 """
-approximate tranSL['a']tion of IRBEM open diffusion code (odc) utility library from Matlab
+approximate translation of IRBEM open diffusion code (odc) utility library from Matlab
 """
 
 # todo:
@@ -261,7 +261,7 @@ def GyroPeriod(Species,Energy,MagLat,L):
     """
 
     Species = SelectSpecies(Species)
-    q = mks[species]['q'] # C
+    q = mks[Species]['q'] # C
     (gamma,v,m) = MeVtogamma(Energy,Species)
 
     B = dipoleB(L,MagLat)/1e9 # T
@@ -364,7 +364,7 @@ def  MBtoMeV(M,B,alpha,species):
     given M in MeV/G, and B in nT, alpha in degrees, and species
     returns energy, in MeV
     """
-    Bm = B/((180./np.pi)*np.sin(np.radians(alpha))**2) # Bmirror
+    Bm = B/np.sin(np.radians(alpha))**2 # Bmirror
     species = SelectSpecies(species)
     m0 = mks[species]['m0']
     c = mks['c']
@@ -469,7 +469,7 @@ def EBalpha2M(E,B,alpha,species):
     c = mks['c'] # m/s
     EJ = E*mks['MeV'] # J = kg (m/s)**2
     p2 = (EJ**2+2*EJ*m0*c**2)/c**2  # (kg m/s)**2
-    M = p2*(180./np.pi)*np.sin(alpha*np.pi/180.)**2./(2*m0*B)/mks['MeV'] # J/G -> MeV/G
+    M = p2*np.sin(alpha*np.pi/180.)**2./(2*m0*B)/mks['MeV'] # J/G -> MeV/G
     return M
 
 def Ealpha2MK(E,alpha,L,species,Bunit = 'G'):
@@ -494,7 +494,7 @@ def Ealpha2MK(E,alpha,L,species,Bunit = 'G'):
     c = mks['c'] # m/s
     EJ = E*mks['MeV'] # J = kg (m/s)**2
     p2 = (EJ**2+2*EJ*m0*c**2)/c**2  # (kg m/s)**2
-    M = p2*(180./np.pi)*np.sin(alpha*np.pi/180.)**2./(2*m0*Beq)/mks['MeV'] # J/G -> MeV/G
+    M = p2*np.sin(alpha*np.pi/180.)**2./(2*m0*Beq)/mks['MeV'] # J/G -> MeV/G
     return M,K
 
 def MK2Ealpha(M,K,L,species,Bunit='G'):
