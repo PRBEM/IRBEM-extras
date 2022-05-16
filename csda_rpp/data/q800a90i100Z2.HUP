@@ -1,0 +1,61 @@
+ 36 q800a90i100Z2.HUP                                                      20010
+ %Created by CREME96:HI_UPSET_DRIVER Version  200 on 02-Mar-22 at 08:21:13
+ %Input Integral LET Spectrum File: q800a90i100Z2.let                       
+ %Created by CREME96:LETSPEC_DRIVER Version  200 on 02-Mar-22 at 08:19:43       
+ %ZMIN =  2 ZMAX = 92 LETMIN = 1.00E+00 LETMAX = 1.10E+05 MeV-cm2/g LBINS = 1002
+ %EMINCUT = 1.00E-01 MeV/nuc                                                    
+ %TARGET MATERIAL = SILICON                                                     
+ %Input File to LETSPEC_DRIVER: q800a90i100.tfx                                 
+ %Created by CREME96:TRANSPORT_DRIVER Version  200 on 02-Mar-22 at 06:58:53     
+ %ZMIN =  1 ZMAX = 92  EMIN = 1.0000E-01 EMAX = 1.0000E+05 MeV/nuc  MBINS = 1002
+ %Thickness =   100.0000 mils      ALUMINUM                                     
+ %Input File to TRANSPORT_DRIVER: q800a90i.flx                                  
+ %Created by CREME96:FLUX_DRIVER Version  200 on 02-Mar-22 at 06:55:00          
+ %ZMIN =  1 ZMAX = 92                                                           
+ %IMODE  =   0 SOLAR-QUIET MODE: YEAR =  1977.0000                              
+ %ITRANS =   2 INSIDE MAGNETOSPHERE/TRAPPED PROTONS INCLUDED                    
+ %INPUT GEOMAGNETIC TRANSMISSION FILE: q800a90i.gtf                             
+ %Created by CREME96:GTRANS_DRIVER Version  200 on 02-Mar-22 at 06:50:56        
+ %Incl =  90.000 deg  Apo =  .8000E+03 Peri =  .8000E+03 km    .00    .00    .00
+ %ISTORM = 0 IPRECALC = 0  Grid Epoch = 1980.0   L Bin:  .0000E+00  .1000E+07   
+ %Relative dwell time =  .1000E+01                                              
+ %INPUT TRAPPED PROTON FILE:            q800a90i_ave.trp                        
+ %Created by CREME96:TRAPPED_DRIVER Version  200 on 02-Mar-22 at 06:50:04       
+ %Incl =  90.000 deg  Apo =  .8000E+03 Peri =  .8000E+03 km    .00    .00    .00
+ %AP8MIN IMOD = 0 IPRECALC = 0                                                  
+ %Relative dwell time =  .1000E+01 L Bin:  .0000E+00  .1000E+07                 
+ %No. orbits =     200  No. steps/orbit =    200                                
+ %Orbital period =     1.68 hours                                               
+ %Sample energies and integral fluxes                                           
+ %   MeV       protons/m**2-sr-s                                                
+ % 1.0000E+00  4.6088E+05                                                       
+ % 3.0000E+00  2.2591E+05                                                       
+ % 6.0000E+00  1.6208E+05                                                       
+ % 1.5000E+01  1.2229E+05                                                       
+ % 3.0000E+01  1.0193E+05                                                       
+ % 5.0000E+01  8.4274E+04                                                       
+ % 1.0000E+02  5.1402E+04                                                       
+
+  REPORT NO.    1:   LM7912                                  
+  RPP Dimensions: X =   44.72136  Y =   44.72136  Z =    1.00000 microns.
+  Funnel length =     .00000 microns.
+  CROSS-SECTION INPUT   4  WEIBULL FIT: 
+      ONSET   =      .500 MeV-cm2/milligram
+      WIDTH   =    30.000 MeV-cm2/milligram
+      POWER   =     1.000 (dimensionless)
+      PLATEAU =  2000.000 square microns/bit
+  Number of bits =   1.00000E+02
+  Rates:      SEEs/bit/second     /bit/day    /device/second    /device/day
+  *****   1     1.00594E-09     8.69132E-05     1.00594E-07     8.69132E-03
+
+  REPORT NO.    2:   ATMEGA1280                              
+  RPP Dimensions: X =   70.71068  Y =   70.71068  Z =    1.00000 microns.
+  Funnel length =     .00000 microns.
+  CROSS-SECTION INPUT   4  WEIBULL FIT: 
+      ONSET   =    10.000 MeV-cm2/milligram
+      WIDTH   =   120.000 MeV-cm2/milligram
+      POWER   =     1.500 (dimensionless)
+      PLATEAU =  5000.000 square microns/bit
+  Number of bits =   1.00000E+02
+  Rates:      SEEs/bit/second     /bit/day    /device/second    /device/day
+  *****   2     2.54608E-11     2.19981E-06     2.54608E-09     2.19981E-04
