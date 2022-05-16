@@ -1,0 +1,42 @@
+ 31 q800a90i100.PUP                                                        200 9
+ %Created by CREME96:PROTON_UPSET_DRIVER Version  200 on 02-Mar-22 at 08:25:20
+ %Input Proton Spectrum File: q800a90i100.tfx                         
+ %Created by CREME96:TRANSPORT_DRIVER Version  200 on 02-Mar-22 at 06:58:53     
+ %ZMIN =  1 ZMAX = 92  EMIN = 1.0000E-01 EMAX = 1.0000E+05 MeV/nuc  MBINS = 1002
+ %Thickness =   100.0000 mils      ALUMINUM                                     
+ %Input File to TRANSPORT_DRIVER: q800a90i.flx                                  
+ %Created by CREME96:FLUX_DRIVER Version  200 on 02-Mar-22 at 06:55:00          
+ %ZMIN =  1 ZMAX = 92                                                           
+ %IMODE  =   0 SOLAR-QUIET MODE: YEAR =  1977.0000                              
+ %ITRANS =   2 INSIDE MAGNETOSPHERE/TRAPPED PROTONS INCLUDED                    
+ %INPUT GEOMAGNETIC TRANSMISSION FILE: q800a90i.gtf                             
+ %Created by CREME96:GTRANS_DRIVER Version  200 on 02-Mar-22 at 06:50:56        
+ %Incl =  90.000 deg  Apo =  .8000E+03 Peri =  .8000E+03 km    .00    .00    .00
+ %ISTORM = 0 IPRECALC = 0  Grid Epoch = 1980.0   L Bin:  .0000E+00  .1000E+07   
+ %Relative dwell time =  .1000E+01                                              
+ %INPUT TRAPPED PROTON FILE:            q800a90i_ave.trp                        
+ %Created by CREME96:TRAPPED_DRIVER Version  200 on 02-Mar-22 at 06:50:04       
+ %Incl =  90.000 deg  Apo =  .8000E+03 Peri =  .8000E+03 km    .00    .00    .00
+ %AP8MIN IMOD = 0 IPRECALC = 0                                                  
+ %Relative dwell time =  .1000E+01 L Bin:  .0000E+00  .1000E+07                 
+ %No. orbits =     200  No. steps/orbit =    200                                
+ %Orbital period =     1.68 hours                                               
+ %Sample energies and integral fluxes                                           
+ %   MeV       protons/m**2-sr-s                                                
+ % 1.0000E+00  4.6088E+05                                                       
+ % 3.0000E+00  2.2591E+05                                                       
+ % 6.0000E+00  1.6208E+05                                                       
+ % 1.5000E+01  1.2229E+05                                                       
+ % 3.0000E+01  1.0193E+05                                                       
+ % 5.0000E+01  8.4274E+04                                                       
+ % 1.0000E+02  5.1402E+04                                                       
+
+  REPORT NO.    1:   LM7912                                  
+  CROSS-SECTION INPUT   4  WEIBULL FIT: 
+      ONSET   =    30.000 MeV
+      WIDTH   =    10.000 MeV
+      POWER   =     1.000 (dimensionless)
+      PLATEAU =    10.000 x 10**-12 cm2/bit
+  Number of bits =   1.00000E+00
+  Rates:      SEEs/bit/second     /bit/day    /device/second    /device/day
+  *****   1     1.10564E-09     9.55271E-05     1.10564E-09     9.55271E-05

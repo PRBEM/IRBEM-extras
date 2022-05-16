@@ -24,7 +24,7 @@ These packages will tend not to have the same level of documentation,
 inter-version compatibility, Makefile, and installation that is
 provided in the main irbem library.
 
-As of 24 February, the "extras" contains 3 packages:
+As of May 2022, the "extras" contains these packages:
 
 var2cdf - IDL and Matlab routines to support sharing of structured
 data and save sets between Matlab and IDL via NASA's CDF format. These
@@ -47,3 +47,13 @@ or maximum coordinate distance sense.
 rfl - Response Function Library, a set of routines to perform standard
 tasks relating to the response function of idealized and simulated
 instruments.
+
+opendc - Open Diffusion Code, routines for computing radiation belt
+diffusion coefficients and such.
+
+lstar - Routines for fast computation of Lstar on a grid
+
+csda_rpp - routines for computing single event effects rates for 
+shielded parts using the continuous slowing down approximatoin (CSDA)
+and (for ions) the right parallel piped method (RPP).
+

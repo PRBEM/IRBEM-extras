@@ -1,3 +1,6 @@
+Except where otherwise noted, packages in this repository adhere to the
+GNU LGPL V3.0
+
 		   GNU LESSER GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 
