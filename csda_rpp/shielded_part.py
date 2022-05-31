@@ -63,7 +63,7 @@ class ShieldedPart(object):
             icache - mapping from fluxZ to Z
             Z - array of Zs used in energy matrix and other matrices
             energy - energy matrix (NE,NZ)
-            LET - LET grid (NLET,NLET)
+            LET - LET grid (NLET,)
             D - incident spectrum to degraded spectrum matrices(NE,NE,NZ)
             M - degraded spectrum to LET spectrum matrices (NLET,NE,NZ) (ions)
             MD - incident energy spectrum to LET spectrum matrices (NLET,NE,NZ) (ions)
@@ -150,7 +150,7 @@ class ShieldedPart(object):
             
         # build matrices that convert from energy spectrum to LET spectrum
         # one per Z
-        M = np.zeros((energy.shape[0],len(LET),len(Z)))
+        M = np.zeros((len(LET),energy.shape[0],len(Z)))
         MD = np.zeros(M.shape)
         for (iz,z) in enumerate(Z):
             M[:,:,iz] = self.targetTable.get_Mcache(energy[:,iz],LET,species=self.targetTable.Z2sym[z])
@@ -588,7 +588,7 @@ if __name__ == '__main__':
     
     # make up fake flux
     # protons
-    pEgrid = np.exp(np.linspace(np.log(1e-1),np.log(1e5),1002))
+    pEgrid = np.exp(np.linspace(np.log(1e-1),np.log(1e5),501)) # use different size from LET
     pflux = np.exp(-pEgrid/10)
     t = np.linspace(0,1,20)    
     Egrid = np.zeros((len(pEgrid),len(Z)))
