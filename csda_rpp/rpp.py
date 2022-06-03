@@ -36,6 +36,9 @@ Glossary:
     volumes - number of sensitive volumes (e.g., number of bits)
     default_fast - default run mode is fast (computing/storing matrices)
     epsrel: epsrel argument passed to quad, dblquad numerical integration (relative precision)
+    ecludeH - used to exclude protons from LET spectrum and SEE rate for ion parts
+        fixed at False for proton parts, defaults to True for ion parts, but can override
+    
     
 Notes:
     Integration is done by adaptive quadrature using scipy.integrate.quad and 
@@ -760,7 +763,7 @@ class LB88(RPPChordLengthDist):
     
 class IonPartRPP(IonPart):
     """
-    part = IonPartRPP(h,cs=None,L0=None,W=None,S=None,slim=None,aspect=1,a=None,b=None,cld=None,volumes=1,default_fast=True,epsrel=1e-4)
+    part = IonPartRPP(h,cs=None,L0=None,W=None,S=None,slim=None,aspect=1,a=None,b=None,cld=None,volumes=1,default_fast=True,epsrel=1e-4,excludeH=True)
 
     Ion part modeled as right parallel piped (RPP) using chord length distribution (default LB88 method)
     
@@ -779,7 +782,7 @@ class IonPartRPP(IonPart):
     Public Methods:
         same as IonPart
     """
-    def __init__(self,h,cs=None,L0=None,W=None,S=None,slim=None,aspect=1,a=None,b=None,cld=None,volumes=1,default_fast=True,epsrel=1e-4):
+    def __init__(self,h,cs=None,L0=None,W=None,S=None,slim=None,aspect=1,a=None,b=None,cld=None,volumes=1,default_fast=True,epsrel=1e-4,excludeH=True):
         
         if cs is not None:
             slim = cs.slim            
@@ -824,7 +827,7 @@ class IonPartRPP(IonPart):
         Ap = (hcm*acm + hcm*bcm + acm*bcm)/2 # projected surface area
         xmax = np.sqrt(hcm**2 + acm**2 + bcm**2) # maximum path length
         # xnorm == hcm
-        super().__init__(cs,Ap,hcm,xmax,volumes=volumes,default_fast=default_fast,epsrel=epsrel)
+        super().__init__(cs,Ap,hcm,xmax,volumes=volumes,default_fast=default_fast,epsrel=epsrel,excludeH=excludeH)
         
         self.cld = cld
         self.h = h
