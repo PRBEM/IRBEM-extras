@@ -32,7 +32,7 @@ Glossary:
     h - thickness (um) of part's sensitive volume
     a - middle dimension (um) of part's sensitive volume
     b - long dimension (um) of part's sensitive volume
-    aspect - aspect ratio of longest to middle dimension of RPP (b/a)    
+    aspect - aspect ratio of middle to longest dimension of RPP (a/b, h < a < b, so a/b<1)    
     volumes - number of sensitive volumes (e.g., number of bits)
     default_fast - default run mode is fast (computing/storing matrices)
     epsrel: epsrel argument passed to quad, dblquad numerical integration (relative precision)
@@ -804,8 +804,8 @@ class IonPartRPP(IonPart):
         else:
             if aspect>1:
                 aspect = 1/aspect # user entered aspect ratio upside down
-            bcm = np.sqrt(slim*aspect)
-            acm = np.sqrt(slim/aspect)
+            acm = np.sqrt(slim*aspect) # a < b for aspect < 1
+            bcm = np.sqrt(slim/aspect)
             a = acm*1e4
             b = bcm*1e4
             # acm*bcm = slim
