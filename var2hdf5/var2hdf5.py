@@ -315,7 +315,7 @@ def hdf52var(filename,converter=None):
 
 def test():
     
-    def recursive_equals(a,b,path=''):
+    def recursive_equals(a,b,path='/var'):
         if isinstance(a,np.ndarray):
             if not isinstance(b,np.ndarray):
                 print('%s are not both numpy ndarrays ' % path)
