@@ -9,6 +9,9 @@ between computer languages.
 Each language will implement a var2hdf5 writer function and an 
 hdf52var reader function
 
+A global HDF5 file attribute VAR2HDF5_SPEC_VERSION (an integer, starting at 0)
+will be used to track changes to the file spec and allow reverse compatibility.
+
 The variables are stored recursively under /var
 Each variable has a type attribute (see table below)
 
