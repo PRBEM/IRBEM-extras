@@ -208,7 +208,7 @@ def hdf52var(filename,converter=None):
     """
     var = hdf52var(filename,converter=None)
     read variable from hdf5 file
-    filename - HDF5 filename to write
+    filename - HDF5 filename to read
     converter - function pointer that converts variables to HDF5-recognized types
     calls var = conveter(var,attrs) before trying to handle the variable
     var - variable that was read

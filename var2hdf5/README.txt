@@ -18,11 +18,11 @@ Each variable has a type attribute (see table below)
 type attr | python      | idl         | matlab      | (D)ataset or (G)roup, notes
 int       | int         | LONG        | int64       | D signed long integer
 float     | float       | DOUBLE      | double      | D real number
-bool      | bool        | BYTE        | logical     | D boolean True or False (HDF5 enum)
+bool      | bool        | BOOLEAN     | logical     | D boolean True or False (HDF5 enum)
 str       | str         | STRING      | char        | D string as UTF-8/ASCII encoded bytes
 date      | datetime    | STRING      | char        | D date/time stored as ISO 8601
 timedelta | timedelta   | DOUBLE      | double      | D time difference in seconds
-null      | None        | UNDEFINED   | [] or zeros | D indicates absent/empty
+null      | None        | list()      | [] or zeros | D indicates absent/empty
 list      | list        | LIST        | cell        | D list of items of heterogeneous types
 array     | np.ndarray  | (array)     | N-D matrix  | D (N-D) list of variables of the same type
 dict      | dict        | HASH        | struct      | G key-value pairs
@@ -44,6 +44,13 @@ array:
     Attribute subtype specifies the data type for the array entries
     Array of size 0 is written with subtype null
     
+dict:
+    key value pairs
+    Note that IDL, being case-insensitive, will write all structure tag names as upper
+      case. Conversely, a hash is used when reading dicts to preserve case-sensitivity.
+      IDL's !NULL type cannot be used because it is ignored by IDL in lists and structures.
+      E.g., [!NULL,3,2,!NULL,1] looks to IDL like [3,2,1], and {a:!NULL} is not allowed.
+
 table:
     For tabular data that has named columns
     Stored like a dict, but each variable's entry has a 'column' attribute
