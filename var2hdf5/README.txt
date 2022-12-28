@@ -12,18 +12,18 @@ hdf52var reader function
 The variables are stored recursively under /var
 Each variable has a type attribute (see table below)
 
-type attr | python      | matlab      | (D)ataset or (G)roup, notes
-int       | int         | int64       | D signed long integer
-float     | float       | double      | D real number
-bool      | bool        | logical     | D boolean True or False (HDF5 enum)
-str       | str         | char        | D string as UTF-8/ASCII encoded bytes
-date      | datetime    | datenum     | D date/time stored as ISO 8601
-timedelta | timedelta   | double      | D time difference in seconds
-null      | None        | [] or zeros | D indicates absent/empty
-list      | list        | cell        | D list of items of heterogeneous types
-array     | np.ndarray  | N-D matrix  | D (N-D) list of variables of the same type
-dict      | dict        | struct      | G key-value pairs
-table     | np.ndarray  | struct      | G collection of named variables of same length
+type attr | python      | idl         | matlab      | (D)ataset or (G)roup, notes
+int       | int         | LONG        | int64       | D signed long integer
+float     | float       | DOUBLE      | double      | D real number
+bool      | bool        | BYTE        | logical     | D boolean True or False (HDF5 enum)
+str       | str         | STRING      | char        | D string as UTF-8/ASCII encoded bytes
+date      | datetime    | STRING      | char        | D date/time stored as ISO 8601
+timedelta | timedelta   | DOUBLE      | double      | D time difference in seconds
+null      | None        | UNDEFINED   | [] or zeros | D indicates absent/empty
+list      | list        | LIST        | cell        | D list of items of heterogeneous types
+array     | np.ndarray  | (array)     | N-D matrix  | D (N-D) list of variables of the same type
+dict      | dict        | HASH        | struct      | G key-value pairs
+table     | np.ndarray  | ORDEREDHASH | struct      | G collection of named variables of same length
 
 Additional notes
 
@@ -32,9 +32,9 @@ list:
     The value stored at the nominal location (e.g., /var/mylist) of a list 
       variable is the list number (#) in /__list_#__/.
     Attribute list_length specifies number of entries in list
-    List item names are zero-based, zero-padded integers with enough 
-      depth to hold all entries. So a list with 10 entries will have items 0..9
-      and a list with 100 entries will have items 00..99
+    List item names are zero-based, zero-padded integers as strings with enough 
+      depth to hold all entries. So a list with 10 entries will have items "0".."9"
+      and a list with 100 entries will have items "00".."99"
     List items can be any type, including other lists
     
 array:
