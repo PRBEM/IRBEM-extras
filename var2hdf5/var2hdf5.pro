@@ -70,16 +70,17 @@ function _build_simple_var,variable,name,conv_func,lists
   return, var
 end
 
-function _build_var,variable,name,conv_func,lists
-  ; var = _build_var(variable,name,conv_func,lists)
+function _build_var,rawvar,name,conv_func,lists
+  ; var = _build_var(rawvar,name,conv_func,lists)
   ; builds a structure that holds needed info for h5_create
-  ; to create this simple or complex variable
+  ; to create this simple or complex variable from rawvar
   ; conv_func is the converter provided to var2hdf5
   ; lists tracks list variables
   
   _init_var2hdf5
   common VAR2HDF5_COMMON
   
+  variable = rawvar ; protect input passed by reference
   if conv_func then variable = conv_func(variable)
   
   dims = size(variable,/dimensions)
@@ -102,7 +103,7 @@ function _build_var,variable,name,conv_func,lists
     ; add list_length attribute
     var = {_NAME:name,_TYPE:'DATASET',_DATA:n_elements(lists), $
       type:{_NAME:'type',_TYPE:'ATTRIBUTE',_DATA:'list'}, $
-      list_length:{_NAME:'list_length',_TYPE:'ATTRIBUTE',_DATA:n_elements(lists)}}
+      list_length:{_NAME:'list_length',_TYPE:'ATTRIBUTE',_DATA:list_len}}
     val = list()
     padding = ceil(alog10(1>list_len)) ; required digits to express all entries (1> means at least 1)
     for j=0,list_len-1 do begin
@@ -135,7 +136,7 @@ function _build_var,variable,name,conv_func,lists
         val = var.(i)
         if (size(val,/tname) eq 'STRUCT') && (val._TYPE ne 'ATTRIBUTE') then begin
           ; add column attribute
-          column = where(tags eq tags2[i])
+          column = where(tags eq val._NAME)
           val = create_struct('column',{_NAME:'column',_TYPE:'ATTRIBUTE',_DATA:column[0]},val)
         endif
         newvar = create_struct(tags2[i],val,newvar)         
@@ -220,8 +221,7 @@ function _read_var,rawvar,h5data,conv_func
     list_num = rawvar._DATA
     list_name = '__LIST_' + strtrim(list_num,2) + '__' ; __list_#__
     i = where(toptags eq list_name)
-    i = i[0]
-    listi = h5data.(i)
+    listi = h5data.(i[0])
     list_len = rawvar.list_length._DATA
     if list_len eq 0 then begin
       var = list()
@@ -246,17 +246,20 @@ function _read_var,rawvar,h5data,conv_func
     endfor
   endif else if subtype eq 'table' then begin
     keys = []
-    order = []
-    values = []
+    column = []
+    values = list()
     vtags = tag_names(rawvar)
     for i=0,n_elements(vtags)-1 do begin
       val = rawvar.(i)
       if (size(val,/tname) eq 'STRUCT') && (val._TYPE ne 'ATTRIBUTE') then begin
         keys = [keys,val._NAME]
-        order = [order,val.column._DATA]
-        values = [values,_read_var(val,h5data,conv_func)] 
+        column = [column,val.column._DATA]
+        values.add,_read_var(val,h5data,conv_func) 
       endif
     endfor
+    ; invert the meaning of column -> order
+    order = indgen(n_elements(column))
+    order[column] = indgen(n_elements(column))
     var = orderedhash(keys[order],values[order])    
   endif else begin
     message,'Unable to process (sub)type ' + subtype
@@ -266,10 +269,11 @@ function _read_var,rawvar,h5data,conv_func
   
   dims = size(var,/dimensions)
   if n_elements(dims) gt 1 then begin
-    ; reverse order of multi-dimensional arrays after reading
+    ; reverse order of multi-dimensional arrays for writing to file
     var = transpose(var,reverse(indgen(n_elements(dims))))
   endif
   
+  return,var
 end
 
 
@@ -296,13 +300,64 @@ function hdf52var,filename,converter=conv_func
   return, _read_var(h5data.var,h5data,conv_func)
 end
 
-function _recursive_equals,var1,var2,path=in_path
-  ; bool = _recursive_equals(var1,var2,path='/var')
-  if n_elements(in_path) eq 0 then path = '/var'
-  message,'Not implemented yet'
+function _recursive_equals,a,b,path=in_path
+  ; bool = _recursive_equals(a,b,path='/var')
   
-  print,'Unable to compare ',in_path,' types ',typename(var1),' and ', ypename(var2)
-  return, !FALSE
+  _init_var2hdf5
+  common VAR2HDF5_COMMON
+  
+  if n_elements(in_path) eq 0 then in_path = '/var'
+  
+  ; regularize types
+  if size(a,/tname) eq 'STRUCT' then a = hash(a)
+  if size(b,/tname) eq 'STRUCT' then b = hash(b)
+  if typename(a) eq 'DICTIONARY' then a = hash(a.keys(),a.values())
+  if typename(b) eq 'DICTIONARY' then b = hash(b.keys(),b.values())
+  
+  tname1 = size(a,/tname) ; simple type names
+  tname2 = typename(a) ; a bit more verbose on complex types (tname1 OBJREF)
+  if (tname1 ne size(b,/tname)) or (tname2 ne typename(b)) then begin
+    print,in_path,' are not the same type ',tname1,' ',size(b,/tname), '->',tname2,' ',typename(b) 
+    return,!FALSE
+  endif
+  if ~array_equal(size(a,/dimensions),size(b,/dimensions)) then begin
+    print,in_path,' are not the same shape ',size(a,/dimensions),' vs ',size(b,/dimensions)
+    return,!FALSE
+  endif
+
+  if ismember(tname1,SIMPLE_TYPES) then begin
+    if array_equal(a,b,/nan) then begin
+      return, !TRUE 
+    endif else begin
+      print,in_path,' are not equal'
+      return,!FALSE
+    endelse        
+  endif else if ismember(tname2,['DICTIONARY','HASH','ORDEREDHASH']) then begin
+    atags = a.keys()
+    btags = b.keys()
+    if tname2 ne 'ORDEREDHASH' then begin
+      atags = atags.sort()
+      btags = btags.sort()
+    endif
+    if ~array_equal(atags.toarray(),btags.toarray()) then begin
+      print,in_path,' tags do not match'
+      return,!FALSE
+    endif
+    for i = 0,n_elements(atags)-1 do begin
+      key = atags[i]
+      if ~_recursive_equals(a[key],b[key],path=in_path+'/' + key) then return, !FALSE
+    endfor
+    return,!TRUE    
+  endif else if tname2 eq 'LIST' then begin
+    for i = 0,n_elements(a)-1 do begin
+      if ~_recursive_equals(a[i],b[i],path=in_path + '/[' + strtrim(i,2)+']') then return,!FALSE
+    endfor
+    return,!TRUE
+  endif else begin
+    print,in_path,' unable to compare type ',tname1,' ',tname2
+    return,!FALSE
+  endelse
+
 end
 
 pro test
@@ -327,9 +382,9 @@ pro test
     empty_list : list(), $
     empty_array : list(), $ ; UNDEFINED not allowed as dict entry value
     array : [[1,!VALUES.F_NAN,2],[3.0,4.1,5]], $
-    table : orderedhash({integer:[1,-1],real:[2.0,3.5],string:['foo','bar'],boolean:[!TRUE,!FALSE]}), $
-    nested : orderedhash({integer:[1,-1],real:[2.0,3.5],string:['foo','bar'],boolean:[!TRUE,!FALSE],$
-    subarray:[make_array(1,3,3,value=0),make_array(1,3,3,value=1)]}) $ 
+    table: orderedhash(['integer','real','string','boolean'],list([1,-1],[2.0,3.5],['foo','bar'],[!TRUE,!FALSE])), $
+    nested: orderedhash(['integer','real','string','boolean','subarray'],list([1,-1],[2.0,3.5],['foo','bar'],[!TRUE,!FALSE], $
+      [make_array(1,3,3,value=0),make_array(1,3,3,value=1)])) $
   }
   
   tnames = tag_names(tests)
@@ -339,10 +394,8 @@ pro test
     key = tnames[i]
     var = tests.(i)
     filename = 'test_' + strlowcase(tnames[i]) + '_idl.h5'
-    print,filename
     var2hdf5,var,filename
     var2 = hdf52var(filename)
-    continue ; cannot complete this test because _reverse_equals not written
     if _recursive_equals(var,var2) then begin
       print,key,': PASS'
     endif else begin
