@@ -1,9 +1,12 @@
 ; var2hdf5.pro - write variables to and read variables from hdf5 files
 ; Prinicpal author: Paul O'Brien
-; public functions:
+; public main functions:
 ;    var2hdf5 - save a variable to an HDF5 file
 ;    hdf52var - read a variable from an HDF5 file (for files created by var2hdf5)
 ;    test - run several test cases that write, read, and compare
+; public utility functions:
+;    ismember - determine whether an item is in a list
+;    pad_int - left zero pad an integer to a specified strlen
     
 ; placeholder for var2hdf5.pro which will provide two functions
 
@@ -48,13 +51,22 @@ function _build_simple_var,variable,name,conv_func,lists
     type = 'str'
     ; now test for date-time string in ISO8601 YYYY-MM-DDTHH:MM:SS... format
     iso8601 = '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}'
-    if where(stregex(variable,iso8601,/BOOLEAN) eq !FALSE,/NULL) eq !NULL then type = 'datetime'
+    if where(stregex(variable,iso8601,/BOOLEAN) eq !FALSE,/NULL) eq !NULL then type = 'date'
   endif else if ismember(tname,INT_TYPES) then type = 'int' $
   else if ismember(tname,FLOAT_TYPES) then type = 'float' $
   else message,"Variable " + name + " has unknown simple type " + tname
   
+  subtype = type
+  if n_elements(variable) gt 1 then type = 'array'
+  
   var = {_NAME:name,_DATA:variable,_TYPE:'DATASET',$
     type:{_NAME:'type',_DATA:type,_TYPE:'ATTRIBUTE'}}
+    
+  if type eq 'array' then begin
+    ; add subtype attribute
+    var = create_struct('subtype',{_NAME:'subtype',_TYPE:'ATTRIBUTE',_DATA:subtype},var)
+  endif
+    
   return, var
 end
 
@@ -72,7 +84,7 @@ function _build_var,variable,name,conv_func,lists
   
   dims = size(variable,/dimensions)
   if n_elements(dims) gt 1 then begin
-    ; reverse order of arrays for writing to file
+    ; reverse order of multi-dimensional arrays for writing to file
     variable = transpose(variable,reverse(indgen(n_elements(dims))))
   endif
   
@@ -85,14 +97,12 @@ function _build_var,variable,name,conv_func,lists
   
   ; Cannot handle: tname1=COMPLEX, DCOMPLEX, POINTER, OBJREF
   ; Can handle: tname1=STRUCT, tname2=LIST, HASH, DICTIONARY, ORDEREDHASH
-  var = {_NAME:name,_TYPE:'GROUP'}
-  type = 'dict'
-  nested = !FALSE
   if tname2 eq 'LIST' then begin
     list_len = n_elements(variable)
-    type = 'list'
     ; add list_length attribute
-    var = create_struct('list_length',{_NAME:'list_length',_TYPE:'ATTRIBUTE',_DATA:n_elements(lists)},var)
+    var = {_NAME:name,_TYPE:'DATASET',_DATA:n_elements(lists), $
+      type:{_NAME:'type',_TYPE:'ATTRIBUTE',_DATA:'list'}, $
+      list_length:{_NAME:'list_length',_TYPE:'ATTRIBUTE',_DATA:n_elements(lists)}}
     val = list()
     padding = ceil(alog10(1>list_len)) ; required digits to express all entries (1> means at least 1)
     for j=0,list_len-1 do begin
@@ -101,7 +111,9 @@ function _build_var,variable,name,conv_func,lists
     endfor
     lists.add,val
   endif else if (tname1 eq 'STRUCT') or ismember(tname2,['DICTIONARY','HASH','ORDEREDHASH']) then begin
+    var = {_NAME:name,_TYPE:'GROUP'}
     type = 'table'
+    nested = !FALSE
     if tname2 ne 'ORDEREDHASH' then type = 'dict' ; without ordering, not a table
     if tname1 eq 'STRUCT' then tags = tag_names(variable) $
       else tags = variable.keys()
@@ -130,10 +142,10 @@ function _build_var,variable,name,conv_func,lists
       endfor
       var = newvar
     endif
+    ; add type attribute
+    var = create_struct('type',{_NAME:'type',_TYPE:'ATTRIBUTE',_DATA:type},var)
   endif else message, "Unable to save " + name + " of type " + tname1 + '/' + tname2
   
-  ; add type attribute
-  var = create_struct('type',{_NAME:'type',_TYPE:'ATTRIBUTE',_DATA:type},var)
   return, var
 end
 
@@ -160,6 +172,10 @@ pro var2hdf5,variable,filename,converter=conv_func
   ; each entry in lists is a list of built-out variables (w/ metadata)
   struct = _build_var(variable,'var',conv_func,lists)
   
+  top = {_TYPE:'GROUP',$
+    VAR2HDF5_SPEC_VERSION:{_TYPE:'ATTRIBUTE',_DATA:VAR2HDF5_SPEC_VERSION},$
+    VAR:struct}
+
   if n_elements(lists) gt 0 then begin
     for i = 0,n_elements(lists)-1 do begin
       lname = '__list_' + strtrim(i,2) + '__'
@@ -167,39 +183,107 @@ pro var2hdf5,variable,filename,converter=conv_func
       list_len = n_elements(listi)
       s = {_NAME:lname,_TYPE:'GROUP'}
       for j=0,list_len-1 do begin
-        s = create_struct('x'+listi[j]._NAME,listi[j],s) ; prepend x to make valid IDL variable
+        s = create_struct('_'+listi[j]._NAME,listi[j],s) ; prepend _ to make valid IDL variable name
       endfor ; j - index into list[i]
-      struct = create_struct(lname,s,struct)
+      top = create_struct(lname,s,top)
     endfor ; i - index into lists    
   endif
   
-  top = {_TYPE:'GROUP',$
-    VAR2HDF5_SPEC_VERSION:{_TYPE:'ATTRIBUTE',_DATA:VAR2HDF5_SPEC_VERSION},$
-    VAR:struct}
 
   h5_create,filename,top
 end
 
-function _read_var,rawvar,h5data
-; var = _read_var(rawvar,h5data)
+function _read_var,rawvar,h5data,conv_func
+; var = _read_var(rawvar,h5data,conv_func)
 ; recursively read and process rawvar
+; rawvar is (sub)structure returned by h5_parse
+; h5data is the top level structure returned by h5_parse
+; conv_func is the converter provided to var2hdf5
 ; can't do this for python HDF5 files because of an IDL bug
 ; reading string attributes from HDF5 files. This is critical because
 ; the string attribute "type" is used to tell the reader what
 ; type the variable is supposed to have
 ; but can read HDF5 files written by IDL
-  message,'Not implemented yet'
+
+; types are: int, float, bool, str, date, timedelta, null, list, array, dict, table
+  toptags = tag_names(h5data)
+  subtype = rawvar.TYPE._DATA
+  if subtype eq 'array' then subtype = rawvar.SUBTYPE._DATA
+  if ismember(subtype,['int','float','str','date','timedelta']) then begin
+    var = rawvar._DATA ; these types need no further conversion
+  endif else if subtype eq 'bool' then begin
+    var = boolean(rawvar._DATA)    
+  endif else if subtype eq 'null' then begin
+    if n_elements(rawvar._DATA) le 1 then var = list() $
+      else var = make_array(size(rawvar._DATA,/dimensions),value=list())
+  endif else if subtype eq 'list' then begin
+    list_num = rawvar._DATA
+    list_name = '__LIST_' + strtrim(list_num,2) + '__' ; __list_#__
+    i = where(toptags eq list_name)
+    i = i[0]
+    listi = h5data.(i)
+    list_len = rawvar.list_length._DATA
+    if list_len eq 0 then begin
+      var = list()
+    endif else begin
+      var = list(indgen(list_len),/extract) ; dummy entries
+      padding = ceil(alog10(1>list_len)) ; required digits to express all entries (1> means at least 1)
+      tags = tag_names(listi)
+      for j=0,list_len-1 do begin
+        key = '_'+pad_int(j,padding) ; left pad with zeros, prepend '_' as IDL does with numeric tag names
+        k = where(tags eq key)
+        var[j] = _read_var(listi.(k[0]),h5data,conv_func) ; replace dummy with parsed variable
+      endfor
+    endelse
+  endif else if subtype eq 'dict' then begin
+    vtags = tag_names(rawvar)
+    var = hash()
+    for i=0,n_elements(vtags)-1 do begin
+      val = rawvar.(i)
+      if (size(val,/tname) eq 'STRUCT') && (val._TYPE ne 'ATTRIBUTE') then begin
+        var[val._NAME] = _read_var(val,h5data,conv_func)
+      endif
+    endfor
+  endif else if subtype eq 'table' then begin
+    keys = []
+    order = []
+    values = []
+    vtags = tag_names(rawvar)
+    for i=0,n_elements(vtags)-1 do begin
+      val = rawvar.(i)
+      if (size(val,/tname) eq 'STRUCT') && (val._TYPE ne 'ATTRIBUTE') then begin
+        keys = [keys,val._NAME]
+        order = [order,val.column._DATA]
+        values = [values,_read_var(val,h5data,conv_func)] 
+      endif
+    endfor
+    var = orderedhash(keys[order],values[order])    
+  endif else begin
+    message,'Unable to process (sub)type ' + subtype
+  endelse
+
+  if conv_func then var = conv_func(var,rawvar)  
+  
+  dims = size(var,/dimensions)
+  if n_elements(dims) gt 1 then begin
+    ; reverse order of multi-dimensional arrays after reading
+    var = transpose(var,reverse(indgen(n_elements(dims))))
+  endif
+  
 end
 
 
-function hdf52var,filename,converter
-  ;var = hdf52var(filename,converter=None)
+function hdf52var,filename,converter=conv_func
+  ;var = hdf52var(filename,converter=conv_func)
   ;read variable from hdf5 file
   ;filename - HDF5 filename to read
   ;converter - function pointer that converts variables to HDF5-recognized types
   ;calls var = conveter(var,attrs) before trying to handle the variable
   ;var - variable that was read
+  ; converter works as var = conv_func(var,rawvar) before returning
   ;see README for conversion spec
+  
+  if n_elements(conv_func) eq 0 then conv_func = !FALSE
   
   _init_var2hdf5
   common VAR2HDF5_COMMON
@@ -209,7 +293,7 @@ function hdf52var,filename,converter
     codev = strtrim(VAR2HDF5_SPEC_VERSION,2) ; conver to string, w/o padding
     message,'VAR2HDF5_SPEC_VERSION '+ filev + '>' + codev  +' not suported'
   endif
-  return, _read_var(h5data.var,h5data)
+  return, _read_var(h5data.var,h5data,conv_func)
 end
 
 function _recursive_equals,var1,var2,path=in_path
@@ -257,7 +341,6 @@ pro test
     filename = 'test_' + strlowcase(tnames[i]) + '_idl.h5'
     print,filename
     var2hdf5,var,filename
-    continue ; cannot complete this test because hdf52var not written
     var2 = hdf52var(filename)
     continue ; cannot complete this test because _reverse_equals not written
     if _recursive_equals(var,var2) then begin
