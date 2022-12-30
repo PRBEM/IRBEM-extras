@@ -91,7 +91,7 @@ def var2hdf5(var,filename,converter=None):
                 return
 
             if isinstance(sample,(dt.datetime,dt.date))                    :
-                new_var = np.array([v.isotime() for v in var.ravel()])
+                new_var = np.array([v.isoformat() for v in var.ravel()])
                 new_var.shape = var.shape
                 fp[group] = new_var
                 fp[group].attrs['type'] = 'array'
