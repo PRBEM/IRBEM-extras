@@ -12,6 +12,13 @@ hdf52var reader function
 A global HDF5 file attribute VAR2HDF5_SPEC_VERSION (an integer, starting at 0)
 will be used to track changes to the file spec and allow reverse compatibility.
 
+A global HDF5 file attribute 'writer' (a string) will be used to record what
+program wrote the HDF5 file. E.g., 'python/var2hdf5.py'
+
+Strings, including attributes, may be encoded differently by different languages.
+The reader will need to account for this when processing type and subtype attributes
+and when processing variables of type str and date.
+
 The variables are stored recursively under /var
 Each variable has a type attribute (see table below)
 

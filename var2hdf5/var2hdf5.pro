@@ -175,6 +175,7 @@ pro var2hdf5,variable,filename,converter=conv_func
   
   top = {_TYPE:'GROUP',$
     VAR2HDF5_SPEC_VERSION:{_TYPE:'ATTRIBUTE',_DATA:VAR2HDF5_SPEC_VERSION},$
+    writer:{_NAME:'writer',_TYPE:'ATTRIBUTE',_DATA:'idl/'+file_basename(routine_filepath())},$
     VAR:struct}
 
   if n_elements(lists) gt 0 then begin
