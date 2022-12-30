@@ -93,7 +93,7 @@ def var2hdf5(var,filename,converter=None):
             if isinstance(sample,(dt.datetime,dt.date))                    :
                 new_var = np.array([v.isoformat() for v in var.ravel()])
                 new_var.shape = var.shape
-                fp[group] = new_var
+                fp[group] = np.array(new_var,dtype='S')
                 fp[group].attrs['type'] = 'array'
                 fp[group].attrs['subtype'] = 'date'
                 return
