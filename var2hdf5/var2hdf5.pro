@@ -200,11 +200,9 @@ function _read_var,rawvar,h5data,conv_func
 ; rawvar is (sub)structure returned by h5_parse
 ; h5data is the top level structure returned by h5_parse
 ; conv_func is the converter provided to var2hdf5
-; can't do this for python HDF5 files because of an IDL bug
-; reading string attributes from HDF5 files. This is critical because
-; the string attribute "type" is used to tell the reader what
-; type the variable is supposed to have
-; but can read HDF5 files written by IDL
+; 
+; python HDF5 files can only be read by IDL 8.8.1 or higher 
+;  due to an IDL bug in prior versions of IDL
 
 ; types are: int, float, bool, str, date, timedelta, null, list, array, dict, table
   toptags = tag_names(h5data)
@@ -364,6 +362,7 @@ end
 
 pro test
   ; run a series of write/read tests for consistency
+  ; will read python test files if present
 
   tests = { $; each entry is test_name:expected_value
     struct : {string:'foo',integer:3,real:4.5,boolean:!TRUE, $
@@ -407,6 +406,18 @@ pro test
     endelse
   endfor
   print,'TOTAL FAILS: ',strtrim(fails,2)
+
+  ; now try to read python test files
+  py_count = 0
+  for i = 0,n_elements(tnames)-1 do begin
+    ;if ismember(strlowcase(tnames[i]),['table','nested']) then continue
+    filename = 'test_' + strlowcase(tnames[i]) + '.h5'
+    if ~file_test(filename) then continue ; file not present
+    print,'Reading python test file ',filename
+    var = hdf52var(filename)
+    py_count = py_count+1
+  endfor
+  print,'Python test files successfully read:',py_count
 
 end
 
