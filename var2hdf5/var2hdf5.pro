@@ -300,7 +300,7 @@ function hdf52var,filename,converter=conv_func
   return, _read_var(h5data.var,h5data,conv_func)
 end
 
-function _recursive_equals,a,b,path=in_path
+function _recursive_equals,a_in,b_in,path=in_path
   ; bool = _recursive_equals(a,b,path='/var')
   
   _init_var2hdf5
@@ -309,6 +309,8 @@ function _recursive_equals,a,b,path=in_path
   if n_elements(in_path) eq 0 then in_path = '/var'
   
   ; regularize types
+  a = a_in ; don't change original variable (pass by ref)
+  b = b_in ; don't change original variable (pass by ref)
   if size(a,/tname) eq 'STRUCT' then a = hash(a)
   if size(b,/tname) eq 'STRUCT' then b = hash(b)
   if typename(a) eq 'DICTIONARY' then a = hash(a.keys(),a.values())
