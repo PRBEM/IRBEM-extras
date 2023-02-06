@@ -294,12 +294,12 @@ I = rfl_get_list_neighbors(Egrid,inst_info.E0);
 
 i = I(1);
 if (i>=1) && (i < NE), % E(i) <= E0 < E(i+1)
-    hE = inst_info.DE*inst_info.EPS*(Egrid(i+1) - inst_info.E0) / (Egrid(i+1)-Egrid(i)) ;
+    hE(i) = inst_info.DE*inst_info.EPS*(Egrid(i+1) - inst_info.E0) / (Egrid(i+1)-Egrid(i)) ;
 end
 
 i = I(2);
 if (i>=2) && (i <= NE), % E(i-1) < E0 < E(i)
-    hE = inst_info.DE*inst_info.EPS*(inst_info.E0-Egrid(i-1)) / (Egrid(i)-Egrid(i-1));
+    hE(i) = inst_info.DE*inst_info.EPS*(inst_info.E0-Egrid(i-1)) / (Egrid(i)-Egrid(i-1));
 end
 
 hE = hE / inst_info.CROSSCALIB;

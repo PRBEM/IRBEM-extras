@@ -11,16 +11,17 @@ rfl_init_inseparable.m - initialize [E,TH,PH] type
 rfl_init_pinhole.m - initialize pinhole angular response
 
 Class heirarchy:
-omni [E]
-    inner class EnergyResponse1D: TBL INT WIDE DIFF
-    Esep_csym [E][TH]
-        inner class AngleResponse1D: TBL CYL_TELE SLAB DISK
-        Esep [E][TH,PHI]
-            TBL(TH,PHI)
-    insep_csym [E,TH]
-        TBL(E,TH)
-        insep [E,TH,PHI]
-            TBL(E,TH,PHI)
+ChannelResponse
+    inner class EnergyResponse: TBL INT WIDE DIFF
+    inner class AngleResponse: TBL CYL_TELE SLAB DISK PINHOLE, RECT_TELE(TH,PH)
+    omni [E]
+        Esep_sym [E][TH]
+            Esep_asym [E][TH,PHI]
+                TBL(TH,PHI)
+        insep_sym [E,TH]
+            TBL(E,TH)
+            insep_asym [E,TH,PHI]
+                TBL(E,TH,PHI)
 Need a giant factory function to initialize the right classes
 could use @classmethod functions to dispatch for subclassing
 
