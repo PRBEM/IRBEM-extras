@@ -27,7 +27,7 @@ glossary:
     h* - energy-angle response, units of MeV-cm^2-sr(-s) (CROSSCALIB applied)
     
     
-The ChannelResponse and its internal classes EnergyResponse and AngularResponse
+The ChannelResponse and its internal classes EnergyResponse and AngleResponse
 have implicit factory constructors. That means passing the constructor a data 
 tree that actually defines a subclass, then the appropriate subclass is returned.
 To extend these classes, in the new subclass, define a classmethod "is_mine" 
@@ -50,53 +50,6 @@ TODO:
     when sbuclassing, if is_mine is not overloaded, subclass will always
     take precedence over its parent class
 """
-
-
-# class factory demo
-
-class A(object):
-    @classmethod
-    def is_mine(cls,**kwargs):
-        return None # virtual base class never right answer
-    def __new__(cls,**kwargs):
-        if kwargs: # check children first
-            for c in cls.__subclasses__():
-                res = c.__new__(c,**kwargs)
-                if res: return res
-        if cls.is_mine(**kwargs):
-            return super().__new__(cls) # python will pass kwargs to init
-        return None            
-    def __init__(self,**kwargs):
-        if 'type' in kwargs:
-            self.type = kwargs['type']
-        else:
-            self.type = None
-    def __str__(self):
-        return 'Object of class %s type=%s' % (self.__class__.__name__,self.type)
-        
-class B(A):
-    @classmethod
-    def is_mine(cls,**kwargs):
-        return ('type' in kwargs) and (kwargs['type'] == 'B')
-class C(A):
-    @classmethod
-    def is_mine(cls,**kwargs):
-        return ('type' in kwargs) and (kwargs['type'] == 'C')
-class D(C):
-    @classmethod
-    def is_mine(cls,**kwargs):
-        return ('type' in kwargs) and (kwargs['type'] == 'D')
-
-class E(C):
-    pass # replaces C in hierarchy
-    
-print('A()',A())
-print('A',A(type='A'))
-print('B',A(type='B'))
-print('C',A(type='C'))
-print('D',A(type='D'))
-print('E',A(type='E'))
-#raise Exception('stop')
 
 import numpy as np
 from scipy.interpolate import interp1d
@@ -179,28 +132,40 @@ class RFL_ValueEx(RFL_Exception):
     def __init__(self,message = 'Unexpected/Invalid Value'):
         super().__init__(message)
 
+def keyword_check(*keywords,**kwargs):
+    """
+    bool = keyword_check(*keywords,**kwargs)
+    check one or more keywords in kwargs
+    if present and str, return True
+    otherwise raise appropriate exception
+    """
+    for key in keywords:
+        if key not in kwargs: raise RFL_KeywordEx('Keyword %s required, absent' % key)
+        if not isinstance(kwargs[key],str): raise RFL_KeywordEx('%s must be a string(str)' % key)
+    return True
+
+def keyword_check_bool(*keywords,**kwargs):
+        """
+        bool = keyword_check_bool(*keywords,**kwargs)
+        check one or more keywords in kwargs
+        if present and str, return True
+        otherwise returns False
+        """
+        for key in keywords:
+            if key not in kwargs: return False
+            if not isinstance(kwargs[key],str): return False
+        return True
+
 class ChannelResponse(object):
     """
     Virtual base class for channel responses
     Constructor is a factory that will return 
     appropriate subclass from response dictionary
     """
-    @classmethod
-    def _dict_check(cls,*keywords,**kwargs):
-        """
-        bool = cls._dict_check(*keywords,**kwargs)
-        check one or more keywords in kwargs
-        if present and str, return True
-        otherwise raise appropriate exception
-        """
-        for key in keywords:
-            if key not in kwargs: raise RFL_KeywordEx('Keyword %s required, absent' % key)
-            if not isinstance(kwargs[key],str): raise RFL_KeywordEx('%s must be a string(str)' % key)
-        return True
         
     @classmethod
     def is_mine(cls,**kwargs):
-        cls._dict_check('RESP_TYPE',**kwargs)
+        keyword_check('RESP_TYPE',**kwargs)
         raise RFL_Exception('Supplied keywords to not define a recognized ChannelResponse')
     def __new__(cls,**kwargs):        
         if kwargs: # check children first
@@ -234,21 +199,17 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def create(cls,**kwargs):
-            if 'E_TYPE' not in kwargs: raise RFL_KeywordEx('E_TYPE required, absent')
-            if not isinstance(kwargs['E_TYPE'],str): raise RFL_KeywordEx('E_TYPE must be a string(str)')
-            # TODO: rewrite this to use create on subclasses
-            E_TYPE = kwargs['E_TYPE'].upper()
-            if E_TYPE == 'TBL':
-                return ChannelResponse.ER_Table.create(**kwargs)
-            elif E_TYPE == 'INT':
-                return ChannelResponse.ER_Int.create(**kwargs)
-            elif E_TYPE == 'WIDE':
-                return ChannelResponse.ER_Wide.create(**kwargs)
-            elif E_TYPE == 'DIFF':
-                return ChannelResponse.ER_Diff.create(**kwargs)
-            else:
-                raise RFL_ValueEx('E_TYPE had unexpected value %s' % E_TYPE)
+        def is_mine(cls,**kwargs):
+            keyword_check('E_TYPE',**kwargs)
+            raise RFL_Exception('Supplied keywords to not define a recognized EnergyResponse')
+        def __new__(cls,**kwargs):        
+            if kwargs: # check children first
+                for c in cls.__subclasses__():
+                    res = c.__new__(c,**kwargs)
+                    if res: return res
+            if cls.is_mine(**kwargs):
+                return super().__new__(cls) # python will pass kwargs to init
+            return None            
         
         def __init__(self,**kwargs):
             if 'CROSSCALIB' not in kwargs:
@@ -273,11 +234,9 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def create(cls,**kwargs):
-            """
-            Create an ER_Diff object
-            """
-            return cls(**kwargs)
+        def is_mine(cls,**kwargs):
+            keyword_check('E_TYPE',**kwargs)
+            return (kwargs['E_TYPE'].upper() == 'DIFF')
 
         def __init__(self,**kwargs):
             super().__init__(**kwargs)
@@ -328,11 +287,9 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def create(cls,**kwargs):
-            """
-            Create an ER_Int object
-            """
-            return cls(**kwargs)
+        def is_mine(cls,**kwargs):
+            keyword_check('E_TYPE',**kwargs)
+            return (kwargs['E_TYPE'].upper() == 'INT')
 
         def __init__(self,**kwargs):
             super().__init__(**kwargs)
@@ -385,11 +342,9 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def create(cls,**kwargs):
-            """
-            Create an ER_Wide object
-            """
-            return cls(**kwargs)
+        def is_mine(cls,**kwargs):
+            keyword_check('E_TYPE',**kwargs)
+            return (kwargs['E_TYPE'].upper() == 'WIDE')
 
         def __init__(self,**kwargs):
             super().__init__(**kwargs)
@@ -426,11 +381,9 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def create(cls,**kwargs):
-            """
-            Create an ER_Table object
-            """
-            return cls(**kwargs)
+        def is_mine(cls,**kwargs):
+            keyword_check('E_TYPE',**kwargs)
+            return (kwargs['E_TYPE'].upper() == 'TBL')
 
         def __init__(self,**kwargs):
             super().__init__(**kwargs)
@@ -470,9 +423,16 @@ class ChannelResponse(object):
         """
         # omni, TBL,CYL_TELE,RECT_TELE,SLAB,DISK,PIN_HOLE
         @classmethod
-        def create(cls,**kwargs):
-            # TODO: write this to use create on subclasses
-            raise NotImplementedError
+        def is_mine(cls,**kwargs):
+            raise RFL_Exception('Supplied keywords to not define a recognized AngleResponse')
+        def __new__(cls,**kwargs):        
+            if kwargs: # check children first
+                for c in cls.__subclasses__():
+                    res = c.__new__(c,**kwargs)
+                    if res: return res
+            if cls.is_mine(**kwargs):
+                return super().__new__(cls) # python will pass kwargs to init
+            return None            
         def hAalphabeta(self,alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,**kwargs):
             """
             hAalphabeta = .hAalphabeta(alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,...)
@@ -523,8 +483,9 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def create(cls,**kwargs):
-            raise NotImplementedError
+        def is_mine(cls,**kwargs):
+            return keyword_check_bool('RESP_TYPE',**kwargs) and \
+                (kwargs['RESP_TYPE'].upper() == '[E]')
 
     class AR_Pinhole(AngleResponse):
         """
@@ -534,8 +495,9 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def create(cls,**kwargs):
-            raise NotImplementedError
+        def is_mine(cls,**kwargs):            
+            return keyword_check_bool('TH_TYPE',**kwargs) and \
+                (kwargs['TH_TYPE'].upper() == 'PINHOLE')
 
     class AR_Disk(AngleResponse):
         """
@@ -545,8 +507,9 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def create(cls,**kwargs):
-            raise NotImplementedError
+        def is_mine(cls,**kwargs):
+            return keyword_check_bool('TH_TYPE',**kwargs) and \
+                (kwargs['TH_TYPE'].upper() == 'DISK')
 
     class AR_Slab(AngleResponse):
         """
@@ -556,8 +519,9 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def create(cls,**kwargs):
-            raise NotImplementedError
+        def is_mine(cls,**kwargs):
+            return keyword_check_bool('TH_TYPE',**kwargs) and \
+                (kwargs['TH_TYPE'].upper() == 'SLAB')
 
     class AR_Tele_sym(AngleResponse):
         """
@@ -567,8 +531,9 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def create(cls,**kwargs):
-            raise NotImplementedError
+        def is_mine(cls,**kwargs):
+            return keyword_check_bool('TH_TYPE',**kwargs) and \
+                (kwargs['TH_TYPE'].upper() == 'CYL_TELE')
 
     class AR_Table_sym(AngleResponse):
         """
@@ -578,8 +543,9 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def create(cls,**kwargs):
-            raise NotImplementedError
+        def is_mine(cls,**kwargs):
+            return keyword_check_bool('TH_TYPE',**kwargs) and \
+                (kwargs['TH_TYPE'].upper() == 'TBL')
 
     class AR_Tele_asym(AngleResponse):
         """
@@ -589,8 +555,9 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def create(cls,**kwargs):
-            raise NotImplementedError
+        def is_mine(cls,**kwargs):
+            return keyword_check_bool('TP_TYPE',**kwargs) and \
+                (kwargs['TP_TYPE'].upper() == 'RECT_TELE')
 
     class AR_Table_asym(AngleResponse):
         """
@@ -600,8 +567,9 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def create(cls,**kwargs):
-            raise NotImplementedError
+        def is_mine(cls,**kwargs):
+            return keyword_check_bool('TP_TYPE',**kwargs) and \
+                (kwargs['TP_TYPE'].upper() == 'TBL')
 
 
 class CR_Omni(ChannelResponse):
@@ -614,7 +582,7 @@ class CR_Omni(ChannelResponse):
     
     @classmethod
     def is_mine(cls,**kwargs):
-        cls._dict_check('RESP_TYPE',**kwargs)
+        keyword_check('RESP_TYPE',**kwargs)
         return (kwargs['RESP_TYPE'].upper() == '[E]')
     
 class CR_Esep_sym(CR_Omni):
@@ -626,7 +594,7 @@ class CR_Esep_sym(CR_Omni):
     """
     @classmethod
     def is_mine(cls,**kwargs):
-        cls._dict_check('RESP_TYPE',**kwargs)
+        keyword_check('RESP_TYPE',**kwargs)
         return (kwargs['RESP_TYPE'].upper() == '[E][TH]')
     
 class CR_Esep_asym(CR_Esep_sym):
@@ -638,7 +606,7 @@ class CR_Esep_asym(CR_Esep_sym):
     """
     @classmethod
     def is_mine(cls,**kwargs):
-        cls._dict_check('RESP_TYPE',**kwargs)
+        keyword_check('RESP_TYPE',**kwargs)
         return (kwargs['RESP_TYPE'].upper() == '[E][TH,PH]')
 
 class CR_insep_sym(CR_Omni):
@@ -650,7 +618,7 @@ class CR_insep_sym(CR_Omni):
     """
     @classmethod
     def is_mine(cls,**kwargs):
-        cls._dict_check('RESP_TYPE',**kwargs)
+        keyword_check('RESP_TYPE',**kwargs)
         return (kwargs['RESP_TYPE'].upper() == '[E,TH]')
     
 class CR_insep_asym(CR_insep_sym):
@@ -662,9 +630,12 @@ class CR_insep_asym(CR_insep_sym):
     """
     @classmethod
     def is_mine(cls,**kwargs):
-        cls._dict_check('RESP_TYPE',**kwargs)
+        keyword_check('RESP_TYPE',**kwargs)
         return (kwargs['RESP_TYPE'].upper() == '[E,TH,PH]')
 
 if __name__ == '__main__':
     # very simple test
-    print(ChannelResponse(RESP_TYPE='[E,TH]'))
+    print('Omni',ChannelResponse(RESP_TYPE='[E]'))
+    print('CR_insep_sym',ChannelResponse(RESP_TYPE='[E,TH]'))
+    print('CR_Esep_asym',ChannelResponse(RESP_TYPE='[E][TH,PH]'))
+    print('AR_Tele_asym',ChannelResponse.AngleResponse(TP_TYPE='RECT_TELE'))
