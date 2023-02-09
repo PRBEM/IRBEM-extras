@@ -30,7 +30,48 @@ glossary:
 """
 TODO:
     apply CROSSCALIB for hE and h* (but not hA*)
+    use __subclasses__ in create factory so user-defined sub-classes work
+    do this in the __new__ constructor
+    use a class method is_mine to check if this class is appropriate
+    when sbuclassing, if is_mine is not overloaded, subclass will always
+    take precedence over its parent class
 """
+
+
+# class factory demo
+
+class A(object):
+    @classmethod
+    def is_mine(cls,**kwargs):
+        return None # virtual base class never right answer
+    def __new__(cls,**kwargs):
+        # check children first
+        for c in cls.__subclasses__():
+            res = c.__new__(c,**kwargs)
+            if res: return res
+        if cls.is_mine(**kwargs):
+            return cls
+        return None            
+        
+class B(A):
+    @classmethod
+    def is_mine(cls,**kwargs):
+        return ('type' in kwargs) and (kwargs['type'] == 'B')
+class C(A):
+    @classmethod
+    def is_mine(cls,**kwargs):
+        return ('type' in kwargs) and (kwargs['type'] == 'C')
+class D(C):
+    @classmethod
+    def is_mine(cls,**kwargs):
+        return ('type' in kwargs) and (kwargs['type'] == 'D')
+
+print('A()',A())
+print('A',A(type='A'))
+print('B',A(type='B'))
+print('C',A(type='C'))
+print('D',A(type='D'))
+raise Exception('stop')
 
 import numpy as np
 from scipy.interpolate import interp1d
@@ -120,36 +161,21 @@ class ChannelResponse(object):
     appropriate subclass from response dictionary
     """
     @classmethod
-    def create(cls,RESP_TYPE=None,**kwargs):
+    def create(cls,**kwargs):
         """
-        channel = ChannelResponse.create(resp_type,...)
-            RESP_TYPE is reponse type '[E]',<etc>,'[E,TH,PH]'
-        channel = ChannelResponse.create(info,...)
-            info is a dict of response type data (e.g., loaded from a file)
+        channel = ChannelResponse.create(**kwargs)
         returns an initialized response object of the specified type
         """
-        if isinstance(RESP_TYPE,cls): # undocumented feature
-            # RESP_TYPE is actually a ChannelResponse object
-            raise Warning("Called ChannelReponse.create on object. Use object's copy method instead")
-            return RESP_TYPE.copy()
-        if isinstance(RESP_TYPE,dict):
-            kwargs = {**RESP_TYPE,**kwargs} # merge response type and kwargs
-            RESP_TYPE = kwargs['RESP_TYPE']
-        if not isinstance(RESP_TYPE,str): raise RFL_KeywordEx('response type (RESP_TYPE) can only be string')
-        RESP_TYPE = RESP_TYPE.upper()
-        if RESP_TYPE == '[E]':
-            return CR_Omni.create(**kwargs)
-        elif RESP_TYPE == '[E][TH]':
-            return CR_Esep_sym.create(**kwargs)
-        elif RESP_TYPE == '[E][TH,PHI]':
-            return CR_Esep_asym.create(**kwargs)
-        elif RESP_TYPE == '[E,TH]':
-            return CR_insep_sym.create(**kwargs)
-        elif RESP_TYPE == '[E,TH,PH]':
-            return CR_insep_asym.create(**kwargs)
-        else:
-            raise RFL_ValueEx('Unknown response type (RESP_TYPE): %s' % RESP_TYPE)
+        if 'RESP_TYPE' not in kwargs: raise RFL_KeywordEx('RESP_TYPE required, absent')
+        if not isinstance(kwargs['RESP_TYPE'],str): raise RFL_KeywordEx('RESP_TYPE must be a string(str)')
+        for c in cls.__subclasses__():
+            obj = c.create(**kwargs)
+            if obj: return obj
+        raise RFL_Exception('Supplied keywords to not define a recognized ChannelResponse')
 
+    def __init__(self,**kwargs):
+        print('Not Implemented yet: ' + self.__class__.__name__)
+    
     def copy(self):
         """
         channel.copy() return a copy of this object
@@ -173,6 +199,7 @@ class ChannelResponse(object):
         def create(cls,**kwargs):
             if 'E_TYPE' not in kwargs: raise RFL_KeywordEx('E_TYPE required, absent')
             if not isinstance(kwargs['E_TYPE'],str): raise RFL_KeywordEx('E_TYPE must be a string(str)')
+            # TODO: rewrite this to use create on subclasses
             E_TYPE = kwargs['E_TYPE'].upper()
             if E_TYPE == 'TBL':
                 return ChannelResponse.ER_Table.create(**kwargs)
@@ -371,7 +398,7 @@ class ChannelResponse(object):
             super().__init__(**kwargs)
             self.EPS = kwargs['EPS']
             self.E_GRID = kwargs['E_GRID']
-            self.hE0 = np.sum(self.E_GRID*self.EPS*make_Delats(self.E_GRID))/self.CROSSCALIB  # for flat spectrum
+            self.hE0 = np.sum(self.E_GRID*self.EPS*make_deltas(self.E_GRID))/self.CROSSCALIB  # for flat spectrum
             self._RE = None
 
         def RE(self,E):
@@ -382,7 +409,7 @@ class ChannelResponse(object):
             """
             if self._RE is None:
                 # extrapolate beyond grid with nearest edge (first/last) value
-                self._RE = interp1d(self.E_GRID,self.EPS,'linear',bounds_error=False,fill_value=[self.EPS[0],self.EPS[-1]],self.assum_sorted=True)
+                self._RE = interp1d(self.E_GRID,self.EPS,'linear',bounds_error=False,fill_value=[self.EPS[0],self.EPS[-1]],assum_sorted=True)
             return self._RE(E)
 
         def hE(self,Egrid,**kwargs):
@@ -406,6 +433,7 @@ class ChannelResponse(object):
         # omni, TBL,CYL_TELE,RECT_TELE,SLAB,DISK,PIN_HOLE
         @classmethod
         def create(cls,**kwargs):
+            # TODO: write this to use create on subclasses
             raise NotImplementedError
         def hAalphabeta(self,alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,**kwargs):
             """
@@ -547,7 +575,14 @@ class CR_Omni(ChannelResponse):
     """
     @classmethod
     def create(cls,**kwargs):
-        return cls(**kwargs)
+        if 'RESP_TYPE' not in kwargs: raise RFL_KeywordEx('RESP_TYPE required, absent')
+        if not isinstance(kwargs['RESP_TYPE'],str): raise RFL_KeywordEx('RESP_TYPE must be a string(str)')
+        if kwargs['RESP_TYPE'].upper() == '[E]':
+            return cls(**kwargs)
+        for c in cls.__subclasses__():
+            obj = c.create(**kwargs)
+            if obj: return obj
+        return None
     
 class CR_Esep_sym(CR_Omni):
     """
@@ -558,7 +593,16 @@ class CR_Esep_sym(CR_Omni):
     """
     @classmethod
     def create(cls,**kwargs):
-        return cls(**kwargs)    
+        if 'RESP_TYPE' not in kwargs: raise RFL_KeywordEx('RESP_TYPE required, absent')
+        if not isinstance(kwargs['RESP_TYPE'],str): raise RFL_KeywordEx('RESP_TYPE must be a string(str)')
+        if '[E]' not in kwargs['RESP_TYPE'].upper(): return None # not Esep
+        for c in cls.__subclasses__():
+            obj = c.create(**kwargs)
+            if obj: return obj
+        if kwargs['RESP_TYPE'].upper() == '[E][TH]':
+            return cls(**kwargs)
+        else:
+            return None
     
 class CR_Esep_asym(CR_Esep_sym):
     """
@@ -569,7 +613,15 @@ class CR_Esep_asym(CR_Esep_sym):
     """
     @classmethod
     def create(cls,**kwargs):
-        return cls(**kwargs)    
+        if 'RESP_TYPE' not in kwargs: raise RFL_KeywordEx('RESP_TYPE required, absent')
+        if not isinstance(kwargs['RESP_TYPE'],str): raise RFL_KeywordEx('RESP_TYPE must be a string(str)')
+        for c in cls.__subclasses__():
+            obj = c.create(**kwargs)
+            if obj: return obj
+        if kwargs['RESP_TYPE'].upper() == '[E][TH,PH]':
+            return cls(**kwargs)
+        else:
+            return None
     
 class CR_insep_sym(CR_Omni):
     """
@@ -580,7 +632,15 @@ class CR_insep_sym(CR_Omni):
     """
     @classmethod
     def create(cls,**kwargs):
-        return cls(**kwargs)    
+        if 'RESP_TYPE' not in kwargs: raise RFL_KeywordEx('RESP_TYPE required, absent')
+        if not isinstance(kwargs['RESP_TYPE'],str): raise RFL_KeywordEx('RESP_TYPE must be a string(str)')
+        for c in cls.__subclasses__():
+            obj = c.create(**kwargs)
+            if obj: return obj
+        if kwargs['RESP_TYPE'].upper() == '[E,TH]':
+            return cls(**kwargs)
+        else:
+            return None
     
 class CR_insep_asym(CR_insep_sym):
     """
@@ -591,7 +651,14 @@ class CR_insep_asym(CR_insep_sym):
     """
     @classmethod
     def create(cls,**kwargs):
-        return cls(**kwargs)    
+        if 'RESP_TYPE' not in kwargs: raise RFL_KeywordEx('RESP_TYPE required, absent')
+        for c in cls.__subclasses__():
+            obj = c.create(**kwargs)
+            if obj: return obj
+        if kwargs['RESP_TYPE'].upper() == '[E,TH,PH]':
+            return cls(**kwargs)
+        else:
+            return None
 
 if __name__ == '__main__':
     # very simple test
