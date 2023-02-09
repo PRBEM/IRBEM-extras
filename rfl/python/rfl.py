@@ -66,11 +66,15 @@ class D(C):
     def is_mine(cls,**kwargs):
         return ('type' in kwargs) and (kwargs['type'] == 'D')
 
+class E(C):
+    pass # replaces C in hierarchy
+    
 print('A()',A())
 print('A',A(type='A'))
 print('B',A(type='B'))
 print('C',A(type='C'))
 print('D',A(type='D'))
+print('E',A(type='E'))
 raise Exception('stop')
 
 import numpy as np
