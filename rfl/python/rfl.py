@@ -25,6 +25,20 @@ glossary:
     hE - energy response, units of MeV (CROSSCALIB applied)
     hA* - angular response, units of cm^2(-s) (CROSSCALIB *not* applied)
     h* - energy-angle response, units of MeV-cm^2-sr(-s) (CROSSCALIB applied)
+    
+    
+The ChannelResponse and its internal classes EnergyResponse and AngularResponse
+have implicit factory constructors. That means passing the constructor a data 
+tree that actually defines a subclass, then the appropriate subclass is returned.
+To extend these classes, in the new subclass, define a classmethod "is_mine" 
+that returns True when the data tree indicates the new class should be used. 
+Python will automatically integrate these into the parent/base class's factory 
+constructor. is_mine takes the same inputs as the constructor:
+    @classmethod
+    def is_mine(cls,**kwargs):
+        # search kwargs dict/tree to determine if this subclass should handle
+        # the data, and if so, return True
+
 """
 
 """
@@ -45,13 +59,20 @@ class A(object):
     def is_mine(cls,**kwargs):
         return None # virtual base class never right answer
     def __new__(cls,**kwargs):
-        # check children first
-        for c in cls.__subclasses__():
-            res = c.__new__(c,**kwargs)
-            if res: return res
+        if kwargs: # check children first
+            for c in cls.__subclasses__():
+                res = c.__new__(c,**kwargs)
+                if res: return res
         if cls.is_mine(**kwargs):
-            return cls
+            return super().__new__(cls) # python will pass kwargs to init
         return None            
+    def __init__(self,**kwargs):
+        if 'type' in kwargs:
+            self.type = kwargs['type']
+        else:
+            self.type = None
+    def __str__(self):
+        return 'Object of class %s type=%s' % (self.__class__.__name__,self.type)
         
 class B(A):
     @classmethod
@@ -75,7 +96,7 @@ print('B',A(type='B'))
 print('C',A(type='C'))
 print('D',A(type='D'))
 print('E',A(type='E'))
-raise Exception('stop')
+#raise Exception('stop')
 
 import numpy as np
 from scipy.interpolate import interp1d
@@ -161,30 +182,43 @@ class RFL_ValueEx(RFL_Exception):
 class ChannelResponse(object):
     """
     Virtual base class for channel responses
-    Use factory class method .create() to create
+    Constructor is a factory that will return 
     appropriate subclass from response dictionary
     """
     @classmethod
-    def create(cls,**kwargs):
+    def _dict_check(cls,*keywords,**kwargs):
         """
-        channel = ChannelResponse.create(**kwargs)
-        returns an initialized response object of the specified type
+        bool = cls._dict_check(*keywords,**kwargs)
+        check one or more keywords in kwargs
+        if present and str, return True
+        otherwise raise appropriate exception
         """
-        if 'RESP_TYPE' not in kwargs: raise RFL_KeywordEx('RESP_TYPE required, absent')
-        if not isinstance(kwargs['RESP_TYPE'],str): raise RFL_KeywordEx('RESP_TYPE must be a string(str)')
-        for c in cls.__subclasses__():
-            obj = c.create(**kwargs)
-            if obj: return obj
+        for key in keywords:
+            if key not in kwargs: raise RFL_KeywordEx('Keyword %s required, absent' % key)
+            if not isinstance(kwargs[key],str): raise RFL_KeywordEx('%s must be a string(str)' % key)
+        return True
+        
+    @classmethod
+    def is_mine(cls,**kwargs):
+        cls._dict_check('RESP_TYPE',**kwargs)
         raise RFL_Exception('Supplied keywords to not define a recognized ChannelResponse')
+    def __new__(cls,**kwargs):        
+        if kwargs: # check children first
+            for c in cls.__subclasses__():
+                res = c.__new__(c,**kwargs)
+                if res: return res
+        if cls.is_mine(**kwargs):
+            return super().__new__(cls) # python will pass kwargs to init
+        return None            
 
     def __init__(self,**kwargs):
-        print('Not Implemented yet: ' + self.__class__.__name__)
+        print('Class not implemented yet: ' + self.__class__.__name__)
     
     def copy(self):
         """
         channel.copy() return a copy of this object
         """
-        ChannelResponse.create(**self.to_dict())
+        return ChannelResponse(**self.to_dict())
 
     def to_dict(self):
         """
@@ -577,16 +611,11 @@ class CR_Omni(ChannelResponse):
     Use factory class method .create() to create
     appropriate subclass from response dictionary
     """
+    
     @classmethod
-    def create(cls,**kwargs):
-        if 'RESP_TYPE' not in kwargs: raise RFL_KeywordEx('RESP_TYPE required, absent')
-        if not isinstance(kwargs['RESP_TYPE'],str): raise RFL_KeywordEx('RESP_TYPE must be a string(str)')
-        if kwargs['RESP_TYPE'].upper() == '[E]':
-            return cls(**kwargs)
-        for c in cls.__subclasses__():
-            obj = c.create(**kwargs)
-            if obj: return obj
-        return None
+    def is_mine(cls,**kwargs):
+        cls._dict_check('RESP_TYPE',**kwargs)
+        return (kwargs['RESP_TYPE'].upper() == '[E]')
     
 class CR_Esep_sym(CR_Omni):
     """
@@ -596,17 +625,9 @@ class CR_Esep_sym(CR_Omni):
     appropriate subclass from response dictionary
     """
     @classmethod
-    def create(cls,**kwargs):
-        if 'RESP_TYPE' not in kwargs: raise RFL_KeywordEx('RESP_TYPE required, absent')
-        if not isinstance(kwargs['RESP_TYPE'],str): raise RFL_KeywordEx('RESP_TYPE must be a string(str)')
-        if '[E]' not in kwargs['RESP_TYPE'].upper(): return None # not Esep
-        for c in cls.__subclasses__():
-            obj = c.create(**kwargs)
-            if obj: return obj
-        if kwargs['RESP_TYPE'].upper() == '[E][TH]':
-            return cls(**kwargs)
-        else:
-            return None
+    def is_mine(cls,**kwargs):
+        cls._dict_check('RESP_TYPE',**kwargs)
+        return (kwargs['RESP_TYPE'].upper() == '[E][TH]')
     
 class CR_Esep_asym(CR_Esep_sym):
     """
@@ -616,17 +637,10 @@ class CR_Esep_asym(CR_Esep_sym):
     appropriate subclass from response dictionary
     """
     @classmethod
-    def create(cls,**kwargs):
-        if 'RESP_TYPE' not in kwargs: raise RFL_KeywordEx('RESP_TYPE required, absent')
-        if not isinstance(kwargs['RESP_TYPE'],str): raise RFL_KeywordEx('RESP_TYPE must be a string(str)')
-        for c in cls.__subclasses__():
-            obj = c.create(**kwargs)
-            if obj: return obj
-        if kwargs['RESP_TYPE'].upper() == '[E][TH,PH]':
-            return cls(**kwargs)
-        else:
-            return None
-    
+    def is_mine(cls,**kwargs):
+        cls._dict_check('RESP_TYPE',**kwargs)
+        return (kwargs['RESP_TYPE'].upper() == '[E][TH,PH]')
+
 class CR_insep_sym(CR_Omni):
     """
     CR_insep_sym
@@ -635,16 +649,9 @@ class CR_insep_sym(CR_Omni):
     appropriate subclass from response dictionary
     """
     @classmethod
-    def create(cls,**kwargs):
-        if 'RESP_TYPE' not in kwargs: raise RFL_KeywordEx('RESP_TYPE required, absent')
-        if not isinstance(kwargs['RESP_TYPE'],str): raise RFL_KeywordEx('RESP_TYPE must be a string(str)')
-        for c in cls.__subclasses__():
-            obj = c.create(**kwargs)
-            if obj: return obj
-        if kwargs['RESP_TYPE'].upper() == '[E,TH]':
-            return cls(**kwargs)
-        else:
-            return None
+    def is_mine(cls,**kwargs):
+        cls._dict_check('RESP_TYPE',**kwargs)
+        return (kwargs['RESP_TYPE'].upper() == '[E,TH]')
     
 class CR_insep_asym(CR_insep_sym):
     """
@@ -654,16 +661,10 @@ class CR_insep_asym(CR_insep_sym):
     appropriate subclass from response dictionary
     """
     @classmethod
-    def create(cls,**kwargs):
-        if 'RESP_TYPE' not in kwargs: raise RFL_KeywordEx('RESP_TYPE required, absent')
-        for c in cls.__subclasses__():
-            obj = c.create(**kwargs)
-            if obj: return obj
-        if kwargs['RESP_TYPE'].upper() == '[E,TH,PH]':
-            return cls(**kwargs)
-        else:
-            return None
+    def is_mine(cls,**kwargs):
+        cls._dict_check('RESP_TYPE',**kwargs)
+        return (kwargs['RESP_TYPE'].upper() == '[E,TH,PH]')
 
 if __name__ == '__main__':
     # very simple test
-    print(ChannelResponse.create(RESP_TYPE='[E,TH]'))
+    print(ChannelResponse(RESP_TYPE='[E,TH]'))
