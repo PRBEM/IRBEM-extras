@@ -28,16 +28,11 @@ glossary:
     
     
 The ChannelResponse and its internal classes EnergyResponse and AngleResponse
-have implicit factory constructors. That means passing the constructor a data 
-tree that actually defines a subclass, then the appropriate subclass is returned.
-To extend these classes, in the new subclass, define a classmethod "is_mine" 
-that returns True when the data tree indicates the new class should be used. 
-Python will automatically integrate these into the parent/base class's factory 
-constructor. is_mine takes the same inputs as the constructor:
-    @classmethod
-    def is_mine(cls,**kwargs):
-        # search kwargs dict/tree to determine if this subclass should handle
-        # the data, and if so, return True
+have implicit factory constructors via the FactoryConstructorMixin. 
+That means passing the constructor a data tree that actually defines a subclass, 
+then the appropriate subclass is returned. see FactoryConstructorMixin
+for information on how to define the is_mine method in any subclasses
+defined from ChannelResponse, EnergyResponse, and AngleResponse
 
 """
 
@@ -53,6 +48,8 @@ TODO:
 
 import numpy as np
 from scipy.interpolate import interp1d
+
+
 
 # utilities
 def get_list_neighbors(lst,q):
@@ -156,7 +153,49 @@ def keyword_check_bool(*keywords,**kwargs):
             if not isinstance(kwargs[key],str): return False
         return True
 
-class ChannelResponse(object):
+class FactoryConstructorMixin(object):
+    """
+    class FactoryConstructorMixin
+    a mixin to support letting an object constructor
+    traverse its subclass tree to instantiate the correct
+    subclass based on the initialization arguments
+
+    Class trees that inherit from FactoryConstructorMixin
+    should implement is_mine in every subclass to "claim" the
+    initialiation data and insantiate that subclass rather than
+    the parent constructor thta was called.    
+
+    @classmethod
+    def is_mine(cls,*args,**kwargs):
+        # search kwargs dict/tree to determine if this subclass should handle
+        # the data, and if so, return True
+    
+    Any class that inherites directly from FactoryConstructorMixin
+    should implement is_mine that raises an exception rather than returning False
+    
+    An subclass that does not define is_mine will replace its parent in the
+    factory hierarchy (use this approach to modify the behavior of a subclass).
+    
+    Any subclass that defines its own is_mine will extend its parent into a
+    distinct, new subclass in the factory hierarchy (use this approach if
+    parent and chiled are alternatives that should co-exist)
+    
+    """
+    @classmethod
+    def is_mine(cls,*args,**kwargs):
+        raise Exception("Class '%s' failed to implement is_mine classmethod or didn't claim case" % cls.__name__)
+    def __new__(cls,*args,**kwargs):
+        # check children first
+        if args or kwargs:
+            for c in cls.__subclasses__():
+                res = c.__new__(c,*args,**kwargs)
+                if res: return res
+        if cls.is_mine(*args,**kwargs):
+            return super().__new__(cls) # python will pass kwargs to init
+        return None            
+ 
+
+class ChannelResponse(FactoryConstructorMixin):
     """
     Virtual base class for channel responses
     Constructor is a factory that will return 
@@ -164,17 +203,9 @@ class ChannelResponse(object):
     """
         
     @classmethod
-    def is_mine(cls,**kwargs):
+    def is_mine(cls,*args,**kwargs):
         keyword_check('RESP_TYPE',**kwargs)
         raise RFL_Exception('Supplied keywords to not define a recognized ChannelResponse')
-    def __new__(cls,**kwargs):        
-        if kwargs: # check children first
-            for c in cls.__subclasses__():
-                res = c.__new__(c,**kwargs)
-                if res: return res
-        if cls.is_mine(**kwargs):
-            return super().__new__(cls) # python will pass kwargs to init
-        return None            
 
     def __init__(self,**kwargs):
         print('Class not implemented yet: ' + self.__class__.__name__)
@@ -191,7 +222,7 @@ class ChannelResponse(object):
         """
         raise NotImplementedError
 
-    class EnergyResponse(object):
+    class EnergyResponse(FactoryConstructorMixin):
         """
         EnergyResponse
         class representing energy responses
@@ -199,21 +230,13 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def is_mine(cls,**kwargs):
+        def is_mine(cls,*args,**kwargs):
             keyword_check('E_TYPE',**kwargs)
             raise RFL_Exception('Supplied keywords to not define a recognized EnergyResponse')
-        def __new__(cls,**kwargs):        
-            if kwargs: # check children first
-                for c in cls.__subclasses__():
-                    res = c.__new__(c,**kwargs)
-                    if res: return res
-            if cls.is_mine(**kwargs):
-                return super().__new__(cls) # python will pass kwargs to init
-            return None            
         
         def __init__(self,**kwargs):
             if 'CROSSCALIB' not in kwargs:
-                raise Warning('CROSSCALIB not found in channel description, assuming unity')
+                print('CROSSCALIB not found in channel description, assuming unity')
                 self.CROSSCALIB = 1.0 # default
             else:
                 self.CROSSCALIB = kwargs['CROSSCALIB']
@@ -234,7 +257,7 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def is_mine(cls,**kwargs):
+        def is_mine(cls,*args,**kwargs):
             keyword_check('E_TYPE',**kwargs)
             return (kwargs['E_TYPE'].upper() == 'DIFF')
 
@@ -287,7 +310,7 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def is_mine(cls,**kwargs):
+        def is_mine(cls,*args,**kwargs):
             keyword_check('E_TYPE',**kwargs)
             return (kwargs['E_TYPE'].upper() == 'INT')
 
@@ -342,7 +365,7 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def is_mine(cls,**kwargs):
+        def is_mine(cls,*args,**kwargs):
             keyword_check('E_TYPE',**kwargs)
             return (kwargs['E_TYPE'].upper() == 'WIDE')
 
@@ -381,7 +404,7 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def is_mine(cls,**kwargs):
+        def is_mine(cls,*args,**kwargs):
             keyword_check('E_TYPE',**kwargs)
             return (kwargs['E_TYPE'].upper() == 'TBL')
 
@@ -414,7 +437,7 @@ class ChannelResponse(object):
             hE = self.RE(Egrid)*dE/self.CROSSCALIB
             return hE
 
-    class AngleResponse(object):
+    class AngleResponse(FactoryConstructorMixin):
         """
         AngleResponse
         class representing angular responses
@@ -423,16 +446,8 @@ class ChannelResponse(object):
         """
         # omni, TBL,CYL_TELE,RECT_TELE,SLAB,DISK,PIN_HOLE
         @classmethod
-        def is_mine(cls,**kwargs):
+        def is_mine(cls,*args,**kwargs):
             raise RFL_Exception('Supplied keywords to not define a recognized AngleResponse')
-        def __new__(cls,**kwargs):        
-            if kwargs: # check children first
-                for c in cls.__subclasses__():
-                    res = c.__new__(c,**kwargs)
-                    if res: return res
-            if cls.is_mine(**kwargs):
-                return super().__new__(cls) # python will pass kwargs to init
-            return None            
         def hAalphabeta(self,alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,**kwargs):
             """
             hAalphabeta = .hAalphabeta(alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,...)
@@ -483,7 +498,7 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def is_mine(cls,**kwargs):
+        def is_mine(cls,*args,**kwargs):
             return keyword_check_bool('RESP_TYPE',**kwargs) and \
                 (kwargs['RESP_TYPE'].upper() == '[E]')
 
@@ -495,7 +510,7 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def is_mine(cls,**kwargs):            
+        def is_mine(cls,*args,**kwargs):            
             return keyword_check_bool('TH_TYPE',**kwargs) and \
                 (kwargs['TH_TYPE'].upper() == 'PINHOLE')
 
@@ -507,7 +522,7 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def is_mine(cls,**kwargs):
+        def is_mine(cls,*args,**kwargs):
             return keyword_check_bool('TH_TYPE',**kwargs) and \
                 (kwargs['TH_TYPE'].upper() == 'DISK')
 
@@ -519,7 +534,7 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def is_mine(cls,**kwargs):
+        def is_mine(cls,*args,**kwargs):
             return keyword_check_bool('TH_TYPE',**kwargs) and \
                 (kwargs['TH_TYPE'].upper() == 'SLAB')
 
@@ -531,7 +546,7 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def is_mine(cls,**kwargs):
+        def is_mine(cls,*args,**kwargs):
             return keyword_check_bool('TH_TYPE',**kwargs) and \
                 (kwargs['TH_TYPE'].upper() == 'CYL_TELE')
 
@@ -543,7 +558,7 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def is_mine(cls,**kwargs):
+        def is_mine(cls,*args,**kwargs):
             return keyword_check_bool('TH_TYPE',**kwargs) and \
                 (kwargs['TH_TYPE'].upper() == 'TBL')
 
@@ -555,7 +570,7 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def is_mine(cls,**kwargs):
+        def is_mine(cls,*args,**kwargs):
             return keyword_check_bool('TP_TYPE',**kwargs) and \
                 (kwargs['TP_TYPE'].upper() == 'RECT_TELE')
 
@@ -567,7 +582,7 @@ class ChannelResponse(object):
         appropriate subclass from response dictionary
         """
         @classmethod
-        def is_mine(cls,**kwargs):
+        def is_mine(cls,*args,**kwargs):
             return keyword_check_bool('TP_TYPE',**kwargs) and \
                 (kwargs['TP_TYPE'].upper() == 'TBL')
 
@@ -581,7 +596,7 @@ class CR_Omni(ChannelResponse):
     """
     
     @classmethod
-    def is_mine(cls,**kwargs):
+    def is_mine(cls,*args,**kwargs):
         keyword_check('RESP_TYPE',**kwargs)
         return (kwargs['RESP_TYPE'].upper() == '[E]')
     
@@ -593,7 +608,7 @@ class CR_Esep_sym(CR_Omni):
     appropriate subclass from response dictionary
     """
     @classmethod
-    def is_mine(cls,**kwargs):
+    def is_mine(cls,*args,**kwargs):
         keyword_check('RESP_TYPE',**kwargs)
         return (kwargs['RESP_TYPE'].upper() == '[E][TH]')
     
@@ -605,7 +620,7 @@ class CR_Esep_asym(CR_Esep_sym):
     appropriate subclass from response dictionary
     """
     @classmethod
-    def is_mine(cls,**kwargs):
+    def is_mine(cls,*args,**kwargs):
         keyword_check('RESP_TYPE',**kwargs)
         return (kwargs['RESP_TYPE'].upper() == '[E][TH,PH]')
 
@@ -617,7 +632,7 @@ class CR_insep_sym(CR_Omni):
     appropriate subclass from response dictionary
     """
     @classmethod
-    def is_mine(cls,**kwargs):
+    def is_mine(cls,*args,**kwargs):
         keyword_check('RESP_TYPE',**kwargs)
         return (kwargs['RESP_TYPE'].upper() == '[E,TH]')
     
@@ -629,12 +644,59 @@ class CR_insep_asym(CR_insep_sym):
     appropriate subclass from response dictionary
     """
     @classmethod
-    def is_mine(cls,**kwargs):
+    def is_mine(cls,*args,**kwargs):
         keyword_check('RESP_TYPE',**kwargs)
         return (kwargs['RESP_TYPE'].upper() == '[E,TH,PH]')
 
 if __name__ == '__main__':
-    # very simple test
+
+    # factory constructor demo
+    class A(FactoryConstructorMixin):  # abstract base class
+        @classmethod
+        def _is_mine(cls,*args,**kwargs):
+            # abstract base class never right answer
+            raise Exception("Provided initialization data did not correspond to any implemented subclass of '%s'" % cls.__name__)
+        def __init__(self,*args,**kwargs):
+            if 'type' in kwargs:
+                self.type = kwargs['type']
+            else:
+                self.type = None
+        def __str__(self):
+            return 'Object of class %s type=%s' % (self.__class__.__name__,self.type)
+            
+    class B(A):
+        @classmethod
+        def is_mine(cls,*args,**kwargs):
+            return ('type' in kwargs) and (kwargs['type'] == 'B')
+    class C(A):
+        @classmethod
+        def is_mine(cls,*args,**kwargs):
+            return ('type' in kwargs) and (kwargs['type'] == 'C')
+    class D(C): # extends C, C and D co-exist
+        @classmethod
+        def is_mine(cls,*args,**kwargs):
+            return ('type' in kwargs) and (kwargs['type'] == 'D')
+    
+    class E(C):
+        pass # replaces C in hierarchy
+    
+    try:    
+        print('A()',A())
+    except Exception as e:
+        print(e)
+    try:    
+        print('A',A(type='A'))
+    except Exception as e:
+        print(e)
+    print('B',A(type='B'))
+    print('C',A(type='C'))
+    print('D',A(type='D'))
+    try:    
+        print('E',A(type='E'))
+    except Exception as e:
+        print(e)
+    
+    # very simple test of RFL class instantiation
     print('Omni',ChannelResponse(RESP_TYPE='[E]'))
     print('CR_insep_sym',ChannelResponse(RESP_TYPE='[E,TH]'))
     print('CR_Esep_asym',ChannelResponse(RESP_TYPE='[E][TH,PH]'))
