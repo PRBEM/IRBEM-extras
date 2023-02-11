@@ -562,12 +562,12 @@ class ChannelResponse(FactoryConstructorMixin):
             return False # abstract class, never the right answer
         def hAthetaphi(self,thetagrid,phigrid,**kwargs):
             """*INHERIT*"""
-            dcostheta = make_deltas(-np.cos(np.radians(thetagrid)),**kwargs)
+            dcostheta = np.abs(make_deltas(-np.cos(np.radians(thetagrid)),**kwargs))
             dphi = make_deltas(np.radians(phigrid),**kwargs)
             return self.A(thetagrid,phigrid)*dcostheta*dphi
         def hAtheta(self,thetagrid,phigrid=None,**kwargs):
             """*INHERIT*"""
-            dcostheta = make_deltas(-np.cos(np.radians(thetagrid)),**kwargs)
+            dcostheta = np.abs(make_deltas(-np.cos(np.radians(thetagrid)),**kwargs))
             if phigrid is None:
                 dphi = 2*np.phi
                 phigrid = 0.0 # dummy value
@@ -684,6 +684,7 @@ class ChannelResponse(FactoryConstructorMixin):
             if self.bidirectional:
                 backw = kwargs.copy()
                 backw['BIDIRECTIONAL'] = 'FALSE'
+                # backward telescope reverses R2 and R1
                 backw['R1'] = self.R1
                 backw['R2'] = self.R2
                 self.backward = ChannelResponse.AR_Tele_sym(**backw)
@@ -701,7 +702,7 @@ class ChannelResponse(FactoryConstructorMixin):
                 Psi1 = np.arccos((self.R1**2+self.D**2*tantheta**2-self.R2**2)/(2*self.D*self.R1*tantheta)) # rads
                 Psi2 = np.arccos((self.R2**2+self.D**2*tantheta**2-self.R1**2)/(2*self.D*self.R2*tantheta)) # rads
                 A[f] = np.cos(thetarads[f])/2*(self.R1**2*(2*Psi1-np.sin(2*Psi1))+self.R2**2*(2*Psi2-np.sin(2*Psi2)))
-            return A
+            return A + self.backward.A(180.0-theta,phi)
 
     class AR_Table_sym(AngleResponse):
         """
