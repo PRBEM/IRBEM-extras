@@ -72,7 +72,7 @@ def inherit_docstrings(cls,parent = None):
 
 def get_list_neighbors(lst,q):
     """
-    i = rfl_get_list_neighbors(lst,q)
+    i = get_list_neighbors(lst,q)
     find bounding neighbors of q in list lst
     if q is scalar:
         returns i = (2,), where lst[i[0]] <= q <= lst[i[1]]
@@ -120,22 +120,22 @@ def make_deltas(grid,int_method='trapz',**kwargs):
         d[1:-1] = (grid[2:]-grid[:-2])/2
         d[-1] = (grid[-1]-grid[-2])/2
     else:
-        raise RFL_ValueEx('Unknown int_method "%s"' % int_method)
+        raise ValueError('Unknown int_method "%s"' % int_method)
     
     return d
 
 
 # classes
 
-class RFL_Exception(Exception):
+class RFLError(Exception):
     """
-    Unknown exception (base class of other RFL Exceptions)
+    Unknown RFL error
     accepts optional message argument
     """
-    def __init__(self,message = 'Unknown RFL Exception'):
+    def __init__(self,message = 'Unknown RFL Error'):
         super().__init__(message)
 
-class RFL_ArgSizeEx(RFL_Exception):
+class ArgSizeError(ValueError):
     """
     Incorrect/Inconsistent Argument Size
     accepts optional message argument
@@ -143,20 +143,12 @@ class RFL_ArgSizeEx(RFL_Exception):
     def __init__(self,message = 'Incorrect/Inconsistent Argument Size'):
         super().__init__(message)
 
-class RFL_KeywordEx(RFL_Exception):
+class KeywordError(RFLError):
     """
     Missing/Invalid Keyword
     accepts optional message argument
     """
     def __init__(self,message = 'Missing/Invalid Keyword'):
-        super().__init__(message)
-
-class RFL_ValueEx(RFL_Exception):
-    """
-    Unexpected/Invalid Value
-    accepts optional message argument
-    """
-    def __init__(self,message = 'Unexpected/Invalid Value'):
         super().__init__(message)
 
 # RFL helper functions
@@ -168,8 +160,8 @@ def keyword_check(*keywords,**kwargs):
     otherwise raise appropriate exception
     """
     for key in keywords:
-        if key not in kwargs: raise RFL_KeywordEx('Keyword %s required, absent' % key)
-        if not isinstance(kwargs[key],str): raise RFL_KeywordEx('%s must be a string(str)' % key)
+        if key not in kwargs: raise KeywordError('Keyword %s required, absent' % key)
+        if not isinstance(kwargs[key],str): raise KeywordError('%s must be a string(str)' % key)
     return True
 
 def keyword_check_bool(*keywords,**kwargs):
@@ -192,11 +184,11 @@ def keyword_check_numeric(*keywords,**kwargs):
     otherwise raise appropriate exception
     """
     for key in keywords:
-        if key not in kwargs: raise RFL_KeywordEx('Keyword %s required, absent' % key)
+        if key not in kwargs: raise KeywordError('Keyword %s required, absent' % key)
         val = kwargs[key]
         while isinstance(val,(list,np.ndarray)):
             val = val[0]
-        if not np.issubdtype(type(val),np.number): raise RFL_KeywordEx('%s must be numeric' % key)
+        if not np.issubdtype(type(val),np.number): raise KeywordError('%s must be numeric' % key)
     return True
 
 def squeeze(val):
@@ -268,7 +260,7 @@ class ChannelResponse(FactoryConstructorMixin):
     def is_mine(cls,*args,**kwargs):
         """*INHERIT*"""
         keyword_check('RESP_TYPE',**kwargs)
-        raise RFL_Exception('Supplied keywords to not define a recognized ChannelResponse')
+        raise RFLException('Supplied keywords to not define a recognized ChannelResponse')
 
     def __init__(self,**kwargs):
         print('Class not implemented yet: ' + self.__class__.__name__)
@@ -296,7 +288,7 @@ class ChannelResponse(FactoryConstructorMixin):
         def is_mine(cls,*args,**kwargs):
             """*INHERIT*"""
             keyword_check('E_TYPE',**kwargs)
-            raise RFL_Exception('Supplied keywords to not define a recognized EnergyResponse')
+            raise RFLException('Supplied keywords to not define a recognized EnergyResponse')
         
         def __init__(self,**kwargs):
             if 'CROSSCALIB' not in kwargs:
@@ -495,8 +487,11 @@ class ChannelResponse(FactoryConstructorMixin):
         """
         @classmethod
         def is_mine(cls,*args,**kwargs):
-            """*INHERIT*"""            
-            return True # stop upward propagation, used by null
+            """*INHERIT*"""     
+            if not kwargs:
+                return True # null response
+            else:
+                raise KeywordError('The data provided did not define a recognized AngleResponse')
         def __init__(self,**kwargs):
             if kwargs: # backward present only when called with initialization data
                 self.backward = ChannelResponse.AngleResponse() # backward response is null by default
@@ -593,15 +588,18 @@ class ChannelResponse(FactoryConstructorMixin):
             return keyword_check_bool('RESP_TYPE',**kwargs) and \
                 (kwargs['RESP_TYPE'] == '[E]')
         def __init__(self,**kwargs):
-            super().__init__(**kwargs)            
-            keyword_check_numeric('G',**kwargs)
-            self.G = squeeze(kwargs['G'])            
+            super().__init__(**kwargs)
+            if ('G' in kwargs) and kwargs['G'] is not None:
+                # derived class may provide G as none
+                keyword_check_numeric('G',**kwargs)
+                self.G = squeeze(kwargs['G'])            
             # assum a half omni
             self.area = self.G/2/np.pi # equivalent sphere's cross-section 
             if self.bidirectional:
                 # backwards is also omni
-                kwargs['BIDIRECTIONAL'] = 'FALSE'
-                self.backward = ChannelResponse.AR_Omni(**kwargs)
+                backw = kwargs.copy()
+                backw['BIDIRECTIONAL'] = 'FALSE'
+                self.backward = self.__class__(**backw)
         def A(self,theta,phi):
             """*INHERIT*"""
             return self.area*(theta<=90) + self.backward.area*(theta>90)
@@ -630,7 +628,7 @@ class ChannelResponse(FactoryConstructorMixin):
             computed as pi*area
             """
             return self.area*np.pi
-    class AR_Disk(AR_csym):
+    class AR_Disk(AR_SingleElement):
         """
         AR_Disk
         class representing disk angular responses
@@ -646,7 +644,7 @@ class ChannelResponse(FactoryConstructorMixin):
             self.H1 = squeeze(kwargs['H1'])
             self.area = self.W1*self.H1
 
-    class AR_Slab(AR_csym):
+    class AR_Slab(AR_SingleElement):
         """
         AR_Slab
         class representing rectangular slab angular responses
@@ -660,27 +658,50 @@ class ChannelResponse(FactoryConstructorMixin):
             keyword_check_numeric('R1',**kwargs)
             self.R1 = squeeze(kwargs['R1'])
             self.area = np.pi*self.R1**2
-            self.G = self.area*np.pi
 
-    class AR_Pinhole(AngleResponse):
-        """
-        AR_Pinhole
-        class representing pinhole angular responses
-        """
-        @classmethod
-        def is_mine(cls,*args,**kwargs):            
-            return keyword_check_bool('TH_TYPE',**kwargs) and \
-                (kwargs['TH_TYPE'] == 'PINHOLE')
-
-    class AR_Tele_sym(AngleResponse):
+    class AR_Tele_sym(AR_csym):
         """
         AR_Tele_sym
         class representing phi-symmetric telescope angular responses
+        Using Sullivan's 1971 paper as updated in ~2010
         """
         @classmethod
         def is_mine(cls,*args,**kwargs):
             return keyword_check_bool('TH_TYPE',**kwargs) and \
                 (kwargs['TH_TYPE'] == 'CYL_TELE')
+        def __init__(self,**kwargs):
+            super().__init__(**kwargs)
+            keyword_check_numeric('R1','R2','D',**kwargs)
+            self.R1 = squeeze(kwargs['R1'])
+            self.R2 = squeeze(kwargs['R1'])
+            self.D = squeeze(kwargs['D'])
+            self.Rs = min(self.R1,self.R2)
+            self.thetac = np.degrees(np.atan(np.abs(self.R1-self.R2)/self.D))
+            self.thetam = np.degrees(np.atand((self.R1+self.R2)/self.D))
+            self.area = np.pi*self.Rs**2 # area at normal incidence
+            tmp = self.R1**2+self.R2**2+self.D**2
+            self.G = np.pi**2/2*(tmp-np.sqrt(tmp**2-4*self.R1**2*self.R2**2)) # eqn 8
+            if self.bidirectional:
+                backw = kwargs.copy()
+                backw['BIDIRECTIONAL'] = 'FALSE'
+                backw['R1'] = self.R1
+                backw['R2'] = self.R2
+                self.backward = ChannelResponse.AR_Tele_sym(**backw)
+        def A(self,theta,phi):
+            """*INHERIT*"""
+            # uses Sullivan's updated paper, equation 10
+            A = np.zeros(np.broadcast(theta,phi).shape)
+            thetarads = np.radians(theta)
+            f = theta <= self.thetac
+            if any(f):
+                A[f] = np.pi*self.Rs**2*np.cos(thetarads[f])
+            f = (theta>self.thetac) & (theta < self.thetam)
+            if any(f):
+                tantheta = self.tan(thetarads[f])
+                Psi1 = np.arccos((self.R1**2+self.D**2*tantheta**2-self.R2**2)/(2*self.D*self.R1*tantheta)) # rads
+                Psi2 = np.arccos((self.R2**2+self.D**2*tantheta**2-self.R1**2)/(2*self.D*self.R2*tantheta)) # rads
+                A[f] = np.cos(thetarads[f])/2*(self.R1**2*(2*Psi1-np.sin(2*Psi1))+self.R2**2*(2*Psi2-np.sin(2*Psi2)))
+            return A
 
     class AR_Table_sym(AngleResponse):
         """
@@ -691,6 +712,16 @@ class ChannelResponse(FactoryConstructorMixin):
         def is_mine(cls,*args,**kwargs):
             return keyword_check_bool('TH_TYPE',**kwargs) and \
                 (kwargs['TH_TYPE'] == 'TBL')
+
+    class AR_Pinhole(AngleResponse):
+        """
+        AR_Pinhole
+        class representing pinhole angular responses
+        """
+        @classmethod
+        def is_mine(cls,*args,**kwargs):            
+            return keyword_check_bool('TH_TYPE',**kwargs) and \
+                (kwargs['TH_TYPE'] == 'PINHOLE')
 
     class AR_Tele_asym(AngleResponse):
         """
