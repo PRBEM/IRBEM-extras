@@ -39,19 +39,37 @@ defined from ChannelResponse, EnergyResponse, and AngleResponse
 """
 TODO:
     apply CROSSCALIB for hE and h* (but not hA*)
-    use __subclasses__ in create factory so user-defined sub-classes work
-    do this in the __new__ constructor
-    use a class method is_mine to check if this class is appropriate
-    when sbuclassing, if is_mine is not overloaded, subclass will always
-    take precedence over its parent class
 """
+
+# NOTE: in this code where the docstring is *INHERIT* that means
+# the string *INHERIT* will be replaced by the docstring for the
+# parent class's corresponding method
 
 import numpy as np
 from scipy.interpolate import interp1d
 
-
-
 # utilities
+def inherit_docstrings(cls,parent = None):
+    """
+    inherit_docstrings(cls,parent = None)
+    propagate docstring down the class tree
+    replacing string "*INHERIT*" with docstring
+    from corresponding item in parent class
+    """
+    if parent:
+        for name in dir(cls):
+            if name.startswith('__'): continue # don't mess with special items
+            m = getattr(cls,name)
+            if hasattr(parent,'__doc__') and hasattr(m,'__doc__') and (getattr(m,'__doc__') is not None):
+                if type(m).__name__ == 'method':
+                    # set the method's function's docstring
+                    m.__func__.__doc__ = m.__func__.__doc__.replace('*INHERIT*',parent.__doc__)
+                else:
+                    # set the object's docstring
+                    m.__doc__ = m.__doc__.replace('*INHERIT*',parent.__doc__)
+    for c in cls.__subclasses__():
+        inherit_docstrings(c,parent=cls)
+
 def get_list_neighbors(lst,q):
     """
     i = rfl_get_list_neighbors(lst,q)
@@ -110,25 +128,38 @@ def make_deltas(grid,int_method='trapz',**kwargs):
 # classes
 
 class RFL_Exception(Exception):
-    """Unknown exception (base class of other RFL Exceptions)"""
+    """
+    Unknown exception (base class of other RFL Exceptions)
+    accepts optional message argument
+    """
     def __init__(self,message = 'Unknown RFL Exception'):
         super().__init__(message)
 
 class RFL_ArgSizeEx(RFL_Exception):
-    """Incorrect/Inconsistent Argument Size"""
+    """
+    Incorrect/Inconsistent Argument Size
+    accepts optional message argument
+    """
     def __init__(self,message = 'Incorrect/Inconsistent Argument Size'):
         super().__init__(message)
 
 class RFL_KeywordEx(RFL_Exception):
-    """Missing/Invalid Keyword"""
+    """
+    Missing/Invalid Keyword
+    accepts optional message argument
+    """
     def __init__(self,message = 'Missing/Invalid Keyword'):
         super().__init__(message)
 
 class RFL_ValueEx(RFL_Exception):
-    """Unexpected/Invalid Value"""
+    """
+    Unexpected/Invalid Value
+    accepts optional message argument
+    """
     def __init__(self,message = 'Unexpected/Invalid Value'):
         super().__init__(message)
 
+# RFL helper functions
 def keyword_check(*keywords,**kwargs):
     """
     bool = keyword_check(*keywords,**kwargs)
@@ -152,6 +183,33 @@ def keyword_check_bool(*keywords,**kwargs):
             if key not in kwargs: return False
             if not isinstance(kwargs[key],str): return False
         return True
+    
+def keyword_check_numeric(*keywords,**kwargs):
+    """
+    bool = keyword_check_numeric(*keywords,**kwargs)
+    check one or more keywords in kwargs
+    if present and np.numeric, return True
+    otherwise raise appropriate exception
+    """
+    for key in keywords:
+        if key not in kwargs: raise RFL_KeywordEx('Keyword %s required, absent' % key)
+        val = kwargs[key]
+        while isinstance(val,(list,np.ndarray)):
+            val = val[0]
+        if not np.issubdtype(type(val),np.number): raise RFL_KeywordEx('%s must be numeric' % key)
+    return True
+
+def squeeze(val):
+    """
+    val = squeeze(val)
+    squeeze a value by removing trailing singleton dimensions
+    and if a single value, make it a scalar
+    """
+    val = np.squeeze(val)
+    if val.size==1:
+        val = np.asscalar(val) # reduce singleton to scalar
+    return val
+    
 
 class FactoryConstructorMixin(object):
     """
@@ -163,11 +221,11 @@ class FactoryConstructorMixin(object):
     Class trees that inherit from FactoryConstructorMixin
     should implement is_mine in every subclass to "claim" the
     initialiation data and insantiate that subclass rather than
-    the parent constructor thta was called.    
+    the parent constructor that was called.    
 
     @classmethod
     def is_mine(cls,*args,**kwargs):
-        # search kwargs dict/tree to determine if this subclass should handle
+        # search args,kwargs dict/tree to determine if this subclass should handle
         # the data, and if so, return True
     
     Any class that inherites directly from FactoryConstructorMixin
@@ -178,11 +236,15 @@ class FactoryConstructorMixin(object):
     
     Any subclass that defines its own is_mine will extend its parent into a
     distinct, new subclass in the factory hierarchy (use this approach if
-    parent and chiled are alternatives that should co-exist)
+    parent and child are alternatives that should co-exist)
     
     """
     @classmethod
     def is_mine(cls,*args,**kwargs):
+        """
+            bool = is_mine(cls,*args,**kwargs)
+            returns true if args, kwargs describe an object of this class
+        """
         raise Exception("Class '%s' failed to implement is_mine classmethod or didn't claim case" % cls.__name__)
     def __new__(cls,*args,**kwargs):
         # check children first
@@ -204,6 +266,7 @@ class ChannelResponse(FactoryConstructorMixin):
         
     @classmethod
     def is_mine(cls,*args,**kwargs):
+        """*INHERIT*"""
         keyword_check('RESP_TYPE',**kwargs)
         raise RFL_Exception('Supplied keywords to not define a recognized ChannelResponse')
 
@@ -231,6 +294,7 @@ class ChannelResponse(FactoryConstructorMixin):
         """
         @classmethod
         def is_mine(cls,*args,**kwargs):
+            """*INHERIT*"""
             keyword_check('E_TYPE',**kwargs)
             raise RFL_Exception('Supplied keywords to not define a recognized EnergyResponse')
         
@@ -241,6 +305,13 @@ class ChannelResponse(FactoryConstructorMixin):
             else:
                 self.CROSSCALIB = kwargs['CROSSCALIB']
             
+        def RE(self,E):
+            """
+            R = RE(E)
+            Channel response at energy E (w/o CROSSCALIB)
+            output is dimensionless
+            """
+            raise NotImplementedError
         def hE(self,Egrid,**kwargs):
             """
             hE = .hE(Egrid,...)
@@ -258,30 +329,24 @@ class ChannelResponse(FactoryConstructorMixin):
         """
         @classmethod
         def is_mine(cls,*args,**kwargs):
+            """*INHERIT*"""
             keyword_check('E_TYPE',**kwargs)
-            return (kwargs['E_TYPE'].upper() == 'DIFF')
+            return (kwargs['E_TYPE'] == 'DIFF')
 
         def __init__(self,**kwargs):
             super().__init__(**kwargs)
-            self.EPS = kwargs['EPS']
-            self.E0 = kwargs['E0'] # TODO - convert to MeV
-            self.DE = kwargs['DE'] # TODO - convert to MeV
+            keyword_check_numeric('EPS','E0','DE',**kwargs)            
+            self.EPS = squeeze(kwargs['EPS'])
+            self.E0 = squeeze(kwargs['E0']) # TODO - convert to MeV
+            self.DE = squeeze(kwargs['DE']) # TODO - convert to MeV
             self.hE0 = self.DE*self.EPS/self.CROSSCALIB # hE for flat spectrum
 
         def RE(self,E):
-            """
-            R = RE(E)
-            Channel response at energy E (w/o CROSSCALIB)
-            output is dimensionless
-            """
+            """*INHERIT*"""
             return (E==self.E0)*self.EPS # DE gets ignored, which is bad, but unaviodable
 
         def hE(self,Egrid,**kwargs):
-            """
-            hE = .hE(Egrid,...)
-            return energy response weights on Egrid
-            CROSSCALIB applied
-            """
+            """*INHERIT*"""
             Egrid = np.array(Egrid)
             NE = len(Egrid)
             hE = np.zeros(Egrid.shape) 
@@ -306,34 +371,26 @@ class ChannelResponse(FactoryConstructorMixin):
         """
         ER_Int
         class representing integral energy channel response
-        use factory class method .create() to create
-        appropriate subclass from response dictionary
         """
         @classmethod
         def is_mine(cls,*args,**kwargs):
+            """*INHERIT*"""
             keyword_check('E_TYPE',**kwargs)
-            return (kwargs['E_TYPE'].upper() == 'INT')
+            return (kwargs['E_TYPE'] == 'INT')
 
         def __init__(self,**kwargs):
             super().__init__(**kwargs)
-            self.EPS = kwargs['EPS']
-            self.E0 = kwargs['E0'] # TODO - convert to MeV
+            keyword_check_numeric('EPS','E0',**kwargs)            
+            self.EPS = squeeze(kwargs['EPS'])
+            self.E0 = squeeze(kwargs['E0']) # TODO - convert to MeV
             self.hE0 = self.DE*self.EPS/self.CROSSCALIB  # should be inf for flat spectrum, but assume energy bandwidth==1
 
         def RE(self,E):
-            """
-            R = RE(E)
-            Channel response at energy E (w/o CROSSCALIB)
-            output is dimensionless
-            """
+            """*INHERIT*"""
             return (E>=self.E0)*self.EPS
 
         def hE(self,Egrid,**kwargs):
-            """
-            hE = .hE(Egrid,...)
-            return energy response weights on Egrid
-            CROSSCALIB applied
-            """
+            """*INHERIT*"""
             Egrid = np.array(Egrid)
             NE = len(Egrid)
             hE = np.zeros(Egrid.shape) 
@@ -361,35 +418,27 @@ class ChannelResponse(FactoryConstructorMixin):
         """
         ER_Wide
         class representing wide differential energy channel response
-        use factory class method .create() to create
-        appropriate subclass from response dictionary
         """
         @classmethod
         def is_mine(cls,*args,**kwargs):
+            """*INHERIT*"""
             keyword_check('E_TYPE',**kwargs)
-            return (kwargs['E_TYPE'].upper() == 'WIDE')
+            return (kwargs['E_TYPE'] == 'WIDE')
 
         def __init__(self,**kwargs):
             super().__init__(**kwargs)
-            self.EPS = kwargs['EPS']
-            self.E0 = kwargs['E0'] # TODO - convert to MeV
-            self.E1 = kwargs['E1'] # TODO - convert to MeV
+            keyword_check_numeric('EPS','E0','E1',**kwargs)            
+            self.EPS = squeeze(kwargs['EPS'])
+            self.E0 = squeeze(kwargs['E0']) # TODO - convert to MeV
+            self.E1 = squeeze(kwargs['E1']) # TODO - convert to MeV
             self.hE0 = (self.E1-self.E0)*self.EPS/self.CROSSCALIB  # for flat spectrum
 
         def RE(self,E):
-            """
-            R = RE(E)
-            Channel response at energy E (w/o CROSSCALIB)
-            output is dimensionless
-            """
+            """*INHERIT*"""
             return ((E>=self.E0) & (E<=self.E1))*self.EPS
 
         def hE(self,Egrid,**kwargs):
-            """
-            hE = .hE(Egrid,...)
-            return energy response weights on Egrid
-            CROSSCALIB applied
-            """
+            """*INHERIT*"""
             
             # treat as difference between two integral channels
             low = ChannelResponse.DE_Int(**kwargs)
@@ -400,38 +449,30 @@ class ChannelResponse(FactoryConstructorMixin):
         """
         ER_Table
         class representing tabular energy channel response
-        use factory class method .create() to create
-        appropriate subclass from response dictionary
         """
         @classmethod
         def is_mine(cls,*args,**kwargs):
+            """*INHERIT*"""
             keyword_check('E_TYPE',**kwargs)
-            return (kwargs['E_TYPE'].upper() == 'TBL')
+            return (kwargs['E_TYPE'] == 'TBL')
 
         def __init__(self,**kwargs):
             super().__init__(**kwargs)
-            self.EPS = kwargs['EPS']
-            self.E_GRID = kwargs['E_GRID']
+            keyword_check_numeric('EPS','E_GRID',**kwargs)
+            self.EPS = squeeze(kwargs['EPS'])
+            self.E_GRID = squeeze(kwargs['E_GRID'])
             self.hE0 = np.sum(self.E_GRID*self.EPS*make_deltas(self.E_GRID))/self.CROSSCALIB  # for flat spectrum
             self._RE = None
 
         def RE(self,E):
-            """
-            R = RE(E)
-            Channel response at energy E (w/o CROSSCALIB)
-            output is dimensionless
-            """
+            """*INHERIT*"""
             if self._RE is None:
                 # extrapolate beyond grid with nearest edge (first/last) value
                 self._RE = interp1d(self.E_GRID,self.EPS,'linear',bounds_error=False,fill_value=[self.EPS[0],self.EPS[-1]],assum_sorted=True)
             return self._RE(E)
 
         def hE(self,Egrid,**kwargs):
-            """
-            hE = .hE(Egrid,...)
-            return energy response weights on Egrid
-            CROSSCALIB applied
-            """
+            """*INHERIT*"""
             
             dE = make_deltas(Egrid,**kwargs)
             hE = self.RE(Egrid)*dE/self.CROSSCALIB
@@ -441,212 +482,291 @@ class ChannelResponse(FactoryConstructorMixin):
         """
         AngleResponse
         class representing angular responses
-        use factory class method .create() to create
-        appropriate subclass from response dictionary
+        all responses are forward-only and
+        add backward response via self.backward when bidirectional
+        when initialized with no arguments, returns a null response
+        
+        properties:
+            bidirectional - bool, is the angular response bidirectional?
+            backward - backward angular response (null class when not bidirectional)
+            area - detector area, cm^2
+            G - geometric factor for forward hemisphere particles (theta<=90) cm^2 sr
+            hA0 - goemetric factor for forward and (if bidirectional) backward hemispheres
         """
-        # omni, TBL,CYL_TELE,RECT_TELE,SLAB,DISK,PIN_HOLE
         @classmethod
         def is_mine(cls,*args,**kwargs):
-            raise RFL_Exception('Supplied keywords to not define a recognized AngleResponse')
+            """*INHERIT*"""            
+            return True # stop upward propagation, used by null
+        def __init__(self,**kwargs):
+            if kwargs: # backward present only when called with initialization data
+                self.backward = ChannelResponse.AngleResponse() # backward response is null by default
+            self.bidirectional = ('BIDIRECTIONAL' in kwargs) and (kwargs['BIDIRECTIONAL'] == 'TRUE')
+            self.area = 0.0  # used by null
+            self.G = 0.0 # used by null
         def hAalphabeta(self,alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,**kwargs):
             """
             hAalphabeta = .hAalphabeta(alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,...)
             return angular response weights on alpha x beta grid
-            see module glossar for input meanings
+            see module glossary for input meanings
             if tgrid is supplied, result is integrated over time grid
                 expects alpha0,beta0,phi0 to depend on tgird
             output units are cm^2 or cm^2-s if tgrid supplied
             """
-            raise NotImplementedError
+            return 0.0 # used by null
         def hAalpha(self,alpha0,beta0,phib,alphagrid,betagrid=None,tgrid=None,**kwargs):
             """
             hAalpha = .hAalpha(alpha0,beta0,phib,alphagrid,betagrid=None,tgrid=None,...)
             return angular response weights on alpha grid (integrated over beta)
-            see module glossar for input meanings
+            see module glossary for input meanings
             if betagrid is None, supplies numeric beta grid when needed
             if tgrid is supplied, result is integrated over time grid
                 expects alpha0,beta0,phi0 to depend on tgird
             output units are cm^2 or cm^2-s if tgrid supplied
             """
-            raise NotImplementedError
-        def hthetaphi(self,thetagrid,phigrid,**kwargs):
+            return 0.0 # used by null
+        def A(self,theta,phi):
             """
-            hAalphabeta = .hAalphabeta(thetagrid,phigrid,...)
+            A = .A(theta,phi)
+            return angular response (effective area) at specified theta,phi cm^2
+            should add forward and backward response together
+            see module glossary for input meanings
+            """
+            return 0.0 # used by null
+        def hAthetaphi(self,thetagrid,phigrid,**kwargs):
+            """
+            hAthetaphi = .hAthetaphi(thetagrid,phigrid,...)
             return angular response weights on theta x phi grid, cm^2
-            see module glossar for input meanings
+            see module glossary for input meanings
             """
-            raise NotImplementedError
+            return 0.0 # used by null
         def hAtheta(self,thetagrid,phigrid=None,**kwargs):
             """
-            halphabeta = .halphabeta(thetagrid,phigrid,...)
+            hAtheta = .hAtheta(thetagrid,phigrid,...)
             return angular response weights on theta grid, cm^2
-            see module glossar for input meanings
+            integrated over phigrid (or 0-2pi if None)
+            see module glossary for input meanings
             """
-            raise NotImplementedError
+            return 0.0 # used by null
         @property
-        def G0(self):
+        def hA0(self):
             """
             return the nominal geometric factor in cm^2 sr
+            including bidirectional effects
             """
-            raise NotImplementedError
+            return self.G + self.backward.G
 
-    class AR_Omni(AngleResponse):
+    class AR_csym(AngleResponse):
         """
-        AR_Omni
-        class representing omnidirectional angular responses
-        use factory class method .create() to create
-        appropriate subclass from response dictionary
+        AR_csym 
+        virtual base class representing phi-symmetric angular responses
+        forward response only
         """
         @classmethod
         def is_mine(cls,*args,**kwargs):
+            """*INHERIT*"""
+            return False # abstract class, never the right answer
+        def hAthetaphi(self,thetagrid,phigrid,**kwargs):
+            """*INHERIT*"""
+            dcostheta = make_deltas(-np.cos(np.radians(thetagrid)),**kwargs)
+            dphi = make_deltas(np.radians(phigrid),**kwargs)
+            return self.A(thetagrid,phigrid)*dcostheta*dphi
+        def hAtheta(self,thetagrid,phigrid=None,**kwargs):
+            """*INHERIT*"""
+            dcostheta = make_deltas(-np.cos(np.radians(thetagrid)),**kwargs)
+            if phigrid is None:
+                dphi = 2*np.phi
+                phigrid = 0.0 # dummy value
+            else:
+                dphi = make_deltas(np.radians(phigrid),**kwargs).sum()
+            return self.A(thetagrid,phigrid)*dcostheta*dphi
+
+    class AR_Omni(AR_csym):
+        """
+        AR_Omni omnidirectional response
+        class representing omnidirectional angular responses
+        Note: an omni is a sphere (same apparent area from all directions). 
+        For flat, single-element detectors, use DISK and SLAB
+        """
+        @classmethod
+        def is_mine(cls,*args,**kwargs):
+            """*INHERIT*"""
             return keyword_check_bool('RESP_TYPE',**kwargs) and \
-                (kwargs['RESP_TYPE'].upper() == '[E]')
+                (kwargs['RESP_TYPE'] == '[E]')
+        def __init__(self,**kwargs):
+            super().__init__(**kwargs)            
+            keyword_check_numeric('G',**kwargs)
+            self.G = squeeze(kwargs['G'])            
+            # assum a half omni
+            self.area = self.G/2/np.pi # equivalent sphere's cross-section 
+            if self.bidirectional:
+                # backwards is also omni
+                kwargs['BIDIRECTIONAL'] = 'FALSE'
+                self.backward = ChannelResponse.AR_Omni(**kwargs)
+        def A(self,theta,phi):
+            """*INHERIT*"""
+            return self.area*(theta<=90) + self.backward.area*(theta>90)
+
+    class AR_SingleElement(AR_Omni):
+        """
+        AR_SingleElement
+        class representing single-element detectors (i.e., w/ cos projection effect)
+        derived class must define 
+          self.area, the detector area
+          self.G, the geometric factor
+        """
+        @classmethod
+        def is_mine(cls,*args,**kwargs):
+            "*INHERIT*"
+            return False # abstract class, never the right answer
+        def __init__(self,**kwargs):
+            super().__init__(G=None,**kwargs) # supply fake G, area and G will be set in derived class
+        def A(self,theta,phi):
+            """*INHERIT*"""
+            return super().A(theta,phi)*np.abs(np.cos(np.radians(theta,phi)))
+        @property
+        def G(self):
+            """
+            Geometric factor for forward going particles
+            computed as pi*area
+            """
+            return self.area*np.pi
+    class AR_Disk(AR_csym):
+        """
+        AR_Disk
+        class representing disk angular responses
+        """
+        @classmethod
+        def is_mine(cls,*args,**kwargs):
+            return keyword_check_bool('TH_TYPE',**kwargs) and \
+                (kwargs['TH_TYPE'] == 'DISK')
+        def __init__(self,**kwargs):
+            super().__init__(**kwargs)
+            keyword_check_numeric('W1','H1',**kwargs)
+            self.W1 = squeeze(kwargs['W1'])
+            self.H1 = squeeze(kwargs['H1'])
+            self.area = self.W1*self.H1
+
+    class AR_Slab(AR_csym):
+        """
+        AR_Slab
+        class representing rectangular slab angular responses
+        """
+        @classmethod
+        def is_mine(cls,*args,**kwargs):
+            return keyword_check_bool('TH_TYPE',**kwargs) and \
+                (kwargs['TH_TYPE'] == 'SLAB')
+        def __init__(self,**kwargs):
+            super().__init__(**kwargs)
+            keyword_check_numeric('R1',**kwargs)
+            self.R1 = squeeze(kwargs['R1'])
+            self.area = np.pi*self.R1**2
+            self.G = self.area*np.pi
 
     class AR_Pinhole(AngleResponse):
         """
         AR_Pinhole
         class representing pinhole angular responses
-        use factory class method .create() to create
-        appropriate subclass from response dictionary
         """
         @classmethod
         def is_mine(cls,*args,**kwargs):            
             return keyword_check_bool('TH_TYPE',**kwargs) and \
-                (kwargs['TH_TYPE'].upper() == 'PINHOLE')
-
-    class AR_Disk(AngleResponse):
-        """
-        AR_Disk
-        class representing disk angular responses
-        use factory class method .create() to create
-        appropriate subclass from response dictionary
-        """
-        @classmethod
-        def is_mine(cls,*args,**kwargs):
-            return keyword_check_bool('TH_TYPE',**kwargs) and \
-                (kwargs['TH_TYPE'].upper() == 'DISK')
-
-    class AR_Slab(AngleResponse):
-        """
-        AR_Slab
-        class representing rectangular slab angular responses
-        use factory class method .create() to create
-        appropriate subclass from response dictionary
-        """
-        @classmethod
-        def is_mine(cls,*args,**kwargs):
-            return keyword_check_bool('TH_TYPE',**kwargs) and \
-                (kwargs['TH_TYPE'].upper() == 'SLAB')
+                (kwargs['TH_TYPE'] == 'PINHOLE')
 
     class AR_Tele_sym(AngleResponse):
         """
         AR_Tele_sym
         class representing phi-symmetric telescope angular responses
-        use factory class method .create() to create
-        appropriate subclass from response dictionary
         """
         @classmethod
         def is_mine(cls,*args,**kwargs):
             return keyword_check_bool('TH_TYPE',**kwargs) and \
-                (kwargs['TH_TYPE'].upper() == 'CYL_TELE')
+                (kwargs['TH_TYPE'] == 'CYL_TELE')
 
     class AR_Table_sym(AngleResponse):
         """
         AR_Table_sym
         class representing phi-symmetric tabular angular responses
-        use factory class method .create() to create
-        appropriate subclass from response dictionary
         """
         @classmethod
         def is_mine(cls,*args,**kwargs):
             return keyword_check_bool('TH_TYPE',**kwargs) and \
-                (kwargs['TH_TYPE'].upper() == 'TBL')
+                (kwargs['TH_TYPE'] == 'TBL')
 
     class AR_Tele_asym(AngleResponse):
         """
         AR_Tele_asym
         class representing phi-asymmetric telescope angular responses
-        use factory class method .create() to create
-        appropriate subclass from response dictionary
         """
         @classmethod
         def is_mine(cls,*args,**kwargs):
             return keyword_check_bool('TP_TYPE',**kwargs) and \
-                (kwargs['TP_TYPE'].upper() == 'RECT_TELE')
+                (kwargs['TP_TYPE'] == 'RECT_TELE')
 
     class AR_Table_asym(AngleResponse):
         """
         AR_Table_asym
         class representing phi-asymmetric tabular angular responses
-        use factory class method .create() to create
-        appropriate subclass from response dictionary
         """
         @classmethod
         def is_mine(cls,*args,**kwargs):
             return keyword_check_bool('TP_TYPE',**kwargs) and \
-                (kwargs['TP_TYPE'].upper() == 'TBL')
+                (kwargs['TP_TYPE'] == 'TBL')
 
 
 class CR_Omni(ChannelResponse):
     """
     CR_Omni
     omnidirectional channel response
-    Use factory class method .create() to create
-    appropriate subclass from response dictionary
     """
     
     @classmethod
     def is_mine(cls,*args,**kwargs):
         keyword_check('RESP_TYPE',**kwargs)
-        return (kwargs['RESP_TYPE'].upper() == '[E]')
+        return (kwargs['RESP_TYPE'] == '[E]')
     
 class CR_Esep_sym(CR_Omni):
     """
     CR_Esep_sym
     energy-separable, phi-symmetric channel response
-    Use factory class method .create() to create
-    appropriate subclass from response dictionary
     """
     @classmethod
     def is_mine(cls,*args,**kwargs):
         keyword_check('RESP_TYPE',**kwargs)
-        return (kwargs['RESP_TYPE'].upper() == '[E][TH]')
+        return (kwargs['RESP_TYPE'] == '[E][TH]')
     
 class CR_Esep_asym(CR_Esep_sym):
     """
     CR_Esep_asym
     energy-separable, phi-asymmetric channel response
-    Use factory class method .create() to create
-    appropriate subclass from response dictionary
     """
     @classmethod
     def is_mine(cls,*args,**kwargs):
         keyword_check('RESP_TYPE',**kwargs)
-        return (kwargs['RESP_TYPE'].upper() == '[E][TH,PH]')
+        return (kwargs['RESP_TYPE'] == '[E][TH,PH]')
 
 class CR_insep_sym(CR_Omni):
     """
     CR_insep_sym
     energy-inseparable, phi-symmetric channel response
-    Use factory class method .create() to create
-    appropriate subclass from response dictionary
     """
     @classmethod
     def is_mine(cls,*args,**kwargs):
         keyword_check('RESP_TYPE',**kwargs)
-        return (kwargs['RESP_TYPE'].upper() == '[E,TH]')
+        return (kwargs['RESP_TYPE'] == '[E,TH]')
     
 class CR_insep_asym(CR_insep_sym):
     """
     CR_insep_asym
     energy-inseparable, phi-asymmetric channel response
-    Use factory class method .create() to create
-    appropriate subclass from response dictionary
     """
     @classmethod
     def is_mine(cls,*args,**kwargs):
         keyword_check('RESP_TYPE',**kwargs)
-        return (kwargs['RESP_TYPE'].upper() == '[E,TH,PH]')
+        return (kwargs['RESP_TYPE'] == '[E,TH,PH]')
+
+# inherit dosctrings for everythin descended from FactoryConstructorMixin
+# includes ChannelResponse and its internal classes EnergyResponse and AngleResponse
+inherit_docstrings(FactoryConstructorMixin)
 
 if __name__ == '__main__':
 
