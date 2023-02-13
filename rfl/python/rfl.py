@@ -75,26 +75,25 @@ def get_list_neighbors(lst,q):
     i = get_list_neighbors(lst,q)
     find bounding neighbors of q in list lst
     if q is scalar:
-        returns i = (2,), where lst[i[0]] <= q <= lst[i[1]]
+        returns i = (2,), where lst[i[0]] <= q < lst[i[1]]
     else:
-        returns i = (len(q),2), where lst[i[:,0]] <= q <= lst[i[:,1]]
+        returns i = (len(q),2), where lst[i[:,0]] <= q < lst[i[:,1]]
     i == -1 implies q out of range of lst
     """
     lst = np.array(lst).ravel()
     N = len(lst)
     is_scalar = np.isscalar(q)
     q = np.atleast_1d(q).ravel()
-    i = np.full((len(q),2),np.nan)
+    i = np.full((len(q),2),-1)
     iq = np.isfinite(q)
-    i[iq,0] = interp1d(lst,np.arange(N),'nearest',bounds_error=False)(q[iq])
-    f = np.isfinite(i[:,0])
+    i[iq,0] = interp1d(lst,np.arange(N,dtype=int),'nearest',bounds_error=False)(q[iq])
+    f = (i[:,0]>=0)
     if any(f):
         i[f,0] = i[f,0] - (q[f]<lst[i[f,0]]) # force to greatest list <= q
         i[f,1] = i[f,0]+1 # next neighbor to right
     # limit checks
     i[i>=N] = -1
     i[i<0] = -1
-    i[np.logical_not(np.isfinite(i))] = -1
     if is_scalar:
         i = i[0,:]
     return i
@@ -104,10 +103,12 @@ def make_deltas(grid,int_method='trapz',**kwargs):
     d = make_deltas(grid,int_method='trapz',...)
     d are the default weights for a given 1-d grid
     d is (N,), unless N<=1, in which case d is scalar
-    for empty grid, returns 1
+    for empty grid or None, returns 1
     for singleton grid, returns grid (assumes it's actually dt)
     keyword args besides int_method ignored
     """
+    if grid is None:
+        return 1
     grid = np.atleast_1d(grid).ravel()
     if len(grid) == 0:
         return 1
@@ -232,7 +233,72 @@ def squeeze(val):
     if val.size==1:
         val = np.asscalar(val) # reduce singleton to scalar
     return val
+
+def interp_weights(xgrid,xhat,extrap_left=False,extrap_right=False,period=None):
+    """
+        v = interp_weights(xgrid,xhat,extrap_left=False,extrap_right=False,period=None)
+        xgrid is list of grid x values (Nx,)
+        xhat is list of query x values (N,)
+        extrap_left - 
+            0,False - zero for xhat < xgrid[0]
+            True - linearly extrapolate for xhat < xgrid[0]
+            'fixed' xhat < xgrid[0] use value at xgrid[0]
+        extrap_right - 
+            0,False - zero for xhat > xgrid[-1]
+            True - linearly extrapolate for xhat > xgrid[-1]
+            'fixed' xhat > xgrid[-1] use value at xgrid[-1]
+        period - specify period over which x values wrap around
+        v is the value of the interpolation weights from the xgrid to points xhat
+        v is (N,Nx)
+        if xhat is a scalar, then v is (Nx,)
+    """
+    xgrid = np.array(xgrid).ravel()
+    isscalar = np.isscalar(xhat)
+    xhat = np.atleast_1d(xhat).ravel()
+    if period:
+        xhat = np.remainder(xhat,period)
+    Nx = xgrid.size
+    if Nx < 2:
+        raise ValueError('xgrid must have at least 2 entries')
+    N = xhat.size
+    v = np.zeros((N,Nx))
+    I = get_list_neighbors(xgrid,xhat) # (N,2)
+    # prepare to broadacst
     
+    for (k,(ileft,iright)) in enumerate(I):
+        if (ileft>=0) & (ileft<Nx-1): #xgrid[i] <= x < xgrid[i+1]
+            v[k,ileft] = (xgrid[ileft+1]-xhat[k])/(xgrid[ileft+1]-xgrid[ileft])
+        if (iright>0) & (iright<Nx): # xgrid[i-1] <= x < xgrid[i]
+            v[k,iright] = (xhat[k]-xgrid[iright-1])/(xgrid[iright]-xgrid[iright-1])
+            
+
+    if extrap_left == 'fixed':
+        f = xhat < xgrid[0]
+        v[f,0] = 1.0
+    elif extrap_left:
+        dx = (xgrid[1]-xgrid[0])
+        f = (xhat < xgrid[0]) & (xhat > xgrid[0]-dx)
+        v[f,0] = 1.0-(xgrid[0]-xhat[f])/dx # extrapolate left
+        
+
+    if period:
+        dx = xgrid[0]+period-xgrid[-1]
+        f = xhat<xgrid[0]
+        v[f,-1] = (xgrid[0]-xhat[f])/dx
+        v[f,0] = 1-v[f,-1]
+        f = xhat>xgrid[-1]
+        v[f,0] = (xhat[f]-xgrid[-1])/dx
+        v[f,-1] = 1-v[f,0]
+    elif extrap_right == 'fixed':
+        f = xhat > xgrid[-1]
+        v[f,-1] = 1.0
+    elif extrap_right:
+        dx = xgrid[-1]-xgrid[-2]
+        f = (xhat >= xgrid[-1]) & (xhat < xgrid[-1]+dx)
+        v[f,-1] = 1.0-(xhat[f]-xgrid[-1])/dx
+    if isscalar:
+        v = v[0,:] # (1,Nx) -> (Nx,)
+    return v
 
 class FactoryConstructorMixin(object):
     """
@@ -372,23 +438,7 @@ class ChannelResponse(FactoryConstructorMixin):
 
         def hE(self,Egrid,**kwargs):
             """*INHERIT*"""
-            Egrid = np.array(Egrid)
-            NE = len(Egrid)
-            hE = np.zeros(Egrid.shape) 
-            I = get_list_neighbors(Egrid,self.E0)
-            # Egrid(I(1)) <= inst_info.E0 < Egrid(I(2))
-            # or I(2) = -1 or both are -1
-            
-            # left side
-            i = I[0]
-            if (i>=0) and (i<NE-1): # E[i] <= E0 < E[i+1]
-                hE[i] = self.dE*self.EPS*(Egrid[i+1]-self.E0)/(Egrid[i+1]-Egrid[i])
-            
-            # right side
-            i = I[1]
-            if (i>=1) and (i<NE): # E[i-1] < E0 < E[i]
-                hE[i] = self.dE*self.EPS*(self.E0-Egrid[i-1])/(Egrid[i]-Egrid[i-1])
-                
+            hE = interp_weights(Egrid,self.E0)*self.dE*self.EPS
             return hE / self.CROSSCALIB
 
             
@@ -459,6 +509,11 @@ class ChannelResponse(FactoryConstructorMixin):
             self.E0 = squeeze(kwargs['E0']) # TODO - convert to MeV
             self.E1 = squeeze(kwargs['E1']) # TODO - convert to MeV
             self.hE0 = (self.E1-self.E0)*self.EPS/self.CROSSCALIB  # for flat spectrum
+            # build two integral channels to difference them
+            tmp = {**kwargs,'E_TYPE':'INT'} # integral channel w/ same E0
+            self.low = ChannelResponse.ER_Int(**tmp)
+            tmp['E0'] = self.E1 # integral channel above this one
+            self.high = ChannelResponse.ER_Int(**tmp)
 
         def RE(self,E):
             """*INHERIT*"""
@@ -466,11 +521,8 @@ class ChannelResponse(FactoryConstructorMixin):
 
         def hE(self,Egrid,**kwargs):
             """*INHERIT*"""
-            
             # treat as difference between two integral channels
-            low = ChannelResponse.DE_Int(**kwargs)
-            high = {**kwargs,'E0':self.E1}
-            return low.hE(Egrid)-high.hE(Egrid)
+            return self.low.hE(Egrid)-self.high.hE(Egrid)
             
     class ER_Table(EnergyResponse):
         """
@@ -539,29 +591,6 @@ class ChannelResponse(FactoryConstructorMixin):
             self.bidirectional = ('BIDIRECTIONAL' in kwargs) and (kwargs['BIDIRECTIONAL'] == 'TRUE')
             self.area = 0.0  # used by null
             self.G = 0.0 # used by null
-        def hAalphabeta(self,alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,**kwargs):
-            """
-            hAalphabeta = .hAalphabeta(alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,...)
-            return angular response weights on alpha x beta grid
-            see module glossary for input meanings
-            if tgrid is supplied, result is integrated over time grid
-                expects alpha0,beta0,phi0 to depend on tgird
-            output units are cm^2 or cm^2-s if tgrid supplied
-            hAalphabeta is scalar or shape (len(alphagrid),len(betagrid))
-            """
-            return 0.0 # used by null
-        def hAalpha(self,alpha0,beta0,phib,alphagrid,betagrid=None,tgrid=None,**kwargs):
-            """
-            hAalpha = .hAalpha(alpha0,beta0,phib,alphagrid,betagrid=None,tgrid=None,...)
-            return angular response weights on alpha grid (integrated over beta)
-            see module glossary for input meanings
-            if betagrid is None, supplies numeric beta grid when needed
-            if tgrid is supplied, result is integrated over time grid
-                expects alpha0,beta0,phi0 to depend on tgird
-            output units are cm^2 or cm^2-s if tgrid supplied
-            hAalph ais a scalar or 1-d numpy array of same size as alphagrid
-            """
-            return 0.0 # used by null
         def A(self,theta,phi):
             """
             A = .A(theta,phi)
@@ -588,13 +617,39 @@ class ChannelResponse(FactoryConstructorMixin):
             see module glossary for input meanings
             """
             return 0.0 # used by null
+        def hAalphabeta(self,alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,**kwargs):
+            """
+            hAalphabeta = .hAalphabeta(alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,...)
+            return angular response weights on alpha x beta grid
+            see module glossary for input meanings
+            if tgrid is supplied, result is integrated over time grid
+                expects alpha0,beta0,phi0 to depend on tgird
+            output units are cm^2 or cm^2-s if tgrid supplied
+            hAalphabeta is scalar or shape (len(alphagrid),len(betagrid))
+            """
+            return 0.0 # used by null
+        def hAalpha(self,alpha0,beta0,phib,alphagrid,betagrid=None,tgrid=None,**kwargs):
+            """
+            hAalpha = .hAalpha(alpha0,beta0,phib,alphagrid,betagrid=None,tgrid=None,...)
+            return angular response weights on alpha grid (integrated over beta)
+            see module glossary for input meanings
+            if betagrid is None, supplies numeric beta grid when needed
+            if tgrid is supplied, result is integrated over time grid
+                expects alpha0,beta0,phi0 to depend on tgird
+            output units are cm^2 or cm^2-s if tgrid supplied
+            hAalph ais a scalar or 1-d numpy array of same size as alphagrid
+            """
+            return 0.0 # used by null
         @property
         def hA0(self):
             """
             return the nominal geometric factor in cm^2 sr
             including bidirectional effects
             """
-            return self.G + self.backward.G
+            hA0 = self.G
+            if self.bidirectional:
+                hA0 += self.backward.G
+            return hA0
 
     class AR_csym(AngleResponse):
         """
@@ -613,7 +668,10 @@ class ChannelResponse(FactoryConstructorMixin):
             dphi = make_deltas(np.radians(phigrid),**kwargs)
             thetaI,phiI = broadcast_grids(thetagrid,phigrid)
             dcosthetaI,dphiI = self.broadcast_grids(dcostheta,dphi)
-            return (self.A(thetaI,phiI)*dcostheta*(thetaI<=90)+self.backward.A(180-thetagrid,phigrid)*dcostheta*(thetaI>90))*dphi
+            tmp = self.A(thetaI,phiI)*dcostheta*(thetaI<=90)
+            if self.bidirectional:
+                tmp += self.backward.A(180-thetaI,phiI)*dcostheta*(thetaI>90)
+            return tmp*dphi
         def hAtheta(self,thetagrid,phigrid=None,**kwargs):
             """*INHERIT*"""
             dcostheta = np.abs(make_deltas(-np.cos(np.radians(thetagrid)),**kwargs))
@@ -622,7 +680,10 @@ class ChannelResponse(FactoryConstructorMixin):
             else:
                 dphi = make_deltas(np.radians(phigrid),**kwargs).sum()
             phigrid = 0.0 # dummy value to save calculation
-            return (self.A(thetagrid,phigrid)*dcostheta*(thetagrid<=90)+self.backward.A(180-thetagrid,phigrid)*dcostheta(thetagrid>90))*dphi
+            tmp = self.A(thetagrid,phigrid)*dcostheta*(thetagrid<=90)
+            if self.bidirectional:
+                tmp += self.backward.A(180-thetagrid,phigrid)*dcostheta*(thetagrid>90)
+            return tmp*dphi
 
     class AR_Omni(AR_csym):
         """
@@ -639,20 +700,30 @@ class ChannelResponse(FactoryConstructorMixin):
                 (kwargs['RESP_TYPE'] == '[E]')
         def __init__(self,**kwargs):
             super().__init__(**kwargs)
+            G = None
             if ('G' in kwargs) and kwargs['G'] is not None:
                 # derived class may provide G as none
                 keyword_check_numeric('G',**kwargs)
-                self.G = squeeze(kwargs['G']) # TODO: convert to cm^2 sr       
-                # assume a half omni
+                # setup for half omni: full G over 2pi
+                G = squeeze(kwargs['G']) # TODO: convert to cm^2 sr       
+                self.G = G
                 self.area = self.G/2/np.pi # equivalent sphere's cross-section 
             if self.bidirectional:
                 # backwards is also omni
                 backw = kwargs.copy()
                 backw['BIDIRECTIONAL'] = 'FALSE'
+                # divide forward part in half:
+                if G is not None:
+                    self.G /= 2
+                    self.aera /= 2
+                    backw['G'] = self.G # already divided by 2
                 self.backward = self.__class__(**backw)
         def A(self,theta,phi):
             """*INHERIT*"""
-            return self.area*(theta<=90) + self.backward.area*(theta>90)
+            A = self.area*(theta<=90)
+            if self.bidirectiona:
+                A += self.backward.area*(theta>90)
+            return  A
 
     class AR_SingleElement(AR_Omni):
         """
@@ -711,10 +782,10 @@ class ChannelResponse(FactoryConstructorMixin):
             self.H1 = squeeze(kwargs['H1']) # TODO: convert to cm
             self.area = self.W1*self.H1
 
-    class AR_Tele_sym(AR_csym):
+    class AR_Tele_Cyl(AR_csym):
         """
-        AR_Tele_sym
-        class representing phi-symmetric telescope angular responses
+        AR_Tele_Cyl
+        class representing cylindrically-symmetric telescope angular responses
         Using Sullivan's 1971 paper as updated in ~2010
         initialization requires R1, R2, D
         """
@@ -740,7 +811,7 @@ class ChannelResponse(FactoryConstructorMixin):
                 # backward telescope reverses R2 and R1
                 backw['R1'] = self.R1
                 backw['R2'] = self.R2
-                self.backward = ChannelResponse.AR_Tele_sym(**backw)
+                self.backward = self.__class__(**backw)
         def A(self,theta,phi):
             """*INHERIT*"""
             # uses Sullivan's updated paper, equation 10
@@ -755,7 +826,8 @@ class ChannelResponse(FactoryConstructorMixin):
                 Psi1 = np.arccos((self.R1**2+self.D**2*tantheta**2-self.R2**2)/(2*self.D*self.R1*tantheta)) # rads
                 Psi2 = np.arccos((self.R2**2+self.D**2*tantheta**2-self.R1**2)/(2*self.D*self.R2*tantheta)) # rads
                 A[f] = np.cos(thetarads[f])/2*(self.R1**2*(2*Psi1-np.sin(2*Psi1))+self.R2**2*(2*Psi2-np.sin(2*Psi2)))
-            A += self.backward.A(180.0-theta,phi)
+            if self.bidirectional:
+                A += self.backward.A(180.0-theta,phi)
             return np.broadcast_to(A,np.broadcast(theta,phi).shape)
 
     class AR_Table_sym(AngleResponse):
@@ -791,16 +863,88 @@ class ChannelResponse(FactoryConstructorMixin):
     class AR_Pinhole(AngleResponse):
         """
         AR_Pinhole
-        class representing pinhole angular responses
+        class representing pinhole angular responses (delta function at THETA=0)
+        initialization requires G
         """
         @classmethod
         def is_mine(cls,*args,**kwargs):            
             return keyword_check_bool('TH_TYPE',**kwargs) and \
                 (kwargs['TH_TYPE'] == 'PINHOLE')
-
-    class AR_Tele_rect(AngleResponse):
+        def __init__(self,**kwargs):
+            super().__init__(**kwargs)
+            keyword_check_numeric('G',**kwargs)
+            self.G = squeeze(kwargs['G']) # TODO: convert to cm^2 sr  
+            self.area = 0
+            if self.bidirectional:
+                self.G /= 2 # divide G between forward and backward
+                backw = kwargs.copy()
+                backw['BIDIRECTIONAL'] = 'FALSE'                
+                backw['G'] = self.G # already divided in half
+                self.backward = self.__class__(**backw)
+        def A(self,theta,phi):
+            """*INHERIT*"""
+            A = self.G*(theta==0)
+            if self.bidirectional:
+                A += self.G*(theta==180)
+            return np.broadcast_to(A,np.broadcast(theta,phi).shape)
+        def hAthetaphi(self,thetagrid,phigrid,**kwargs):
+            """*INHERIT*"""
+            A = interp_weights(thetagrid,0)*self.G
+            dcostheta = np.abs(make_deltas(-np.cos(np.radians(thetagrid)),**kwargs))
+            dphi = make_deltas(np.radians(phigrid),**kwargs)
+            thetaI,phiI = broadcast_grids(thetagrid,phigrid)
+            dcosthetaI,dphiI = self.broadcast_grids(dcostheta,dphi)
+            A.shape = thetaI.shape
+            tmp = A*dcostheta*(thetaI<=90)*dphi
+            if self.bidirectional:                
+                tmp += self.backward.hAtheta(thetagrid,phigrid,**kwargs)
+            return tmp
+        def hAtheta(self,thetagrid,phigrid=None,**kwargs):
+            """*INHERIT*"""
+            A = interp_weights(thetagrid,0)*self.G
+            dcostheta = np.abs(make_deltas(-np.cos(np.radians(thetagrid)),**kwargs))
+            if phigrid is None:
+                dphi = 2*np.phi
+            else:
+                dphi = make_deltas(np.radians(phigrid),**kwargs).sum()
+            phigrid = 0.0 # dummy value to save calculation
+            tmp = A*dcostheta*(thetagrid<=90)*dphi
+            if self.bidirectional:
+                tmp += self.backward.hAtheta(thetagrid,phigrid,**kwargs)
+            return tmp
+        def hAalphabeta(self,alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,**kwargs):
+            """
+            hAalphabeta = .hAalphabeta(alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,...)
+            return angular response weights on alpha x beta grid
+            see module glossary for input meanings
+            if tgrid is supplied, result is integrated over time grid
+                expects alpha0,beta0,phi0 to depend on tgird
+            output units are cm^2 or cm^2-s if tgrid supplied
+            hAalphabeta is scalar or shape (len(alphagrid),len(betagrid))
+            """
+            raise NotImplementedError # TODO
+        def hAalpha(self,alpha0,beta0,phib,alphagrid,betagrid=None,tgrid=None,**kwargs):
+            """
+            hAalpha = .hAalpha(alpha0,beta0,phib,alphagrid,betagrid=None,tgrid=None,...)
+            return angular response weights on alpha grid (integrated over beta)
+            see module glossary for input meanings
+            if betagrid is None, supplies numeric beta grid when needed
+            if tgrid is supplied, result is integrated over time grid
+                expects alpha0,beta0,phi0 to depend on tgird
+            output units are cm^2 or cm^2-s if tgrid supplied
+            hAalph ais a scalar or 1-d numpy array of same size as alphagrid
+            """
+            dt = np.atleast_1d(make_deltas(tgrid,**kwargs))
+            alpha0 = np.broadast_to(alpha0,dt.shape)
+            dh = interp_weights(alphagrid,alpha0) # len(tgrid) x len(alphagrid)
+            h = np.dot(dt,dh) # sum over time
+            h = h*self.G*sum(dt)/sum(h) # force to integrate to Gdt
+            if self.bidirectional:
+                h += self.backward.hAalpha(alpha0,beta0,phib,alphagrid,betagrid,tgrid,**kwargs)
+            return h
+    class AR_Tele_Rect(AngleResponse):
         """
-        AR_Tele_rect
+        AR_Tele_Rect
         class representing telescope with rectangular elements
         """
         @classmethod
