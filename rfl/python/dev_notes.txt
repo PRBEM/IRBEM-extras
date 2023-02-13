@@ -26,12 +26,14 @@ Need a giant factory function to initialize the right classes
 could use @classmethod functions to dispatch for subclassing
 
 class methods:
-rfl_make_halphabeta.m - make weights for double numerical integral over alpha,beta
-rfl_make_halpha.m - make weights for numerical integral over alpha
-rfl_make_hEalphabeta.m - make weights for triple numerical integral over E,alpha,beta
+(E,alpha,beta,time)
+rfl_make_hEiso.m - make weights for numerical integral over E
 rfl_make_hEalpha.m - make weights for double numerical integral over E,alpha
-rfl_make_hEiso.m - make weights for numerical integral over E, isotropic case
-rfl_make_hE.m - make weights for numerical integral over E, isotropic case
+rfl_make_hEalphabeta.m - make weights for triple numerical integral over E,alpha,beta
+rfl_make_halpha.m - make weights for numerical integral over alpha
+rfl_make_halphabeta.m - make weights for double numerical integral over alpha,beta
+(E,theta,phi)
+rfl_make_hE.m - make weights for numerical integral over E, (integrated over theta,phi)
 rfl_make_hEtheta.m - make weights for double numerical integral over E,theta
 rfl_make_hEthetaphi.m - make weights for triple numerical integral over E,theta,phi
 rfl_make_htheta.m - make weights for numerical integral over theta
