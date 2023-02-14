@@ -46,7 +46,7 @@ TODO:
 # parent class's corresponding method
 
 import numpy as np
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d,RegularGridInterpolator
 
 # utilities
 def inherit_docstrings(cls,parent = None):
@@ -145,6 +145,7 @@ def broadcast_grids(*args,mesh=False):
             s[i] = np.array(x).size
             X[i] = np.reshape(x,s)
         return(tuple(X))
+
 def validate_grid(grid):
     """
     returns true if grid is value:
@@ -158,6 +159,14 @@ def validate_grid(grid):
     return True
 
 # classes
+
+def default_phigrid(**kwargs):
+    """
+    phigrid = default_phigrid(**kwargs)
+    returns default phi grid, as modified by keyword args
+    """
+    # TODO: implement some keyword controls
+    return np.linspace(0,360,361)
 
 class RFLError(Exception):
     """
@@ -346,6 +355,710 @@ class FactoryConstructorMixin(object):
         return None            
  
 
+class EnergyResponse(FactoryConstructorMixin):
+    """
+    EnergyResponse
+    abstract class representing energy responses
+    use factory class method .create() to create
+    appropriate subclass from response dictionary
+    """
+    @classmethod
+    def is_mine(cls,*args,**kwargs):
+        """*INHERIT*"""
+        keyword_check('E_TYPE',**kwargs)
+        raise KeywordError('Supplied keywords to not define a recognized EnergyResponse')
+    
+    def __init__(self,**kwargs):
+        if 'CROSSCALIB' not in kwargs:
+            print('CROSSCALIB not found in channel description, assuming unity')
+            self.CROSSCALIB = 1.0 # default
+        else:
+            self.CROSSCALIB = kwargs['CROSSCALIB']
+        
+    def RE(self,E):
+        """
+        R = RE(E)
+        Channel response at energy E (w/o CROSSCALIB)
+        output is dimensionless
+        """
+        raise NotImplementedError
+    def hE(self,Egrid,**kwargs):
+        """
+        hE = .hE(Egrid,...)
+        return energy response weights on Egrid
+        Egrid and hE are 1-d numpy arrays of the sampe size
+        CROSSCALIB applied
+        """
+        raise NotImplementedError
+
+class ER_Diff(EnergyResponse):
+    """
+    ER_Diff
+    class representing differential energy channel response
+    use factory class method .create() to create
+    appropriate subclass from response dictionary
+    initialization requires EPS, E0, DE
+    """
+    @classmethod
+    def is_mine(cls,*args,**kwargs):
+        """*INHERIT*"""
+        keyword_check('E_TYPE',**kwargs)
+        return (kwargs['E_TYPE'] == 'DIFF')
+
+    def __init__(self,**kwargs):
+        super().__init__(**kwargs)
+        keyword_check_numeric('EPS','E0','DE',**kwargs)            
+        self.EPS = squeeze(kwargs['EPS'])
+        self.E0 = squeeze(kwargs['E0']) # TODO - convert to MeV
+        self.DE = squeeze(kwargs['DE']) # TODO - convert to MeV
+        self.hE0 = self.DE*self.EPS/self.CROSSCALIB # hE for flat spectrum
+
+    def RE(self,E):
+        """*INHERIT*"""
+        return (E==self.E0)*self.EPS # DE gets ignored, which is bad, but unaviodable
+
+    def hE(self,Egrid,**kwargs):
+        """*INHERIT*"""
+        hE = interp_weights(Egrid,self.E0)*self.dE*self.EPS
+        return hE / self.CROSSCALIB
+
+        
+class ER_Int(EnergyResponse):
+    """
+    ER_Int
+    class representing integral energy channel response
+    initialization requires EPS, E0
+    """
+    @classmethod
+    def is_mine(cls,*args,**kwargs):
+        """*INHERIT*"""
+        keyword_check('E_TYPE',**kwargs)
+        return (kwargs['E_TYPE'] == 'INT')
+
+    def __init__(self,**kwargs):
+        super().__init__(**kwargs)
+        keyword_check_numeric('EPS','E0',**kwargs)            
+        self.EPS = squeeze(kwargs['EPS'])
+        self.E0 = squeeze(kwargs['E0']) # TODO - convert to MeV
+        self.hE0 = self.DE*self.EPS/self.CROSSCALIB  # should be inf for flat spectrum, but assume energy bandwidth==1
+
+    def RE(self,E):
+        """*INHERIT*"""
+        return (E>=self.E0)*self.EPS
+
+    def hE(self,Egrid,**kwargs):
+        """*INHERIT*"""
+        Egrid = np.array(Egrid)
+        NE = len(Egrid)
+        hE = np.zeros(Egrid.shape) 
+        I = get_list_neighbors(Egrid,self.E0)
+        # Egrid[I[0]] <= inst_info.E0 < Egrid[I[1]]
+        # or I[1] = -1 or both I=-1
+        
+        dE = make_deltas(Egrid,**kwargs)
+        hE = dE # default, eventually only kept for Egrid>Egrid[I[1]]
+        hE[0:(I[0]+1)] = 0 # zero out below E0
+        
+        # left side
+        i = I[0]
+        if (i>=0) and (i<NE-1): # E[i] <= E0 < E[i+1]
+            hE[i] = (Egrid[i+1]-self.E0)**2/2/(Egrid[i+1]-Egrid[i])
+        
+        # right side
+        i = I[1]
+        if (i>=1) and (i<NE): # E[i-1] < E0 < E[i]
+            hE[i] = (self.E0-Egrid[i-1])**2/2/(Egrid[i]-Egrid[i-1])
+            
+        return hE *self.EPS / self.CROSSCALIB
+    
+class ER_Wide(EnergyResponse):
+    """
+    ER_Wide
+    class representing wide differential energy channel response
+    initialization requires EPS, E0, E1
+    """
+    @classmethod
+    def is_mine(cls,*args,**kwargs):
+        """*INHERIT*"""
+        keyword_check('E_TYPE',**kwargs)
+        return (kwargs['E_TYPE'] == 'WIDE')
+
+    def __init__(self,**kwargs):
+        super().__init__(**kwargs)
+        keyword_check_numeric('EPS','E0','E1',**kwargs)            
+        self.EPS = squeeze(kwargs['EPS'])
+        self.E0 = squeeze(kwargs['E0']) # TODO - convert to MeV
+        self.E1 = squeeze(kwargs['E1']) # TODO - convert to MeV
+        self.hE0 = (self.E1-self.E0)*self.EPS/self.CROSSCALIB  # for flat spectrum
+        # build two integral channels to difference them
+        tmp = {**kwargs,'E_TYPE':'INT'} # integral channel w/ same E0
+        self.low = ER_Int(**tmp)
+        tmp['E0'] = self.E1 # integral channel above this one
+        self.high = ER_Int(**tmp)
+
+    def RE(self,E):
+        """*INHERIT*"""
+        return ((E>=self.E0) & (E<=self.E1))*self.EPS
+
+    def hE(self,Egrid,**kwargs):
+        """*INHERIT*"""
+        # treat as difference between two integral channels
+        return self.low.hE(Egrid)-self.high.hE(Egrid)
+        
+class ER_Table(EnergyResponse):
+    """
+    ER_Table
+    class representing tabular energy channel response
+    """
+    @classmethod
+    def is_mine(cls,*args,**kwargs):
+        """*INHERIT*"""
+        keyword_check('E_TYPE',**kwargs)
+        return (kwargs['E_TYPE'] == 'TBL')
+
+    def __init__(self,**kwargs):
+        super().__init__(**kwargs)
+        keyword_check_numeric('EPS','E_GRID',**kwargs)
+        self.EPS = squeeze(kwargs['EPS'])
+        self.E_GRID = squeeze(kwargs['E_GRID'])
+        if not validate_grid(self.E_GRID):
+            raise ValueError('E_GRID is not a valid grid: 1-d, unique')
+
+        if self.EPS.shape != self.E_GRID.shape:
+            raise ArgSizeError('E_GRID  and EPS are not the same shape')
+            
+        self.hE0 = np.sum(self.E_GRID*self.EPS*make_deltas(self.E_GRID))/self.CROSSCALIB  # for flat spectrum
+        self._RE = None
+
+    def RE(self,E):
+        """*INHERIT*"""
+        if self._RE is None:
+            # extrapolate beyond grid with nearest edge (first/last) value
+            self._RE = interp1d(self.E_GRID,self.EPS,'linear',bounds_error=False,fill_value=[self.EPS[0],self.EPS[-1]],assum_sorted=True)
+        return self._RE(E)
+
+    def hE(self,Egrid,**kwargs):
+        """*INHERIT*"""
+        
+        dE = make_deltas(Egrid,**kwargs)
+        hE = self.RE(Egrid)*dE/self.CROSSCALIB
+        return hE
+
+class AngleResponse(FactoryConstructorMixin):
+    """
+    AngleResponse
+    class representing angular responses
+    all responses are forward-only and
+    add backward response via self.backward when bidirectional
+    when initialized with no arguments, returns a null response
+    
+    properties:
+        bidirectional - bool, is the angular response bidirectional?
+        backward - backward angular response (null class when not bidirectional)
+        area - detector area, cm^2
+        G - geometric factor for forward hemisphere particles (theta<=90) cm^2 sr
+        hA0 - goemetric factor for forward and (if bidirectional) backward hemispheres
+    """
+    @classmethod
+    def is_mine(cls,*args,**kwargs):
+        """*INHERIT*"""     
+        if not kwargs:
+            return True # null response
+        else:
+            raise KeywordError('The data provided did not define a recognized AngleResponse')
+    def __init__(self,**kwargs):
+        self.bidirectional = ('BIDIRECTIONAL' in kwargs) and (kwargs['BIDIRECTIONAL'] == 'TRUE')
+    def A(self,theta,phi):
+        """
+        A = .A(theta,phi)
+        return angular response (effective area) at specified theta,phi cm^2
+        should add forward and backward response together
+        theta and phi must broadcast together
+        see module glossary for input meanings
+        """
+        raise NotImplementedError # abstract base class
+    def hAthetaphi(self,thetagrid,phigrid,**kwargs):
+        """
+        hAthetaphi = .hAthetaphi(thetagrid,phigrid,...)
+        return angular response weights on theta x phi grid, cm^2
+        hAthetaphi is a scalar or shape (len(thetagrid),len(phigrid))
+        see module glossary for input meanings
+        """
+        dcostheta = np.abs(make_deltas(-np.cos(np.radians(thetagrid)),**kwargs))
+        dphi = make_deltas(np.radians(phigrid),**kwargs)
+        thetaI,phiI = broadcast_grids(thetagrid,phigrid)
+        dcosthetaI,dphiI = self.broadcast_grids(dcostheta,dphi)
+        # includes backward response if present
+        return self.A(thetaI,phiI)*dcosthetaI*dphiI
+    def hAtheta(self,thetagrid,phigrid=None,**kwargs):
+        """
+        hAtheta = .hAtheta(thetagrid,phigrid,...)
+        return angular response weights on theta grid, cm^2
+        integrated over phigrid (or 0-2pi if None)
+        hAtheta is a scalar or 1-d numpy array of same size as thetagrid
+        see module glossary for input meanings
+        """
+        if phigrid is None:
+            phigrid = default_phigrid(**kwargs)
+        h = self.hAthetaphi(thetagrid,phigrid,**kwargs)
+        return h.sum(axis=1) # integrate over beta
+    def hAalphabeta(self,alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,**kwargs):
+        """
+        hAalphabeta = .hAalphabeta(alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,...)
+        return angular response weights on alpha x beta grid
+        see module glossary for input meanings
+        if tgrid is supplied, result is integrated over time grid
+            expects alpha0,beta0,phi0 to depend on tgird
+        output units are cm^2 or cm^2-s if tgrid supplied
+        hAalphabeta is scalar or shape (len(alphagrid),len(betagrid))
+        """
+        raise NotImplementedError
+    def hAalpha(self,alpha0,beta0,phib,alphagrid,betagrid=None,tgrid=None,**kwargs):
+        """
+        hAalpha = .hAalpha(alpha0,beta0,phib,alphagrid,betagrid=None,tgrid=None,...)
+        return angular response weights on alpha grid (integrated over beta)
+        see module glossary for input meanings
+        if betagrid is None, supplies numeric beta grid when needed
+        if tgrid is supplied, result is integrated over time grid
+            expects alpha0,beta0,phi0 to depend on tgird
+        output units are cm^2 or cm^2-s if tgrid supplied
+        hAalph ais a scalar or 1-d numpy array of same size as alphagrid
+        """
+        h = self.hAalphabeta(alpha0,beta0,phib,alphagrid,betagrid,tgrid,**kwargs)
+        return h.sum(axis=1) # integrate over beta
+    @property
+    def hA0(self):
+        """
+        return the nominal geometric factor in cm^2 sr
+        including bidirectional effects
+        """
+        hA0 = self.G
+        if self.bidirectional:
+            hA0 += self.backward.hA0
+        return hA0
+
+class AR_csym(AngleResponse):
+    """
+    AR_csym 
+    virtual base class representing phi-symmetric angular responses
+    forward response only
+    """
+    @classmethod
+    def is_mine(cls,*args,**kwargs):
+        """*INHERIT*"""
+        return False # abstract class, never the right answer
+                
+    def hAtheta(self,thetagrid,phigrid=None,**kwargs):
+        """*INHERIT*"""
+        dcostheta = np.abs(make_deltas(-np.cos(np.radians(thetagrid)),**kwargs))
+        if phigrid is None:
+            dphi = 2*np.phi
+        else:
+            dphi = make_deltas(np.radians(phigrid),**kwargs).sum()
+        phigrid = 0.0 # dummy value to save calculation
+        # includes backward response if present
+        return self.A(thetagrid,phigrid)*dcostheta*dphi
+
+class AR_Omni(AR_csym):
+    """
+    AR_Omni omnidirectional response
+    class representing omnidirectional angular responses
+    initialization requires G (None OK for derived classes)
+    Note: an omni is a sphere (same apparent area from all directions). 
+    For flat, single-element detectors, use DISK and SLAB
+    """
+    @classmethod
+    def is_mine(cls,*args,**kwargs):
+        """*INHERIT*"""
+        return keyword_check_bool('RESP_TYPE',**kwargs) and \
+            (kwargs['RESP_TYPE'] == '[E]')
+    def __init__(self,**kwargs):
+        super().__init__(**kwargs)
+        G = None
+        if ('G' in kwargs) and kwargs['G'] is not None:
+            # derived class may provide G as none
+            keyword_check_numeric('G',**kwargs)
+            # setup for half omni: full G over 2pi
+            G = squeeze(kwargs['G']) # TODO: convert to cm^2 sr       
+            self.G = G
+            self.area = self.G/2/np.pi # equivalent sphere's cross-section 
+        if self.bidirectional:
+            # backwards is also omni
+            backw = kwargs.copy()
+            backw['BIDIRECTIONAL'] = 'FALSE'
+            # divide forward part in half:
+            if G is not None:
+                self.G /= 2
+                self.aera /= 2
+                backw['G'] = self.G # already divided by 2
+                backw['L_UNIT'] = 'cm'
+            self.backward = self.__class__(**backw)
+    def A(self,theta,phi):
+        """*INHERIT*"""
+        A = self.area*(theta<=90)
+        if self.bidirectiona:
+            A += self.backward.area*(theta>90)
+        return  A
+
+class AR_SingleElement(AR_Omni):
+    """
+    AR_SingleElement
+    abstract class representing single-element detectors (i.e., w/ cos projection effect)
+    derived class must define 
+      self.area, the detector area
+      self.G, the geometric factor
+    """
+    @classmethod
+    def is_mine(cls,*args,**kwargs):
+        "*INHERIT*"
+        return False # abstract class, never the right answer
+    def __init__(self,**kwargs):
+        super().__init__(G=None,**kwargs) # supply fake G, area and G will be set in derived class
+    def A(self,theta,phi):
+        """*INHERIT*"""
+        return super().A(theta,phi)*np.abs(np.cos(np.radians(theta,phi)))
+    @property
+    def G(self):
+        """
+        Geometric factor for forward going particles
+        computed as pi*area
+        """
+        return self.area*np.pi
+class AR_Disk(AR_SingleElement):
+    """
+    AR_Disk
+    class representing disk angular responses
+    initialization requires R1, R2, D
+    """
+    @classmethod
+    def is_mine(cls,*args,**kwargs):
+        return keyword_check_bool('TH_TYPE',**kwargs) and \
+            (kwargs['TH_TYPE'] == 'DISK')
+    def __init__(self,**kwargs):
+        super().__init__(**kwargs)
+        keyword_check_numeric('R1',**kwargs)
+        self.R1 = squeeze(kwargs['R1']) # TODO: convert to cm
+        self.area = np.pi*self.R1**2
+
+class AR_Slab(AR_SingleElement):
+    """
+    AR_Slab
+    class representing rectangular slab angular responses
+    initialization requires W1, H1
+    """
+    @classmethod
+    def is_mine(cls,*args,**kwargs):
+        return keyword_check_bool('TH_TYPE',**kwargs) and \
+            (kwargs['TH_TYPE'] == 'SLAB')
+    def __init__(self,**kwargs):
+        super().__init__(**kwargs)
+        keyword_check_numeric('W1','H1',**kwargs)
+        self.W1 = squeeze(kwargs['W1']) # TODO: convert to cm
+        self.H1 = squeeze(kwargs['H1']) # TODO: convert to cm
+        self.area = self.W1*self.H1
+
+class AR_Tele_Cyl(AR_csym):
+    """
+    AR_Tele_Cyl
+    class representing cylindrically-symmetric telescope angular responses
+    Using Sullivan's 1971 paper as updated in ~2010
+    initialization requires R1, R2, D
+    """
+    @classmethod
+    def is_mine(cls,*args,**kwargs):
+        return keyword_check_bool('TH_TYPE',**kwargs) and \
+            (kwargs['TH_TYPE'] == 'CYL_TELE')
+    def __init__(self,**kwargs):
+        super().__init__(**kwargs)
+        keyword_check_numeric('R1','R2','D',**kwargs)
+        self.R1 = squeeze(kwargs['R1']) # TODO: convert to cm
+        self.R2 = squeeze(kwargs['R1']) # TODO: convert to cm
+        self.D = squeeze(kwargs['D']) # TODO: convert to cm
+        self.Rs = min(self.R1,self.R2)
+        self.thetac = np.degrees(np.atan(np.abs(self.R1-self.R2)/self.D))
+        self.thetam = np.degrees(np.atand((self.R1+self.R2)/self.D))
+        self.area = np.pi*self.Rs**2 # area at normal incidence
+        tmp = self.R1**2+self.R2**2+self.D**2
+        self.G = np.pi**2/2*(tmp-np.sqrt(tmp**2-4*self.R1**2*self.R2**2)) # eqn 8
+        if self.bidirectional:
+            backw = kwargs.copy()
+            backw['BIDIRECTIONAL'] = 'FALSE'
+            # backward telescope reverses R2 and R1
+            backw['R1'] = self.R1
+            backw['R2'] = self.R2
+            backw['L_UNIT'] = 'cm'                
+            self.backward = self.__class__(**backw)
+    def A(self,theta,phi):
+        """*INHERIT*"""
+        # uses Sullivan's updated paper, equation 10
+        A = np.zeros(theta.shape)
+        thetarads = np.radians(theta)
+        f = theta <= self.thetac
+        if any(f):
+            A[f] = np.pi*self.Rs**2*np.cos(thetarads[f])
+        f = (theta>self.thetac) & (theta < self.thetam)
+        if any(f):
+            tantheta = self.tan(thetarads[f])
+            Psi1 = np.arccos((self.R1**2+self.D**2*tantheta**2-self.R2**2)/(2*self.D*self.R1*tantheta)) # rads
+            Psi2 = np.arccos((self.R2**2+self.D**2*tantheta**2-self.R1**2)/(2*self.D*self.R2*tantheta)) # rads
+            A[f] = np.cos(thetarads[f])/2*(self.R1**2*(2*Psi1-np.sin(2*Psi1))+self.R2**2*(2*Psi2-np.sin(2*Psi2)))
+        if self.bidirectional:
+            A += self.backward.A(180.0-theta,phi)
+        return np.broadcast_to(A,np.broadcast(theta,phi).shape)
+
+class AR_Table_sym(AngleResponse):
+    """
+    AR_Table_sym
+    class representing phi-symmetric tabular angular responses
+    initialization requires TH_GRID, A
+    Ignores bidirectional: For bidirectional tabluar response, 
+        provide A on TH_GRID that spans 0 to 180 degrees
+    """
+    @classmethod
+    def is_mine(cls,*args,**kwargs):
+        return keyword_check_bool('TH_TYPE',**kwargs) and \
+            (kwargs['TH_TYPE'] == 'TBL')
+    def __init__(self,**kwargs):
+        super().__init__(**kwargs)
+        keyword_check_numeric('TH_GRID','A',**kwargs)
+        self.TH_GRID = squeeze(kwargs['TH_GRID'])
+        if not validate_grid(self.TH_GRID):
+            raise ValueError('TH_GRID is not a valid grid: 1-d, unique')
+        self._A = squeeze(kwargs['A']) # TODO: convert to cm^2
+        self._Ainterpolator = None
+        if self.TH_GRID.shape != self.A.shape:
+            raise ArgSizeError('TH_GRID and A are not the same shape')
+    def A(self,theta,phi):
+        """*INHERIT*"""
+        if self._Ainterpolator is None:
+            # extrapolate beyond grid with nearest edge with zero
+            self._Ainterpolator = interp1d(self.TH_GRID,self.A,'linear',bounds_error=False,fill_value=0.0,assum_sorted=True)
+        A = self._Ainterpolator(theta)
+        return np.broadcast_to(A,np.broadcast(theta,phi).shape)
+
+
+class AR_Pinhole(AngleResponse):
+    """
+    AR_Pinhole
+    class representing pinhole angular responses (delta function at THETA=0)
+    initialization requires G
+    """
+    @classmethod
+    def is_mine(cls,*args,**kwargs):            
+        return keyword_check_bool('TH_TYPE',**kwargs) and \
+            (kwargs['TH_TYPE'] == 'PINHOLE')
+    def __init__(self,**kwargs):
+        super().__init__(**kwargs)
+        keyword_check_numeric('G',**kwargs)
+        self.G = squeeze(kwargs['G']) # TODO: convert to cm^2 sr  
+        self.area = 0
+        if self.bidirectional:
+            self.G /= 2 # divide G between forward and backward
+            backw = kwargs.copy()
+            backw['BIDIRECTIONAL'] = 'FALSE'                
+            backw['G'] = self.G # already divided in half
+            backw['L_UNIT'] = 'cm'
+            self.backward = self.__class__(**backw)
+    def A(self,theta,phi):
+        """*INHERIT*"""
+        A = self.G*(theta==0)
+        if self.bidirectional:
+            A += self.G*(theta==180)
+        return np.broadcast_to(A,np.broadcast(theta,phi).shape)
+    def hAthetaphi(self,thetagrid,phigrid,**kwargs):
+        """*INHERIT*"""
+        # compute interpolation weight in -cos(theta)
+        # so that integral over dcos(theta) gives unity
+        A = interp_weights(thetagrid,0)*self.G
+        dcostheta = np.abs(make_deltas(-np.cos(np.radians(thetagrid)),**kwargs))
+        dphi = make_deltas(np.radians(phigrid),**kwargs)
+        thetaI,phiI = broadcast_grids(thetagrid,phigrid)
+        dcosthetaI,dphiI = self.broadcast_grids(dcostheta,dphi)
+        A.shape = thetaI.shape
+        tmp = A*dcostheta*(thetaI<=90)*dphi
+        if self.bidirectional:                
+            tmp += self.backward.hAtheta(thetagrid,phigrid,**kwargs)
+        return tmp
+    def hAtheta(self,thetagrid,phigrid=None,**kwargs):
+        """*INHERIT*"""
+        # compute interpolation weight in -cos(theta)
+        # so that integral over dcos(theta) gives unity
+        A = interp_weights(-np.cos(np.radians(thetagrid,0)))*self.G
+        if phigrid is None:
+            dphi = 2*np.phi
+        else:
+            dphi = make_deltas(np.radians(phigrid),**kwargs).sum()
+        phigrid = 0.0 # dummy value to save calculation
+        tmp = A*(thetagrid<=90)*dphi
+        if self.bidirectional:
+            tmp += self.backward.hAtheta(thetagrid,phigrid,**kwargs)
+        return tmp
+    def hAalphabeta(self,alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,**kwargs):
+        """
+        hAalphabeta = .hAalphabeta(alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,...)
+        return angular response weights on alpha x beta grid
+        see module glossary for input meanings
+        if tgrid is supplied, result is integrated over time grid
+            expects alpha0,beta0,phi0 to depend on tgird
+        output units are cm^2 or cm^2-s if tgrid supplied
+        hAalphabeta is scalar or shape (len(alphagrid),len(betagrid))
+        """
+        dt = np.atleast_1d(make_deltas(tgrid,**kwargs))
+        alpha0 = np.broadast_to(alpha0,dt.shape)
+        beta0 = np.broadast_to(beta0,dt.shape)
+        # compute interpolation weight in -cos(alpha)
+        # so that integral over dcos(alpha) gives unity
+        dha = interp_weights(-np.cos(np.radians(alphagrid)),alpha0) # len(tgrid) x len(alphagrid)
+        dhb = interp_weights(betagrid,beta0) # len(tgrid) x len(betagrid)
+        # reshape to allow broadcast
+        dha.shape = (len(dt),len(alphagrid),1)
+        dhb.shape = (len(dt),1,len(betagrid))
+        dt.reshape = (len(dt),1,1)
+        h = (dt*dha*dhb).sum(axis=0) # integrate over time
+        h = h*self.G*sum(dt)/sum(h) # force to integrate to Gdt
+        if self.bidirectional:
+            h += self.backward.hAalpha(alpha0,beta0,phib,alphagrid,betagrid,tgrid,**kwargs)
+        return h
+    def hAalpha(self,alpha0,beta0,phib,alphagrid,betagrid=None,tgrid=None,**kwargs):
+        """
+        hAalpha = .hAalpha(alpha0,beta0,phib,alphagrid,betagrid=None,tgrid=None,...)
+        return angular response weights on alpha grid (integrated over beta)
+        see module glossary for input meanings
+        if betagrid is None, supplies numeric beta grid when needed
+        if tgrid is supplied, result is integrated over time grid
+            expects alpha0,beta0,phi0 to depend on tgird
+        output units are cm^2 or cm^2-s if tgrid supplied
+        hAalph ais a scalar or 1-d numpy array of same size as alphagrid
+        """
+        dt = np.atleast_1d(make_deltas(tgrid,**kwargs))
+        alpha0 = np.broadast_to(alpha0,dt.shape)
+        # compute interpolation weight in -cos(alpha)
+        # so that integral over dcos(alpha) gives unity
+        dh = interp_weights(-np.cos(np.radians(alphagrid)),alpha0) # len(tgrid) x len(alphagrid)
+        h = np.dot(dt,dh) # sum over time
+        h = h*self.G*sum(dt)/sum(h) # force to integrate to Gdt
+        if self.bidirectional:
+            h += self.backward.hAalpha(alpha0,beta0,phib,alphagrid,betagrid,tgrid,**kwargs)
+        return h
+
+class AR_Tele_Rect(AngleResponse):
+    """
+    AR_Tele_Rect
+    class representing telescope with rectangular elements
+    initialization requires W1, H1, W2, H2, D
+    Using Sullivan's 1971 paper as updated in ~2010
+    mainly based on equation (13)
+    """
+    @classmethod
+    def is_mine(cls,*args,**kwargs):
+        return keyword_check_bool('TP_TYPE',**kwargs) and \
+            (kwargs['TP_TYPE'] == 'RECT_TELE')
+    def __init__(self,**kwargs):
+        super().__init__(**kwargs)
+        keyword_check_numeric('W1','H1','W2','H2',**kwargs)
+        self.W1 = squeeze(kwargs['W1']) # TODO: convert to cm
+        self.H1 = squeeze(kwargs['H1']) # TODO: convert to cm
+        self.W2 = squeeze(kwargs['W2']) # TODO: convert to cm
+        self.H2 = squeeze(kwargs['H2']) # TODO: convert to cm
+        self.D = squeeze(kwargs['D']) # TODO: convert to cm
+        # initialize some Sullivan variables
+        self.alpha = (self.H1+self.H2)/2
+        self.beta = (self.W1+self.W2)/2
+        self.gamma = (self.H1-self.H2)/2
+        self.delta = (self.W1-self.W2)/2
+        # Sullivan's 11
+
+        self.G = self.D**2*np.log(
+                ((self.D**2+self.alpha**2+self.delta**2)/(self.D**2+self.alpha**2+self.beta**2))  
+                *(self.D**2+self.gamma**2+self.beta**2)/(self.D**2+self.gamma**2+self.delta**2)) \
+                +2*self.alpha*np.sqrt(self.D**2+self.beta**2) \
+                *np.arctan(self.alpha/np.sqrt(self.D**2+self.beta**2)) \
+                +2*self.beta*np.sqrt(self.D**2+self.alpha**2) \
+                *np.arctan(self.beta/np.sqrt(self.D**2+self.alpha**2)) \
+                -2*self.alpha*np.sqrt(self.D**2+self.delta**2) \
+                *np.arctan(self.alpha/np.sqrt(self.D**2+self.delta**2)) \
+                -2*self.beta*np.sqrt(self.D**2+self.gamma**2) \
+                *np.arctan(self.beta/np.sqrt(self.D**2+self.gamma**2)) \
+                -2*self.gamma*np.sqrt(self.D**2+self.beta**2) \
+                *np.arctan(self.gamma/np.sqrt(self.D**2+self.beta**2)) \
+                -2*self.delta*np.sqrt(self.D**2+self.alpha**2) \
+                *np.arctan(self.delta/np.sqrt(self.D**2+self.alpha**2)) \
+                +2*self.gamma*np.sqrt(self.D**2+self.delta**2) \
+                *np.arctan(self.gamma/np.sqrt(self.D**2+self.delta**2)) \
+                +2*self.delta*np.sqrt(self.D**2+self.gamma**2) \
+                *np.arctan(self.delta/np.sqrt(self.D**2+self.gamma**2))
+
+        if self.bidirectional:
+            backw = kwargs.copy()
+            backw['BIDIRECTIONAL'] = 'FALSE'                
+            backw['W1'] = self.W2
+            backw['H1'] = self.H2
+            backw['W2'] = self.W1
+            backw['H2'] = self.H1
+            backw['D'] = self.D
+            backw['L_UNIT'] = 'cm'
+            self.backward = self.__class__(**backw)
+    def _X(self,zeta,a1,a2):
+        """
+        Sullivan's X(zeta,a1,a2)
+        """
+        return min(zeta+a1/a2,a2/2) - max(zeta-a1/a2,-a2/2)
+    def A(self,theta,phi):
+        """*INHERIT*"""
+        A = np.zeros(np.broadcast(theta,phi).shape)
+        thetarads = np.radians(theta)
+        phirads = np.radians(phi)
+        tantheta = np.tan(theta)
+        zeta = self.D*tantheta*np.cos(phirads)
+        eta = self.D*tantheta*np.sin(phirads)
+        X = self._X(zeta,self.W1,self.W2)
+        Y = self._X(eta,self.H1,self.H2)
+        costheta = np.cos(thetarads)
+        f = (costheta>0) & (X>0) &  (Y>0) # apply Heaviside implicitly and resolve tand(90)=inf
+        if any(f):
+            A[f] = costheta[f]*X[f]*Y[f] # eqn 13 w/o Heaviside functions            
+        
+        if self.bidirectional:
+            A += self.backward.A(180-theta,phi)
+        return A
+
+# TODO: rename property A to _A
+# TODO: rename _A function to _Ainterpolator
+        
+
+class AR_Table_asym(AngleResponse):
+    """
+    AR_Table_asym
+    class representing phi-asymmetric tabular angular responses
+    initialization requires TH_GRID, PH_GRID, A
+    Ignores bidirectional: For bidirectional tabluar response, 
+        provide A on TH_GRID that spans 0 to 180 degrees
+    """
+    @classmethod
+    def is_mine(cls,*args,**kwargs):
+        return keyword_check_bool('TP_TYPE',**kwargs) and \
+            (kwargs['TP_TYPE'] == 'TBL')
+    def __init__(self,**kwargs):
+        super().__init__(**kwargs)
+        keyword_check_numeric('TH_GRID','PH_GRID','A',**kwargs)
+        self.TH_GRID = squeeze(kwargs['TH_GRID'])
+        if not validate_grid(self.TH_GRID):
+            raise ValueError('TH_GRID is not a valid grid: 1-d, unique')
+        self.PH_GRID = squeeze(kwargs['PH_GRID'])
+        if not validate_grid(self.PH_GRID):
+            raise ValueError('PH_GRID is not a valid grid: 1-d, unique')
+        self._A = squeeze(kwargs['A']) # TODO: convert to cm^2
+        self._Ainterpolator = None
+        if self.A_GRID.shape != (len(self.TH_GRID),len(self.PH_GRID)):
+            raise ArgSizeError('A does not have shape (TH_GRID,PH_GRID)')
+    def A(self,theta,phi):
+        """*INHERIT*"""
+        if self._Ainterpolator is None:
+            # extrapolate beyond grid with nearest edge with zero
+            self._Ainterpolator = RegularGridInterpolator((self.TH_GRID,self.PH_GRID),self.A,'linear',bounds_error=False,fill_value=0.0)
+        return self._Ainterpolator(theta,phi)
+            
+
 class ChannelResponse(FactoryConstructorMixin):
     """
     Virtual base class for channel responses
@@ -373,595 +1086,6 @@ class ChannelResponse(FactoryConstructorMixin):
         channel.to_dict() return a nested dict of this object
         """
         raise NotImplementedError
-
-    class EnergyResponse(FactoryConstructorMixin):
-        """
-        EnergyResponse
-        abstract class representing energy responses
-        use factory class method .create() to create
-        appropriate subclass from response dictionary
-        """
-        @classmethod
-        def is_mine(cls,*args,**kwargs):
-            """*INHERIT*"""
-            keyword_check('E_TYPE',**kwargs)
-            raise KeywordError('Supplied keywords to not define a recognized EnergyResponse')
-        
-        def __init__(self,**kwargs):
-            if 'CROSSCALIB' not in kwargs:
-                print('CROSSCALIB not found in channel description, assuming unity')
-                self.CROSSCALIB = 1.0 # default
-            else:
-                self.CROSSCALIB = kwargs['CROSSCALIB']
-            
-        def RE(self,E):
-            """
-            R = RE(E)
-            Channel response at energy E (w/o CROSSCALIB)
-            output is dimensionless
-            """
-            raise NotImplementedError
-        def hE(self,Egrid,**kwargs):
-            """
-            hE = .hE(Egrid,...)
-            return energy response weights on Egrid
-            Egrid and hE are 1-d numpy arrays of the sampe size
-            CROSSCALIB applied
-            """
-            raise NotImplementedError
-
-    class ER_Diff(EnergyResponse):
-        """
-        ER_Diff
-        class representing differential energy channel response
-        use factory class method .create() to create
-        appropriate subclass from response dictionary
-        initialization requires EPS, E0, DE
-        """
-        @classmethod
-        def is_mine(cls,*args,**kwargs):
-            """*INHERIT*"""
-            keyword_check('E_TYPE',**kwargs)
-            return (kwargs['E_TYPE'] == 'DIFF')
-
-        def __init__(self,**kwargs):
-            super().__init__(**kwargs)
-            keyword_check_numeric('EPS','E0','DE',**kwargs)            
-            self.EPS = squeeze(kwargs['EPS'])
-            self.E0 = squeeze(kwargs['E0']) # TODO - convert to MeV
-            self.DE = squeeze(kwargs['DE']) # TODO - convert to MeV
-            self.hE0 = self.DE*self.EPS/self.CROSSCALIB # hE for flat spectrum
-
-        def RE(self,E):
-            """*INHERIT*"""
-            return (E==self.E0)*self.EPS # DE gets ignored, which is bad, but unaviodable
-
-        def hE(self,Egrid,**kwargs):
-            """*INHERIT*"""
-            hE = interp_weights(Egrid,self.E0)*self.dE*self.EPS
-            return hE / self.CROSSCALIB
-
-            
-    class ER_Int(EnergyResponse):
-        """
-        ER_Int
-        class representing integral energy channel response
-        initialization requires EPS, E0
-        """
-        @classmethod
-        def is_mine(cls,*args,**kwargs):
-            """*INHERIT*"""
-            keyword_check('E_TYPE',**kwargs)
-            return (kwargs['E_TYPE'] == 'INT')
-
-        def __init__(self,**kwargs):
-            super().__init__(**kwargs)
-            keyword_check_numeric('EPS','E0',**kwargs)            
-            self.EPS = squeeze(kwargs['EPS'])
-            self.E0 = squeeze(kwargs['E0']) # TODO - convert to MeV
-            self.hE0 = self.DE*self.EPS/self.CROSSCALIB  # should be inf for flat spectrum, but assume energy bandwidth==1
-
-        def RE(self,E):
-            """*INHERIT*"""
-            return (E>=self.E0)*self.EPS
-
-        def hE(self,Egrid,**kwargs):
-            """*INHERIT*"""
-            Egrid = np.array(Egrid)
-            NE = len(Egrid)
-            hE = np.zeros(Egrid.shape) 
-            I = get_list_neighbors(Egrid,self.E0)
-            # Egrid[I[0]] <= inst_info.E0 < Egrid[I[1]]
-            # or I[1] = -1 or both I=-1
-            
-            dE = make_deltas(Egrid,**kwargs)
-            hE = dE # default, eventually only kept for Egrid>Egrid[I[1]]
-            hE[0:(I[0]+1)] = 0 # zero out below E0
-            
-            # left side
-            i = I[0]
-            if (i>=0) and (i<NE-1): # E[i] <= E0 < E[i+1]
-                hE[i] = (Egrid[i+1]-self.E0)**2/2/(Egrid[i+1]-Egrid[i])
-            
-            # right side
-            i = I[1]
-            if (i>=1) and (i<NE): # E[i-1] < E0 < E[i]
-                hE[i] = (self.E0-Egrid[i-1])**2/2/(Egrid[i]-Egrid[i-1])
-                
-            return hE *self.EPS / self.CROSSCALIB
-        
-    class ER_Wide(EnergyResponse):
-        """
-        ER_Wide
-        class representing wide differential energy channel response
-        initialization requires EPS, E0, E1
-        """
-        @classmethod
-        def is_mine(cls,*args,**kwargs):
-            """*INHERIT*"""
-            keyword_check('E_TYPE',**kwargs)
-            return (kwargs['E_TYPE'] == 'WIDE')
-
-        def __init__(self,**kwargs):
-            super().__init__(**kwargs)
-            keyword_check_numeric('EPS','E0','E1',**kwargs)            
-            self.EPS = squeeze(kwargs['EPS'])
-            self.E0 = squeeze(kwargs['E0']) # TODO - convert to MeV
-            self.E1 = squeeze(kwargs['E1']) # TODO - convert to MeV
-            self.hE0 = (self.E1-self.E0)*self.EPS/self.CROSSCALIB  # for flat spectrum
-            # build two integral channels to difference them
-            tmp = {**kwargs,'E_TYPE':'INT'} # integral channel w/ same E0
-            self.low = ChannelResponse.ER_Int(**tmp)
-            tmp['E0'] = self.E1 # integral channel above this one
-            self.high = ChannelResponse.ER_Int(**tmp)
-
-        def RE(self,E):
-            """*INHERIT*"""
-            return ((E>=self.E0) & (E<=self.E1))*self.EPS
-
-        def hE(self,Egrid,**kwargs):
-            """*INHERIT*"""
-            # treat as difference between two integral channels
-            return self.low.hE(Egrid)-self.high.hE(Egrid)
-            
-    class ER_Table(EnergyResponse):
-        """
-        ER_Table
-        class representing tabular energy channel response
-        """
-        @classmethod
-        def is_mine(cls,*args,**kwargs):
-            """*INHERIT*"""
-            keyword_check('E_TYPE',**kwargs)
-            return (kwargs['E_TYPE'] == 'TBL')
-
-        def __init__(self,**kwargs):
-            super().__init__(**kwargs)
-            keyword_check_numeric('EPS','E_GRID',**kwargs)
-            self.EPS = squeeze(kwargs['EPS'])
-            self.E_GRID = squeeze(kwargs['E_GRID'])
-            if not validate_grid(self.E_GRID):
-                raise ValueError('E_GRID is not a valid grid: 1-d, unique')
-
-            if self.EPS.shape != self.E_GRID.shape:
-                raise ArgSizeError('E_GRID  and EPS are not the same shape')
-                
-            self.hE0 = np.sum(self.E_GRID*self.EPS*make_deltas(self.E_GRID))/self.CROSSCALIB  # for flat spectrum
-            self._RE = None
-
-        def RE(self,E):
-            """*INHERIT*"""
-            if self._RE is None:
-                # extrapolate beyond grid with nearest edge (first/last) value
-                self._RE = interp1d(self.E_GRID,self.EPS,'linear',bounds_error=False,fill_value=[self.EPS[0],self.EPS[-1]],assum_sorted=True)
-            return self._RE(E)
-
-        def hE(self,Egrid,**kwargs):
-            """*INHERIT*"""
-            
-            dE = make_deltas(Egrid,**kwargs)
-            hE = self.RE(Egrid)*dE/self.CROSSCALIB
-            return hE
-
-    class AngleResponse(FactoryConstructorMixin):
-        """
-        AngleResponse
-        class representing angular responses
-        all responses are forward-only and
-        add backward response via self.backward when bidirectional
-        when initialized with no arguments, returns a null response
-        
-        properties:
-            bidirectional - bool, is the angular response bidirectional?
-            backward - backward angular response (null class when not bidirectional)
-            area - detector area, cm^2
-            G - geometric factor for forward hemisphere particles (theta<=90) cm^2 sr
-            hA0 - goemetric factor for forward and (if bidirectional) backward hemispheres
-        """
-        @classmethod
-        def is_mine(cls,*args,**kwargs):
-            """*INHERIT*"""     
-            if not kwargs:
-                return True # null response
-            else:
-                raise KeywordError('The data provided did not define a recognized AngleResponse')
-        def __init__(self,**kwargs):
-            if kwargs: # backward present only when called with initialization data
-                self.backward = ChannelResponse.AngleResponse() # backward response is null by default
-            self.bidirectional = ('BIDIRECTIONAL' in kwargs) and (kwargs['BIDIRECTIONAL'] == 'TRUE')
-            self.area = 0.0  # used by null
-            self.G = 0.0 # used by null
-        def A(self,theta,phi):
-            """
-            A = .A(theta,phi)
-            return angular response (effective area) at specified theta,phi cm^2
-            should add forward and backward response together
-            theta and phi must broadcast together
-            see module glossary for input meanings
-            """
-            return 0.0 # used by null
-        def hAthetaphi(self,thetagrid,phigrid,**kwargs):
-            """
-            hAthetaphi = .hAthetaphi(thetagrid,phigrid,...)
-            return angular response weights on theta x phi grid, cm^2
-            hAthetaphi is a scalar or shape (len(thetagrid),len(phigrid))
-            see module glossary for input meanings
-            """
-            return 0.0 # used by null
-        def hAtheta(self,thetagrid,phigrid=None,**kwargs):
-            """
-            hAtheta = .hAtheta(thetagrid,phigrid,...)
-            return angular response weights on theta grid, cm^2
-            integrated over phigrid (or 0-2pi if None)
-            hAtheta is a scalar or 1-d numpy array of same size as thetagrid
-            see module glossary for input meanings
-            """
-            return 0.0 # used by null
-        def hAalphabeta(self,alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,**kwargs):
-            """
-            hAalphabeta = .hAalphabeta(alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,...)
-            return angular response weights on alpha x beta grid
-            see module glossary for input meanings
-            if tgrid is supplied, result is integrated over time grid
-                expects alpha0,beta0,phi0 to depend on tgird
-            output units are cm^2 or cm^2-s if tgrid supplied
-            hAalphabeta is scalar or shape (len(alphagrid),len(betagrid))
-            """
-            return 0.0 # used by null
-        def hAalpha(self,alpha0,beta0,phib,alphagrid,betagrid=None,tgrid=None,**kwargs):
-            """
-            hAalpha = .hAalpha(alpha0,beta0,phib,alphagrid,betagrid=None,tgrid=None,...)
-            return angular response weights on alpha grid (integrated over beta)
-            see module glossary for input meanings
-            if betagrid is None, supplies numeric beta grid when needed
-            if tgrid is supplied, result is integrated over time grid
-                expects alpha0,beta0,phi0 to depend on tgird
-            output units are cm^2 or cm^2-s if tgrid supplied
-            hAalph ais a scalar or 1-d numpy array of same size as alphagrid
-            """
-            return 0.0 # used by null
-        @property
-        def hA0(self):
-            """
-            return the nominal geometric factor in cm^2 sr
-            including bidirectional effects
-            """
-            hA0 = self.G
-            if self.bidirectional:
-                hA0 += self.backward.G
-            return hA0
-
-    class AR_csym(AngleResponse):
-        """
-        AR_csym 
-        virtual base class representing phi-symmetric angular responses
-        forward response only
-        """
-        @classmethod
-        def is_mine(cls,*args,**kwargs):
-            """*INHERIT*"""
-            return False # abstract class, never the right answer
-                    
-        def hAthetaphi(self,thetagrid,phigrid,**kwargs):
-            """*INHERIT*"""
-            dcostheta = np.abs(make_deltas(-np.cos(np.radians(thetagrid)),**kwargs))
-            dphi = make_deltas(np.radians(phigrid),**kwargs)
-            thetaI,phiI = broadcast_grids(thetagrid,phigrid)
-            dcosthetaI,dphiI = self.broadcast_grids(dcostheta,dphi)
-            tmp = self.A(thetaI,phiI)*dcostheta*(thetaI<=90)
-            if self.bidirectional:
-                tmp += self.backward.A(180-thetaI,phiI)*dcostheta*(thetaI>90)
-            return tmp*dphi
-        def hAtheta(self,thetagrid,phigrid=None,**kwargs):
-            """*INHERIT*"""
-            dcostheta = np.abs(make_deltas(-np.cos(np.radians(thetagrid)),**kwargs))
-            if phigrid is None:
-                dphi = 2*np.phi
-            else:
-                dphi = make_deltas(np.radians(phigrid),**kwargs).sum()
-            phigrid = 0.0 # dummy value to save calculation
-            tmp = self.A(thetagrid,phigrid)*dcostheta*(thetagrid<=90)
-            if self.bidirectional:
-                tmp += self.backward.A(180-thetagrid,phigrid)*dcostheta*(thetagrid>90)
-            return tmp*dphi
-
-    class AR_Omni(AR_csym):
-        """
-        AR_Omni omnidirectional response
-        class representing omnidirectional angular responses
-        initialization requires G (None OK for derived classes)
-        Note: an omni is a sphere (same apparent area from all directions). 
-        For flat, single-element detectors, use DISK and SLAB
-        """
-        @classmethod
-        def is_mine(cls,*args,**kwargs):
-            """*INHERIT*"""
-            return keyword_check_bool('RESP_TYPE',**kwargs) and \
-                (kwargs['RESP_TYPE'] == '[E]')
-        def __init__(self,**kwargs):
-            super().__init__(**kwargs)
-            G = None
-            if ('G' in kwargs) and kwargs['G'] is not None:
-                # derived class may provide G as none
-                keyword_check_numeric('G',**kwargs)
-                # setup for half omni: full G over 2pi
-                G = squeeze(kwargs['G']) # TODO: convert to cm^2 sr       
-                self.G = G
-                self.area = self.G/2/np.pi # equivalent sphere's cross-section 
-            if self.bidirectional:
-                # backwards is also omni
-                backw = kwargs.copy()
-                backw['BIDIRECTIONAL'] = 'FALSE'
-                # divide forward part in half:
-                if G is not None:
-                    self.G /= 2
-                    self.aera /= 2
-                    backw['G'] = self.G # already divided by 2
-                self.backward = self.__class__(**backw)
-        def A(self,theta,phi):
-            """*INHERIT*"""
-            A = self.area*(theta<=90)
-            if self.bidirectiona:
-                A += self.backward.area*(theta>90)
-            return  A
-
-    class AR_SingleElement(AR_Omni):
-        """
-        AR_SingleElement
-        abstract class representing single-element detectors (i.e., w/ cos projection effect)
-        derived class must define 
-          self.area, the detector area
-          self.G, the geometric factor
-        """
-        @classmethod
-        def is_mine(cls,*args,**kwargs):
-            "*INHERIT*"
-            return False # abstract class, never the right answer
-        def __init__(self,**kwargs):
-            super().__init__(G=None,**kwargs) # supply fake G, area and G will be set in derived class
-        def A(self,theta,phi):
-            """*INHERIT*"""
-            return super().A(theta,phi)*np.abs(np.cos(np.radians(theta,phi)))
-        @property
-        def G(self):
-            """
-            Geometric factor for forward going particles
-            computed as pi*area
-            """
-            return self.area*np.pi
-    class AR_Disk(AR_SingleElement):
-        """
-        AR_Disk
-        class representing disk angular responses
-        initialization requires R1, R2, D
-        """
-        @classmethod
-        def is_mine(cls,*args,**kwargs):
-            return keyword_check_bool('TH_TYPE',**kwargs) and \
-                (kwargs['TH_TYPE'] == 'DISK')
-        def __init__(self,**kwargs):
-            super().__init__(**kwargs)
-            keyword_check_numeric('R1',**kwargs)
-            self.R1 = squeeze(kwargs['R1']) # TODO: convert to cm
-            self.area = np.pi*self.R1**2
-
-    class AR_Slab(AR_SingleElement):
-        """
-        AR_Slab
-        class representing rectangular slab angular responses
-        initialization requires W1, H1
-        """
-        @classmethod
-        def is_mine(cls,*args,**kwargs):
-            return keyword_check_bool('TH_TYPE',**kwargs) and \
-                (kwargs['TH_TYPE'] == 'SLAB')
-        def __init__(self,**kwargs):
-            super().__init__(**kwargs)
-            keyword_check_numeric('W1','H1',**kwargs)
-            self.W1 = squeeze(kwargs['W1']) # TODO: convert to cm
-            self.H1 = squeeze(kwargs['H1']) # TODO: convert to cm
-            self.area = self.W1*self.H1
-
-    class AR_Tele_Cyl(AR_csym):
-        """
-        AR_Tele_Cyl
-        class representing cylindrically-symmetric telescope angular responses
-        Using Sullivan's 1971 paper as updated in ~2010
-        initialization requires R1, R2, D
-        """
-        @classmethod
-        def is_mine(cls,*args,**kwargs):
-            return keyword_check_bool('TH_TYPE',**kwargs) and \
-                (kwargs['TH_TYPE'] == 'CYL_TELE')
-        def __init__(self,**kwargs):
-            super().__init__(**kwargs)
-            keyword_check_numeric('R1','R2','D',**kwargs)
-            self.R1 = squeeze(kwargs['R1']) # TODO: convert to cm
-            self.R2 = squeeze(kwargs['R1']) # TODO: convert to cm
-            self.D = squeeze(kwargs['D']) # TODO: convert to cm
-            self.Rs = min(self.R1,self.R2)
-            self.thetac = np.degrees(np.atan(np.abs(self.R1-self.R2)/self.D))
-            self.thetam = np.degrees(np.atand((self.R1+self.R2)/self.D))
-            self.area = np.pi*self.Rs**2 # area at normal incidence
-            tmp = self.R1**2+self.R2**2+self.D**2
-            self.G = np.pi**2/2*(tmp-np.sqrt(tmp**2-4*self.R1**2*self.R2**2)) # eqn 8
-            if self.bidirectional:
-                backw = kwargs.copy()
-                backw['BIDIRECTIONAL'] = 'FALSE'
-                # backward telescope reverses R2 and R1
-                backw['R1'] = self.R1
-                backw['R2'] = self.R2
-                self.backward = self.__class__(**backw)
-        def A(self,theta,phi):
-            """*INHERIT*"""
-            # uses Sullivan's updated paper, equation 10
-            A = np.zeros(theta.shape)
-            thetarads = np.radians(theta)
-            f = theta <= self.thetac
-            if any(f):
-                A[f] = np.pi*self.Rs**2*np.cos(thetarads[f])
-            f = (theta>self.thetac) & (theta < self.thetam)
-            if any(f):
-                tantheta = self.tan(thetarads[f])
-                Psi1 = np.arccos((self.R1**2+self.D**2*tantheta**2-self.R2**2)/(2*self.D*self.R1*tantheta)) # rads
-                Psi2 = np.arccos((self.R2**2+self.D**2*tantheta**2-self.R1**2)/(2*self.D*self.R2*tantheta)) # rads
-                A[f] = np.cos(thetarads[f])/2*(self.R1**2*(2*Psi1-np.sin(2*Psi1))+self.R2**2*(2*Psi2-np.sin(2*Psi2)))
-            if self.bidirectional:
-                A += self.backward.A(180.0-theta,phi)
-            return np.broadcast_to(A,np.broadcast(theta,phi).shape)
-
-    class AR_Table_sym(AngleResponse):
-        """
-        AR_Table_sym
-        class representing phi-symmetric tabular angular responses
-        initialization requires TH_GRID, A
-        Ignores bidirectional: For bidirectional tabluar response, 
-            provide A on TH_GRID that spans 0 to 180 degrees
-        """
-        @classmethod
-        def is_mine(cls,*args,**kwargs):
-            return keyword_check_bool('TH_TYPE',**kwargs) and \
-                (kwargs['TH_TYPE'] == 'TBL')
-        def __init__(self,**kwargs):
-            super().__init__(**kwargs)
-            keyword_check_numeric('TH_GRID','A',**kwargs)
-            self.TH_GRID = squeeze(kwargs['TH_GRID'])
-            if not validate_grid(self.TH_GRID):
-                raise ValueError('TH_GRID is not a valid grid: 1-d, unique')
-            self.A = squeeze(kwargs['A']) # TODO: convert to cm^2
-            if self.TH_GRID.shape != self.A.shape:
-                raise ArgSizeError('TH_GRID and A are not the same shape')
-        def A(self,theta,phi):
-            """*INHERIT*"""
-            if self._A is None:
-                # extrapolate beyond grid with nearest edge with zero
-                self._A = interp1d(self.TH_GRID,self.A,'linear',bounds_error=False,fill_value=0.0,assum_sorted=True)
-            A = self._A(theta)
-            return np.broadcast_to(A,np.broadcast(theta,phi).shape)
-
-
-    class AR_Pinhole(AngleResponse):
-        """
-        AR_Pinhole
-        class representing pinhole angular responses (delta function at THETA=0)
-        initialization requires G
-        """
-        @classmethod
-        def is_mine(cls,*args,**kwargs):            
-            return keyword_check_bool('TH_TYPE',**kwargs) and \
-                (kwargs['TH_TYPE'] == 'PINHOLE')
-        def __init__(self,**kwargs):
-            super().__init__(**kwargs)
-            keyword_check_numeric('G',**kwargs)
-            self.G = squeeze(kwargs['G']) # TODO: convert to cm^2 sr  
-            self.area = 0
-            if self.bidirectional:
-                self.G /= 2 # divide G between forward and backward
-                backw = kwargs.copy()
-                backw['BIDIRECTIONAL'] = 'FALSE'                
-                backw['G'] = self.G # already divided in half
-                self.backward = self.__class__(**backw)
-        def A(self,theta,phi):
-            """*INHERIT*"""
-            A = self.G*(theta==0)
-            if self.bidirectional:
-                A += self.G*(theta==180)
-            return np.broadcast_to(A,np.broadcast(theta,phi).shape)
-        def hAthetaphi(self,thetagrid,phigrid,**kwargs):
-            """*INHERIT*"""
-            A = interp_weights(thetagrid,0)*self.G
-            dcostheta = np.abs(make_deltas(-np.cos(np.radians(thetagrid)),**kwargs))
-            dphi = make_deltas(np.radians(phigrid),**kwargs)
-            thetaI,phiI = broadcast_grids(thetagrid,phigrid)
-            dcosthetaI,dphiI = self.broadcast_grids(dcostheta,dphi)
-            A.shape = thetaI.shape
-            tmp = A*dcostheta*(thetaI<=90)*dphi
-            if self.bidirectional:                
-                tmp += self.backward.hAtheta(thetagrid,phigrid,**kwargs)
-            return tmp
-        def hAtheta(self,thetagrid,phigrid=None,**kwargs):
-            """*INHERIT*"""
-            A = interp_weights(thetagrid,0)*self.G
-            dcostheta = np.abs(make_deltas(-np.cos(np.radians(thetagrid)),**kwargs))
-            if phigrid is None:
-                dphi = 2*np.phi
-            else:
-                dphi = make_deltas(np.radians(phigrid),**kwargs).sum()
-            phigrid = 0.0 # dummy value to save calculation
-            tmp = A*dcostheta*(thetagrid<=90)*dphi
-            if self.bidirectional:
-                tmp += self.backward.hAtheta(thetagrid,phigrid,**kwargs)
-            return tmp
-        def hAalphabeta(self,alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,**kwargs):
-            """
-            hAalphabeta = .hAalphabeta(alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,...)
-            return angular response weights on alpha x beta grid
-            see module glossary for input meanings
-            if tgrid is supplied, result is integrated over time grid
-                expects alpha0,beta0,phi0 to depend on tgird
-            output units are cm^2 or cm^2-s if tgrid supplied
-            hAalphabeta is scalar or shape (len(alphagrid),len(betagrid))
-            """
-            raise NotImplementedError # TODO
-        def hAalpha(self,alpha0,beta0,phib,alphagrid,betagrid=None,tgrid=None,**kwargs):
-            """
-            hAalpha = .hAalpha(alpha0,beta0,phib,alphagrid,betagrid=None,tgrid=None,...)
-            return angular response weights on alpha grid (integrated over beta)
-            see module glossary for input meanings
-            if betagrid is None, supplies numeric beta grid when needed
-            if tgrid is supplied, result is integrated over time grid
-                expects alpha0,beta0,phi0 to depend on tgird
-            output units are cm^2 or cm^2-s if tgrid supplied
-            hAalph ais a scalar or 1-d numpy array of same size as alphagrid
-            """
-            dt = np.atleast_1d(make_deltas(tgrid,**kwargs))
-            alpha0 = np.broadast_to(alpha0,dt.shape)
-            dh = interp_weights(alphagrid,alpha0) # len(tgrid) x len(alphagrid)
-            h = np.dot(dt,dh) # sum over time
-            h = h*self.G*sum(dt)/sum(h) # force to integrate to Gdt
-            if self.bidirectional:
-                h += self.backward.hAalpha(alpha0,beta0,phib,alphagrid,betagrid,tgrid,**kwargs)
-            return h
-    class AR_Tele_Rect(AngleResponse):
-        """
-        AR_Tele_Rect
-        class representing telescope with rectangular elements
-        """
-        @classmethod
-        def is_mine(cls,*args,**kwargs):
-            return keyword_check_bool('TP_TYPE',**kwargs) and \
-                (kwargs['TP_TYPE'] == 'RECT_TELE')
-
-    class AR_Table_asym(AngleResponse):
-        """
-        AR_Table_asym
-        class representing phi-asymmetric tabular angular responses
-        """
-        @classmethod
-        def is_mine(cls,*args,**kwargs):
-            return keyword_check_bool('TP_TYPE',**kwargs) and \
-                (kwargs['TP_TYPE'] == 'TBL')
-
 
 class CR_Omni(ChannelResponse):
     """
