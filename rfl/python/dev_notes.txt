@@ -71,3 +71,15 @@ rfl_make_all_types.m - make one instance of each type of response function
 rfl_make_ico.m - make ICO inst_info object
 rfl_make_sampex_pet.m - make SAMPEX PET inst_info object
 rfl_resp_to_3D_model_example.m - project model onto SAMPEX PET sensor
+
+
+general purpose 2-element telescope:
+each element has its own internal cartesian coordinate system:
+primary axis (x), secondary axis (y), z = cross(x,y)
+limits on x integration xlim
+limits on y integratoin as a function of x: ylim(x)
+d = (x2-x1,y2-y1)
+G = int_xlim1 dx1 int_ylim1(x1) dt1 int_xlim2 dx2 int_ylim2(x2) dy2 |z1.d|/sqrt(|z1||d|) |z2.d|/sqrt(|z2||d|)
+How to express as 
+G = int_xlim1 dx1 int_ylim1(x1) dy1 int_theta dcostheta int_phi dphi A(x1,y1,theta,phi)
+
