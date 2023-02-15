@@ -158,7 +158,13 @@ def validate_grid(grid):
         return False
     return True
 
-# classes
+def default_thetagrid(**kwargs):
+    """
+    betagrid = thetagrid(**kwargs)
+    returns default theta grid, as modified by keyword args
+    """
+    # TODO: implement some keyword controls
+    return np.linspace(0.0,180.0,181) # 1 degree spacing, closed endpoints
 
 def default_phigrid(**kwargs):
     """
@@ -166,7 +172,26 @@ def default_phigrid(**kwargs):
     returns default phi grid, as modified by keyword args
     """
     # TODO: implement some keyword controls
-    return np.linspace(0,360,361)
+    return np.linspace(0.0,360.0,361) # 1 degree spacing, closed endpoints
+
+def default_alphagrid(**kwargs):
+    """
+    alphagrid = alphagrid(**kwargs)
+    returns default alpha grid, as modified by keyword args
+    """
+    # TODO: implement some keyword controls
+    return np.linspace(0.0,180.0,181) # 1 degree spacing, closed endpoints
+
+def default_betagrid(**kwargs):
+    """
+    betagrid = betagrid(**kwargs)
+    returns default beta grid, as modified by keyword args
+    """
+    # TODO: implement some keyword controls
+    return np.linspace(0.0,360.0,361) # 1 degree spacing, closed endpoints
+
+# classes
+
 
 class RFLError(Exception):
     """
@@ -232,6 +257,21 @@ def keyword_check_numeric(*keywords,**kwargs):
         if not np.issubdtype(type(val),np.number): raise KeywordError('%s must be numeric' % key)
     return True
 
+def keyword_check_numeric_bool(*keywords,**kwargs):
+    """
+    bool = keyword_check_numeric_bool(*keywords,**kwargs)
+    check one or more keywords in kwargs
+    if present and np.numeric, return True
+    otherwise return False
+    """
+    for key in keywords:
+        if key not in kwargs: return False
+        val = kwargs[key]
+        while isinstance(val,(list,np.ndarray)):
+            val = val[0]
+        if not np.issubdtype(type(val),np.number): return False
+    return True
+
 def squeeze(val):
     """
     val = squeeze(val)
@@ -240,7 +280,7 @@ def squeeze(val):
     """
     val = np.squeeze(val)
     if val.size==1:
-        val = np.asscalar(val) # reduce singleton to scalar
+        val = val.item() # reduce singleton to scalar (replaces .asscalar)
     return val
 
 def interp_weights(xgrid,xhat,extrap_left=False,extrap_right=False,period=None):
@@ -353,14 +393,15 @@ class FactoryConstructorMixin(object):
         if cls.is_mine(*args,**kwargs):
             return super().__new__(cls) # python will pass kwargs to init
         return None            
+    def __init__(self,*args,**kwargs):
+        super().__init__() # avoid trying to call object initializer with arguments
  
 
 class EnergyResponse(FactoryConstructorMixin):
     """
     EnergyResponse
     abstract class representing energy responses
-    use factory class method .create() to create
-    appropriate subclass from response dictionary
+    initialization accepts CROSSCALIB and EPS (default to 1 if absent)
     """
     @classmethod
     def is_mine(cls,*args,**kwargs):
@@ -369,11 +410,12 @@ class EnergyResponse(FactoryConstructorMixin):
         raise KeywordError('Supplied keywords to not define a recognized EnergyResponse')
     
     def __init__(self,**kwargs):
-        if 'CROSSCALIB' not in kwargs:
-            print('CROSSCALIB not found in channel description, assuming unity')
-            self.CROSSCALIB = 1.0 # default
-        else:
-            self.CROSSCALIB = kwargs['CROSSCALIB']
+        for arg in ['CROSSCALIB','EPS']:
+            if keyword_check_numeric_bool(arg):
+                setattr(self,arg,squeeze(kwargs[arg]))
+            else:
+                print('%s not found or not numeric in channel description, assuming unity' % arg)
+                setattr(self,arg,1.0) # default to unity
         
     def RE(self,E):
         """
@@ -381,7 +423,7 @@ class EnergyResponse(FactoryConstructorMixin):
         Channel response at energy E (w/o CROSSCALIB)
         output is dimensionless
         """
-        raise NotImplementedError
+        raise NotImplementedError # abstract base class
     def hE(self,Egrid,**kwargs):
         """
         hE = .hE(Egrid,...)
@@ -389,29 +431,41 @@ class EnergyResponse(FactoryConstructorMixin):
         Egrid and hE are 1-d numpy arrays of the sampe size
         CROSSCALIB applied
         """
-        raise NotImplementedError
+        raise NotImplementedError  # abstract base class
+    def hE0(self,Egrid=None,**kwargs):
+        """
+        hE = .hE(Egrid=None,...)
+        return energy response integrated over Egrid
+        if Egrid is not provided, attempts to provide its own
+        hE is a scalar, MeV
+        CROSSCALIB applied
+        """
+        if Egrid is None:
+            if self._E0 is None:
+                raise ValueError('Egrid must be supplied for %s.hE0' % self.__class__.__name__)
+            return self._E0
+        else:
+            hE = self.hE(Egrid,**kwargs)
+            return hE.sum() # integrate over energy
 
 class ER_Diff(EnergyResponse):
     """
     ER_Diff
     class representing differential energy channel response
-    use factory class method .create() to create
-    appropriate subclass from response dictionary
     initialization requires EPS, E0, DE
+    EPS is optional (defaults to 1)
     """
     @classmethod
     def is_mine(cls,*args,**kwargs):
         """*INHERIT*"""
-        keyword_check('E_TYPE',**kwargs)
-        return (kwargs['E_TYPE'] == 'DIFF')
+        return ('E_TYPE' in kwargs) and (kwargs['E_TYPE'] == 'DIFF')
 
     def __init__(self,**kwargs):
-        super().__init__(**kwargs)
-        keyword_check_numeric('EPS','E0','DE',**kwargs)            
-        self.EPS = squeeze(kwargs['EPS'])
+        super().__init__(**kwargs) # handles CROSSCALIB and EPS
+        keyword_check_numeric('E0','DE',**kwargs)
         self.E0 = squeeze(kwargs['E0']) # TODO - convert to MeV
         self.DE = squeeze(kwargs['DE']) # TODO - convert to MeV
-        self.hE0 = self.DE*self.EPS/self.CROSSCALIB # hE for flat spectrum
+        self._hE0 = self.DE*self.EPS/self.CROSSCALIB # hE for flat spectrum
 
     def RE(self,E):
         """*INHERIT*"""
@@ -421,26 +475,25 @@ class ER_Diff(EnergyResponse):
         """*INHERIT*"""
         hE = interp_weights(Egrid,self.E0)*self.dE*self.EPS
         return hE / self.CROSSCALIB
-
         
 class ER_Int(EnergyResponse):
     """
     ER_Int
     class representing integral energy channel response
     initialization requires EPS, E0
+    propertis:
+        hE0 - integrated energy response for flat spectrum, MeV
     """
     @classmethod
     def is_mine(cls,*args,**kwargs):
         """*INHERIT*"""
-        keyword_check('E_TYPE',**kwargs)
-        return (kwargs['E_TYPE'] == 'INT')
+        return ('E_TYPE' in kwargs) and (kwargs['E_TYPE'] == 'INT')
 
     def __init__(self,**kwargs):
-        super().__init__(**kwargs)
-        keyword_check_numeric('EPS','E0',**kwargs)            
-        self.EPS = squeeze(kwargs['EPS'])
+        super().__init__(**kwargs) # handles CROSSCALIB and EPS
+        keyword_check_numeric('E0',**kwargs)            
         self.E0 = squeeze(kwargs['E0']) # TODO - convert to MeV
-        self.hE0 = self.DE*self.EPS/self.CROSSCALIB  # should be inf for flat spectrum, but assume energy bandwidth==1
+        self._hE0 = None # not defined  for integral channel
 
     def RE(self,E):
         """*INHERIT*"""
@@ -476,20 +529,21 @@ class ER_Wide(EnergyResponse):
     ER_Wide
     class representing wide differential energy channel response
     initialization requires EPS, E0, E1
+    EPS is optional (defaults to 1)
     """
     @classmethod
     def is_mine(cls,*args,**kwargs):
         """*INHERIT*"""
-        keyword_check('E_TYPE',**kwargs)
-        return (kwargs['E_TYPE'] == 'WIDE')
+        return ('E_TYPE' in kwargs) and (kwargs['E_TYPE'] == 'WIDE')
 
     def __init__(self,**kwargs):
-        super().__init__(**kwargs)
-        keyword_check_numeric('EPS','E0','E1',**kwargs)            
-        self.EPS = squeeze(kwargs['EPS'])
+        super().__init__(**kwargs) # handles CROSSCALIB and EPS
+        keyword_check_numeric('E0','E1',**kwargs)            
         self.E0 = squeeze(kwargs['E0']) # TODO - convert to MeV
         self.E1 = squeeze(kwargs['E1']) # TODO - convert to MeV
-        self.hE0 = (self.E1-self.E0)*self.EPS/self.CROSSCALIB  # for flat spectrum
+        if self.E1<=self.E0:
+            raise ValueError('E1 must be greater than E0 for wide channel')
+        self._hE0 = (self.E1-self.E0)*self.EPS/self.CROSSCALIB  # for flat spectrum
         # build two integral channels to difference them
         tmp = {**kwargs,'E_TYPE':'INT'} # integral channel w/ same E0
         self.low = ER_Int(**tmp)
@@ -509,25 +563,25 @@ class ER_Table(EnergyResponse):
     """
     ER_Table
     class representing tabular energy channel response
+    initialization requires EPS, E_GRID
+    EPS is optional (defaults to 1)
     """
     @classmethod
     def is_mine(cls,*args,**kwargs):
         """*INHERIT*"""
-        keyword_check('E_TYPE',**kwargs)
-        return (kwargs['E_TYPE'] == 'TBL')
+        return ('E_TYPE' in kwargs) and (kwargs['E_TYPE'] == 'TBL')
 
     def __init__(self,**kwargs):
-        super().__init__(**kwargs)
-        keyword_check_numeric('EPS','E_GRID',**kwargs)
-        self.EPS = squeeze(kwargs['EPS'])
+        super().__init__(**kwargs) # handles CROSSCALIB and EPS
+        keyword_check_numeric('E_GRID',**kwargs)
         self.E_GRID = squeeze(kwargs['E_GRID'])
         if not validate_grid(self.E_GRID):
             raise ValueError('E_GRID is not a valid grid: 1-d, unique')
 
         if self.EPS.shape != self.E_GRID.shape:
-            raise ArgSizeError('E_GRID  and EPS are not the same shape')
+            raise ArgSizeError('E_GRID and EPS are not the same shape')
             
-        self.hE0 = np.sum(self.E_GRID*self.EPS*make_deltas(self.E_GRID))/self.CROSSCALIB  # for flat spectrum
+        self._hE0 = np.sum(self.E_GRID*self.EPS*make_deltas(self.E_GRID))/self.CROSSCALIB  # for flat spectrum
         self._RE = None
 
     def RE(self,E):
@@ -550,13 +604,11 @@ class AngleResponse(FactoryConstructorMixin):
     class representing angular responses
     all responses are forward-only and
     add backward response via self.backward when bidirectional
-    when initialized with no arguments, returns a null response
+    initialization accepts BIDIRECTIONAL (False if missing)
     
     properties:
         bidirectional - bool, is the angular response bidirectional?
         backward - backward angular response (null class when not bidirectional)
-        area - detector area, cm^2
-        G - geometric factor for forward hemisphere particles (theta<=90) cm^2 sr
         hA0 - goemetric factor for forward and (if bidirectional) backward hemispheres
     """
     @classmethod
@@ -567,20 +619,22 @@ class AngleResponse(FactoryConstructorMixin):
         else:
             raise KeywordError('The data provided did not define a recognized AngleResponse')
     def __init__(self,**kwargs):
-        self.bidirectional = ('BIDIRECTIONAL' in kwargs) and (kwargs['BIDIRECTIONAL'] == 'TRUE')
+        super().__init__(**kwargs)
+        self.bidirectional = ('BIDIRECTIONAL' in kwargs) and (kwargs['BIDIRECTIONAL'] in [True,'TRUE'])
     def A(self,theta,phi):
         """
         A = .A(theta,phi)
         return angular response (effective area) at specified theta,phi cm^2
         should add forward and backward response together
         theta and phi must broadcast together
+        A is mutual broadcast shape of theta,phi
         see module glossary for input meanings
         """
         raise NotImplementedError # abstract base class
     def hAthetaphi(self,thetagrid,phigrid,**kwargs):
         """
         hAthetaphi = .hAthetaphi(thetagrid,phigrid,...)
-        return angular response weights on theta x phi grid, cm^2
+        return angular response weights on theta x phi grid, cm^2 sr
         hAthetaphi is a scalar or shape (len(thetagrid),len(phigrid))
         see module glossary for input meanings
         """
@@ -593,9 +647,9 @@ class AngleResponse(FactoryConstructorMixin):
     def hAtheta(self,thetagrid,phigrid=None,**kwargs):
         """
         hAtheta = .hAtheta(thetagrid,phigrid,...)
-        return angular response weights on theta grid, cm^2
-        integrated over phigrid (or 0-2pi if None)
-        hAtheta is a scalar or 1-d numpy array of same size as thetagrid
+        return angular response weights on theta grid, cm^2 sr
+        if phigrid is None, integrated over 0-360
+        hAtheta is a scalar or 1-d numpy array of same length as thetagrid
         see module glossary for input meanings
         """
         if phigrid is None:
@@ -609,21 +663,23 @@ class AngleResponse(FactoryConstructorMixin):
         see module glossary for input meanings
         if tgrid is supplied, result is integrated over time grid
             expects alpha0,beta0,phi0 to depend on tgird
-        output units are cm^2 or cm^2-s if tgrid supplied
+        output units are cm^2-sr or cm^2-sr-s if tgrid supplied
         hAalphabeta is scalar or shape (len(alphagrid),len(betagrid))
         """
-        raise NotImplementedError
+        raise NotImplementedError # TODO
     def hAalpha(self,alpha0,beta0,phib,alphagrid,betagrid=None,tgrid=None,**kwargs):
         """
         hAalpha = .hAalpha(alpha0,beta0,phib,alphagrid,betagrid=None,tgrid=None,...)
         return angular response weights on alpha grid (integrated over beta)
         see module glossary for input meanings
-        if betagrid is None, supplies numeric beta grid when needed
+        if betagrid is None, integrated over 0-360
         if tgrid is supplied, result is integrated over time grid
             expects alpha0,beta0,phi0 to depend on tgird
-        output units are cm^2 or cm^2-s if tgrid supplied
-        hAalph ais a scalar or 1-d numpy array of same size as alphagrid
+        output units are cm^2-sr or cm^2-sr-s if tgrid supplied
+        hAalpha is a scalar or 1-d numpy array of same length as alphagrid
         """
+        if betagrid is None:
+            betagrid = default_betagrid(**kwargs)
         h = self.hAalphabeta(alpha0,beta0,phib,alphagrid,betagrid,tgrid,**kwargs)
         return h.sum(axis=1) # integrate over beta
     @property
@@ -666,6 +722,9 @@ class AR_Omni(AR_csym):
     initialization requires G (None OK for derived classes)
     Note: an omni is a sphere (same apparent area from all directions). 
     For flat, single-element detectors, use DISK and SLAB
+    properties:
+        area - detector area, cm^2
+        G - geometric factor for forward hemisphere particles (theta<=90) cm^2 sr
     """
     @classmethod
     def is_mine(cls,*args,**kwargs):
@@ -673,7 +732,7 @@ class AR_Omni(AR_csym):
         return keyword_check_bool('RESP_TYPE',**kwargs) and \
             (kwargs['RESP_TYPE'] == '[E]')
     def __init__(self,**kwargs):
-        super().__init__(**kwargs)
+        super().__init__(**kwargs) # handles BIDIRECTIONAL
         G = None
         if ('G' in kwargs) and kwargs['G'] is not None:
             # derived class may provide G as none
@@ -713,7 +772,8 @@ class AR_SingleElement(AR_Omni):
         "*INHERIT*"
         return False # abstract class, never the right answer
     def __init__(self,**kwargs):
-        super().__init__(G=None,**kwargs) # supply fake G, area and G will be set in derived class
+        # supply fake G to super, area and G will be set in derived class
+        super().__init__(G=None,**kwargs) # handles BIDIRECTIONAL
     def A(self,theta,phi):
         """*INHERIT*"""
         return super().A(theta,phi)*np.abs(np.cos(np.radians(theta,phi)))
@@ -735,7 +795,7 @@ class AR_Disk(AR_SingleElement):
         return keyword_check_bool('TH_TYPE',**kwargs) and \
             (kwargs['TH_TYPE'] == 'DISK')
     def __init__(self,**kwargs):
-        super().__init__(**kwargs)
+        super().__init__(**kwargs)  # handles BIDIRECTIONAL
         keyword_check_numeric('R1',**kwargs)
         self.R1 = squeeze(kwargs['R1']) # TODO: convert to cm
         self.area = np.pi*self.R1**2
@@ -751,7 +811,7 @@ class AR_Slab(AR_SingleElement):
         return keyword_check_bool('TH_TYPE',**kwargs) and \
             (kwargs['TH_TYPE'] == 'SLAB')
     def __init__(self,**kwargs):
-        super().__init__(**kwargs)
+        super().__init__(**kwargs) # handles BIDIRECTIONAL
         keyword_check_numeric('W1','H1',**kwargs)
         self.W1 = squeeze(kwargs['W1']) # TODO: convert to cm
         self.H1 = squeeze(kwargs['H1']) # TODO: convert to cm
@@ -769,14 +829,14 @@ class AR_Tele_Cyl(AR_csym):
         return keyword_check_bool('TH_TYPE',**kwargs) and \
             (kwargs['TH_TYPE'] == 'CYL_TELE')
     def __init__(self,**kwargs):
-        super().__init__(**kwargs)
+        super().__init__(**kwargs) # handles BIDIRECTIONAL
         keyword_check_numeric('R1','R2','D',**kwargs)
         self.R1 = squeeze(kwargs['R1']) # TODO: convert to cm
         self.R2 = squeeze(kwargs['R1']) # TODO: convert to cm
         self.D = squeeze(kwargs['D']) # TODO: convert to cm
         self.Rs = min(self.R1,self.R2)
-        self.thetac = np.degrees(np.atan(np.abs(self.R1-self.R2)/self.D))
-        self.thetam = np.degrees(np.atand((self.R1+self.R2)/self.D))
+        self.thetac = np.degrees(np.arctan(np.abs(self.R1-self.R2)/self.D))
+        self.thetam = np.degrees(np.arctan((self.R1+self.R2)/self.D))
         self.area = np.pi*self.Rs**2 # area at normal incidence
         tmp = self.R1**2+self.R2**2+self.D**2
         self.G = np.pi**2/2*(tmp-np.sqrt(tmp**2-4*self.R1**2*self.R2**2)) # eqn 8
@@ -848,7 +908,7 @@ class AR_Pinhole(AngleResponse):
         return keyword_check_bool('TH_TYPE',**kwargs) and \
             (kwargs['TH_TYPE'] == 'PINHOLE')
     def __init__(self,**kwargs):
-        super().__init__(**kwargs)
+        super().__init__(**kwargs) # handles BIDIRECTIONAL
         keyword_check_numeric('G',**kwargs)
         self.G = squeeze(kwargs['G']) # TODO: convert to cm^2 sr  
         self.area = 0
@@ -869,46 +929,29 @@ class AR_Pinhole(AngleResponse):
         """*INHERIT*"""
         # compute interpolation weight in -cos(theta)
         # so that integral over dcos(theta) gives unity
-        A = interp_weights(thetagrid,0)*self.G
-        dcostheta = np.abs(make_deltas(-np.cos(np.radians(thetagrid)),**kwargs))
-        dphi = make_deltas(np.radians(phigrid),**kwargs)
-        thetaI,phiI = broadcast_grids(thetagrid,phigrid)
-        dcosthetaI,dphiI = self.broadcast_grids(dcostheta,dphi)
-        A.shape = thetaI.shape
-        tmp = A*dcostheta*(thetaI<=90)*dphi
-        if self.bidirectional:                
+        w = interp_weights(-np.cos(np.radians(thetagrid)),-1.0) # -cos(0)=-1
+        w = np.broadcast_to(w,np.broadcast(thetagrid,phigrid).shape)
+        tmp = w/w.sum()*self.G # ensure tmp sums to G
+        if self.bidirectional: # special case of actually calling hAtheta
             tmp += self.backward.hAtheta(thetagrid,phigrid,**kwargs)
         return tmp
     def hAtheta(self,thetagrid,phigrid=None,**kwargs):
         """*INHERIT*"""
         # compute interpolation weight in -cos(theta)
         # so that integral over dcos(theta) gives unity
-        A = interp_weights(-np.cos(np.radians(thetagrid,0)))*self.G
-        if phigrid is None:
-            dphi = 2*np.phi
-        else:
-            dphi = make_deltas(np.radians(phigrid),**kwargs).sum()
-        phigrid = 0.0 # dummy value to save calculation
-        tmp = A*(thetagrid<=90)*dphi
-        if self.bidirectional:
-            tmp += self.backward.hAtheta(thetagrid,phigrid,**kwargs)
+        w = interp_weights(-np.cos(np.radians(thetagrid)),-1.0) # -cos(0)=-1
+        tmp = w/w.sum()*self.G # ensure tmp sums to G
+        if self.bidirectional: # special case of actually calling hAtheta
+            tmp += self.backward.hAtheta(180-thetagrid,phigrid,**kwargs)
         return tmp
     def hAalphabeta(self,alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,**kwargs):
-        """
-        hAalphabeta = .hAalphabeta(alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,...)
-        return angular response weights on alpha x beta grid
-        see module glossary for input meanings
-        if tgrid is supplied, result is integrated over time grid
-            expects alpha0,beta0,phi0 to depend on tgird
-        output units are cm^2 or cm^2-s if tgrid supplied
-        hAalphabeta is scalar or shape (len(alphagrid),len(betagrid))
-        """
+        """*INHERIT*"""
         dt = np.atleast_1d(make_deltas(tgrid,**kwargs))
         alpha0 = np.broadast_to(alpha0,dt.shape)
         beta0 = np.broadast_to(beta0,dt.shape)
         # compute interpolation weight in -cos(alpha)
         # so that integral over dcos(alpha) gives unity
-        dha = interp_weights(-np.cos(np.radians(alphagrid)),alpha0) # len(tgrid) x len(alphagrid)
+        dha = interp_weights(-np.cos(np.radians(alphagrid)),-np.cos(np.radians(alpha0))) # len(tgrid) x len(alphagrid)
         dhb = interp_weights(betagrid,beta0) # len(tgrid) x len(betagrid)
         # reshape to allow broadcast
         dha.shape = (len(dt),len(alphagrid),1)
@@ -920,21 +963,12 @@ class AR_Pinhole(AngleResponse):
             h += self.backward.hAalpha(alpha0,beta0,phib,alphagrid,betagrid,tgrid,**kwargs)
         return h
     def hAalpha(self,alpha0,beta0,phib,alphagrid,betagrid=None,tgrid=None,**kwargs):
-        """
-        hAalpha = .hAalpha(alpha0,beta0,phib,alphagrid,betagrid=None,tgrid=None,...)
-        return angular response weights on alpha grid (integrated over beta)
-        see module glossary for input meanings
-        if betagrid is None, supplies numeric beta grid when needed
-        if tgrid is supplied, result is integrated over time grid
-            expects alpha0,beta0,phi0 to depend on tgird
-        output units are cm^2 or cm^2-s if tgrid supplied
-        hAalph ais a scalar or 1-d numpy array of same size as alphagrid
-        """
+        """*INHERIT*"""
         dt = np.atleast_1d(make_deltas(tgrid,**kwargs))
         alpha0 = np.broadast_to(alpha0,dt.shape)
         # compute interpolation weight in -cos(alpha)
         # so that integral over dcos(alpha) gives unity
-        dh = interp_weights(-np.cos(np.radians(alphagrid)),alpha0) # len(tgrid) x len(alphagrid)
+        dh = interp_weights(-np.cos(np.radians(alphagrid)),-np.cos(np.radians(alpha0))) # len(tgrid) x len(alphagrid)
         h = np.dot(dt,dh) # sum over time
         h = h*self.G*sum(dt)/sum(h) # force to integrate to Gdt
         if self.bidirectional:
@@ -954,7 +988,7 @@ class AR_Tele_Rect(AngleResponse):
         return keyword_check_bool('TP_TYPE',**kwargs) and \
             (kwargs['TP_TYPE'] == 'RECT_TELE')
     def __init__(self,**kwargs):
-        super().__init__(**kwargs)
+        super().__init__(**kwargs) # handles BIDIRECTIONAL
         keyword_check_numeric('W1','H1','W2','H2',**kwargs)
         self.W1 = squeeze(kwargs['W1']) # TODO: convert to cm
         self.H1 = squeeze(kwargs['H1']) # TODO: convert to cm
@@ -1022,10 +1056,6 @@ class AR_Tele_Rect(AngleResponse):
             A += self.backward.A(180-theta,phi)
         return A
 
-# TODO: rename property A to _A
-# TODO: rename _A function to _Ainterpolator
-        
-
 class AR_Table_asym(AngleResponse):
     """
     AR_Table_asym
@@ -1064,6 +1094,21 @@ class ChannelResponse(FactoryConstructorMixin):
     Virtual base class for channel responses
     Constructor is a factory that will return 
     appropriate subclass from response dictionary
+    
+    Methods:
+        Working in (E,alpha,beta,time) (results integrated over time)
+        hEiso - make weights for numerical integral over E (isotropic)
+        hEalpha - make weights for double numerical integral over E,alpha (gyrotropic)
+        hEalphabeta - make weights for triple numerical integral over E,alpha,beta
+        halpha - make weights for numerical integral over alpha (flat spectrum, gyrotropic)
+        halphabeta - make weights for double numerical integral over alpha,beta (flat spectrum)
+        Working in (E,theta,phi)
+        R - return response function itself in units of effective area, cm^2
+        hE - make weights for numerical integral over E, (isotropic)
+        hEtheta - make weights for double numerical integral over E,theta (ignores flux phi dependence)
+        hEthetaphi - make weights for triple numerical integral over E,theta,phi
+        htheta - make weights for numerical integral over theta (flat spectrum, ignores flux phi dependence)
+        hthetaphi - make weights for double numerical integral over theta,phi (flat spectrum)
     """
         
     @classmethod
@@ -1071,23 +1116,268 @@ class ChannelResponse(FactoryConstructorMixin):
         """*INHERIT*"""
         keyword_check('RESP_TYPE',**kwargs)
         raise KeywordError('Supplied keywords to not define a recognized ChannelResponse')
-
-    def __init__(self,**kwargs):
-        print('Class not implemented yet: ' + self.__class__.__name__)
-    
     def copy(self):
         """
         channel.copy() return a copy of this object
         """
         return ChannelResponse(**self.to_dict())
-
     def to_dict(self):
         """
         channel.to_dict() return a nested dict of this object
         """
-        raise NotImplementedError
+        raise NotImplementedError # TODO
+    def R(self,E,theta,phi):
+        """
+        R = .R(E,theta,phi)
+        return 3-d response (effective area * efficiency) at 
+         specified E,theta,phi cm^2
+        E, theta and phi must broadcast together
+        R is mutual broadcast shape of E,theta,phi
+        see module glossary for input meanings
+        """
+        raise NotImplementedError # abstract base class
+    def hEthetaphi(self,Egrid,thetagrid,phigrid,**kwargs):
+        """
+        hEthetaphi = .hEthetaphi(Egrid,thetagrid,phigrid,...)
+        return angular response weights on E x theta x phi grid, cm^2 sr MeV
+        hEthetaphi is a scalar or shape (len(Egrid),len(thetagrid),len(phigrid))
+        if Egrid is None, object will attempt to supply its own
+        see module glossary for input meanings
+        """
+        if Egrid is None:
+            if hasattr(self,'E_GRID'):
+                Egrid = self.E_GRID
+            else:
+                raise ValueError('Egrid input cannot be None for object without its own E_GRID')
+        dE = make_deltas(Egrid,**kwargs)
+        dcostheta = np.abs(make_deltas(-np.cos(np.radians(thetagrid)),**kwargs))
+        dphi = make_deltas(np.radians(phigrid),**kwargs)
+        EI,thetaI,phiI = broadcast_grids(Egrid,thetagrid,phigrid)
+        dEI,dcosthetaI,dphiI = self.broadcast_grids(dE,dcostheta,dphi)
+        return self.R(EI,thetaI,phiI)*dEI*dcosthetaI*dphiI
+    def hEtheta(self,Egrid,thetagrid,phigrid=None,**kwargs):
+        """
+        hEtheta = .hEtheta(Egrid,thetagrid,phigrid=None,...)
+        return channel response weights on theta grid, cm^2 sr MeV
+        if phigrid is none, integrated over 0-360
+        hEtheta is a scalar or shape (len(Egrid),len(thetagrid))
+        if Egrid is None, object will attempt to supply its own
+        see module glossary for input meanings
+        """
+        if phigrid is None:
+            if hasattr(self,'PH_GRID'):
+                phigrid = self.PH_GRID
+            else:
+                phigrid = default_phigrid(**kwargs)
+        h = self.hEthetaphi(Egrid,thetagrid,phigrid,**kwargs)                
+        return h.sum(axis=1) # integrate over phi
+    def hE(self,Egrid,thetagrid=None,phigrid=None,**kwargs):
+        """
+        hEtheta = .hEtheta(Egrid,thetagrid=None,phigrid=None,...)
+        return channel response weights on E grid, cm^2 sr MeV
+        if thetagrid is none, integrated over 0-180
+        if phigrid is none, integrated over 0-360
+        hEtheta is a scalar or 1-d numpy array of same length as Egrid
+        if Egrid is None, object will attempt to supply its own
+        see module glossary for input meanings
+        """
+        if thetagrid is None:
+            if hasattr(self,'TH_GRID'):
+                thetagrid = self.TH_GRID
+            else:
+                thetagrid = default_thetagrid(**kwargs)
+        h = self.hEtheta(Egrid,thetagrid,phigrid,**kwargs)                
+        return h.sum(axis=1) # integrate over theta
+    def hEalphabeta(self,alpha0,beta0,phib,Egrid,alphagrid,betagrid,tgrid=None,**kwargs):
+        """
+        hEalphabeta = .hEalphabeta(alpha0,beta0,phib,Egrid,alphagrid,betagrid,tgrid=None,...)
+        return channel response weights on alpha x beta grid
+        if tgrid is supplied, result is integrated over time grid
+            expects alpha0,beta0,phi0 to depend on tgird
+        output units are cm^2-sr-MeV or cm^2-sr-MeV-s if tgrid supplied
+        if Egrid is None, object will attempt to supply its own
+        hEalphabeta is scalar or shape (len(alphagrid),len(betagrid))
+        see module glossary for input meanings
+        """
+        raise NotImplementedError # TODO
+    def hEalpha(self,alpha0,beta0,phib,Egrid,alphagrid,betagrid=None,tgrid=None,**kwargs):
+        """
+        hEalpha = .hEalpha(alpha0,beta0,phib,Egrid,alphagrid,betagrid=None,tgrid=None,...)
+        return channel response weights on alpha grid (integrated over beta)
+        if Egrid is None, object will attempt to supply its own
+        if betagrid is None, supplies numeric beta grid when needed
+        if tgrid is supplied, result is integrated over time grid
+            expects alpha0,beta0,phi0 to depend on tgird
+        output units are cm^2-sr-MeV or cm^2-sr-MeV-s if tgrid supplied
+        hEalpha is a scalar or 1-d numpy array of same length as alphagrid
+        see module glossary for input meanings
+        """
+        if betagrid is None:
+            betagrid = default_betagrid(**kwargs)
+        h = self.hEalphabeta(alpha0,beta0,phib,Egrid,alphagrid,betagrid,tgrid,**kwargs)
+        return h.sum(axis=2) # integrate over beta
+    def hEiso(self,alpha0,beta0,phib,Egrid,alphagrid,betagrid=None,tgrid=None,**kwargs):
+        """
+        hEiso = .hEiso(alpha0,beta0,phib,Egrid,alphagrid=None,betagrid=None,tgrid=None,...)
+        return channel response weights on alpha grid (integrated over beta)
+        if Egrid is None, object will attempt to supply its own
+        if betagrid is None, supplies numeric beta grid when needed
+        if tgrid is supplied, result is integrated over time grid
+            expects alpha0,beta0,phi0 to depend on tgird
+        output units are cm^2-sr-MeV or cm^2-sr-MeV-s if tgrid supplied
+        hEiso is a scalar or 1-d numpy array of same length as alphagrid
+        see module glossary for input meanings
+        """
+        if alphagrid is None:
+            alphagrid = default_alphagrid(**kwargs)
+        h = self.hEalpha(alpha0,beta0,phib,Egrid,alphagrid,betagrid,tgrid,**kwargs)
+        return h.sum(axis=1) # integrate over alpha
+    def hthetaphi(self,Egrid,thetagrid,phigrid,**kwargs):
+        """
+        hthetaphi = .hthetaphi(Egrid,thetagrid,phigrid,...)
+        return angular response weights on theta x phi grid, cm^2 sr MeV
+        integrated over E for a flat spectrum
+        hthetaphi is a scalar or shape (len(thetagrid),len(phigrid))
+        if Egrid is None, object will attempt to supply its own
+        see module glossary for input meanings
+        """
+        h = self.hEthetaphi(Egrid,thetagrid,phigrid,**kwargs)
+        return h.sum(axis=0) # integrate over E
+    def htheta(self,Egrid,thetagrid,phigrid=None,**kwargs):
+        """
+        htheta = .htheta(Egrid,thetagrid,phigrid,...)
+        return channel response weights on theta grid, cm^2 sr MeV
+        integrated over E for a flat spectrum
+        integrated over phigrid (or 0-360 if None)
+        htheta is a scalar or 1-d numpy array of same length as thetagrid
+        if Egrid is None, object will attempt to supply its own
+        see module glossary for input meanings
+        """
+        h = self.hEtheta(Egrid,thetagrid,phigrid,**kwargs)
+        return h.sum(axis=0)  # integrate over E
+    def halphabeta(self,alpha0,beta0,phib,Egrid,alphagrid,betagrid,tgrid=None,**kwargs):
+        """
+        halphabeta = .halphabeta(alpha0,beta0,phib,Egrid,alphagrid,betagrid,tgrid=None,...)
+        return channel response weights on alpha x beta grid
+        integrated over E for a flat spectrum
+        if tgrid is supplied, result is integrated over time grid
+            expects alpha0,beta0,phi0 to depend on tgird
+        output units are cm^2-sr-MeV or cm^2-sr-MeV-s if tgrid supplied
+        if Egrid is None, object will attempt to supply its own
+        halphabeta is scalar or shape (len(alphagrid),len(betagrid))
+        see module glossary for input meanings
+        """
+        h = self.hEalphabeta(alpha0,beta0,phib,Egrid,alphagrid,betagrid,tgrid,**kwargs)
+        return h.sum(axis=0) # integrate over E
+    def halpha(self,alpha0,beta0,phib,Egrid,alphagrid,betagrid=None,tgrid=None,**kwargs):
+        """
+        hAalpha = .hAalpha(alpha0,beta0,phib,Egrid,alphagrid,betagrid=None,tgrid=None,...)
+        return channel response weights on alpha grid (integrated over E,beta)
+        if Egrid is None, object will attempt to supply its own
+        if betagrid is None, supplies numeric beta grid when needed
+        if tgrid is supplied, result is integrated over time grid
+            expects alpha0,beta0,phi0 to depend on tgird
+        output units are cm^2-sr-MeV or cm^2-sr-MeV-s if tgrid supplied
+        hAalph ais a scalar or 1-d numpy array of same length as alphagrid
+        see module glossary for input meanings
+        """
+        h = self.halphabeta(alpha0,beta0,phib,Egrid,alphagrid,betagrid,tgrid,**kwargs)
+        return h.sum(axis=1) # integrate over beta
 
-class CR_Omni(ChannelResponse):
+class CR_Esep(ChannelResponse):
+    """
+    CR_Esep
+    abstract base class for all energy-separable responses
+    """
+    
+    @classmethod
+    def is_mine(cls,*args,**kwargs):
+        return False # abstract class is never the right answer
+    def __init__(self,**kwargs):
+        super().__init__(**kwargs)
+        self.er = EnergyResponse(**kwargs)
+        self.ar = AngleResponse(**kwargs)
+    def R(self,E,theta,phi):
+        """*INHERIT*"""
+        return self.er.RE(E)*self.ar.A(theta,phi)
+        raise NotImplementedError # abstract base class
+    def _merge_hEhA(hE,hA):
+        """
+        hEA = merge hE size (NE,) with hA size (N1,) or (N1,N2)
+        into hEhA of size (NE,N1) or size (NE,N1,N2)
+        hEA = hE*hA
+        """
+        hE = np.reshape(hE,(hE.size,np.ones(hA.ndim,type=int)))
+        hA = np.reshape(hE,(1,*hA.shape))
+        return hE*hA
+    def hEthetaphi(self,Egrid,thetagrid,phigrid,**kwargs):
+        """*INHERIT*"""
+        if Egrid is None:
+            if hasattr(self,'E_GRID'):
+                Egrid = self.E_GRID
+            else:
+                raise ValueError('Egrid input cannot be None for object without its own E_GRID')
+        hE = self.er.hE(Egrid,**kwargs)
+        hA = self.ar.hAthetaphi(thetagrid,phigrid,**kwargs)
+        return self._merge_hEhA(hE,hA)
+    def hEtheta(self,Egrid,thetagrid,phigrid=None,**kwargs):
+        """*INHERIT*"""
+        raise NotImplementedError # TODO
+        if phigrid is None:
+            if hasattr(self,'PH_GRID'):
+                phigrid = self.PH_GRID
+            else:
+                phigrid = default_phigrid(**kwargs)
+        hE = self.er.hE(Egrid,**kwargs)
+        hA = self.ar.hAtheta(thetagrid,phigrid,**kwargs)
+        return self._merge_hEhA(hE,hA)
+    def hE(self,Egrid,thetagrid=None,phigrid=None,**kwargs):
+        """*INHERIT*"""
+        raise NotImplementedError # TODO
+        if thetagrid is None:
+            if hasattr(self,'TH_GRID'):
+                thetagrid = self.TH_GRID
+            else:
+                thetagrid = default_thetagrid(**kwargs)
+        hE = self.er.hE(Egrid,**kwargs)
+        return hE*self.hA0
+    def hEalphabeta(self,alpha0,beta0,phib,Egrid,alphagrid,betagrid,tgrid=None,**kwargs):
+        """*INHERIT*"""
+        hE = self.er.hE(Egrid,**kwargs)
+        hA = self.ar.hAalphabeta(alpha0,beta0,phib,alphagrid,betagrid,tgrid,**kwargs)
+        return self._merge_hEhA(hE,hA)
+    def hEalpha(self,alpha0,beta0,phib,Egrid,alphagrid,betagrid=None,tgrid=None,**kwargs):
+        """*INHERIT*"""
+        hE = self.er.hE(Egrid,**kwargs)
+        hA = self.ar.hAalpha(alpha0,beta0,phib,alphagrid,betagrid,tgrid,**kwargs)
+        return self._merge_hEhA(hE,hA)
+    def hEiso(self,alpha0,beta0,phib,Egrid,alphagrid,betagrid=None,tgrid=None,**kwargs):
+        """*INHERIT*"""
+        hE = self.er.hE(Egrid,**kwargs)
+        hA = self.ar.hA0*sum(make_deltas(tgrid,**kwargs))
+        return hE*hA
+    def hthetaphi(self,Egrid,thetagrid,phigrid,**kwargs):
+        """*INHERIT*"""
+        hE = self.er.hE0(Egrid,**kwargs)
+        hA = self.ar.hAthetaphi(thetagrid,phigrid,**kwargs)
+        return hE*hA
+    def htheta(self,Egrid,thetagrid,phigrid=None,**kwargs):
+        """*INHERIT*"""
+        hE = self.er.hE0(Egrid,**kwargs)
+        hA = self.ar.hAtheta(thetagrid,phigrid,**kwargs)
+        return hE*hA
+    def halphabeta(self,alpha0,beta0,phib,Egrid,alphagrid,betagrid,tgrid=None,**kwargs):
+        """*INHERIT*"""
+        hE = self.er.hE0(Egrid,**kwargs)
+        hA = self.ar.hAalphabeta(alpha0,beta0,phib,alphagrid,betagrid,tgrid,**kwargs)
+        return hE*hA
+    def halpha(self,alpha0,beta0,phib,Egrid,alphagrid,betagrid=None,tgrid=None,**kwargs):
+        """*INHERIT*"""
+        hE = self.er.hE0(Egrid,**kwargs)
+        hA = self.ar.hAalpha(alpha0,beta0,phib,alphagrid,betagrid,tgrid,**kwargs)
+        return hE*hA
+
+class CR_Omni(CR_Esep):
     """
     CR_Omni
     omnidirectional channel response
@@ -1097,8 +1387,9 @@ class CR_Omni(ChannelResponse):
     def is_mine(cls,*args,**kwargs):
         keyword_check('RESP_TYPE',**kwargs)
         return (kwargs['RESP_TYPE'] == '[E]')
+    # no further customization required
     
-class CR_Esep_sym(CR_Omni):
+class CR_Esep_sym(CR_Esep):
     """
     CR_Esep_sym
     energy-separable, phi-symmetric channel response
@@ -1107,8 +1398,9 @@ class CR_Esep_sym(CR_Omni):
     def is_mine(cls,*args,**kwargs):
         keyword_check('RESP_TYPE',**kwargs)
         return (kwargs['RESP_TYPE'] == '[E][TH]')
+    # no further customization required
     
-class CR_Esep_asym(CR_Esep_sym):
+class CR_Esep_asym(CR_Esep):
     """
     CR_Esep_asym
     energy-separable, phi-asymmetric channel response
@@ -1117,8 +1409,9 @@ class CR_Esep_asym(CR_Esep_sym):
     def is_mine(cls,*args,**kwargs):
         keyword_check('RESP_TYPE',**kwargs)
         return (kwargs['RESP_TYPE'] == '[E][TH,PH]')
+    # no further customization required
 
-class CR_insep_sym(CR_Omni):
+class CR_insep_sym(ChannelResponse):
     """
     CR_insep_sym
     energy-inseparable, phi-symmetric channel response
@@ -1127,8 +1420,12 @@ class CR_insep_sym(CR_Omni):
     def is_mine(cls,*args,**kwargs):
         keyword_check('RESP_TYPE',**kwargs)
         return (kwargs['RESP_TYPE'] == '[E,TH]')
+    # TODO - __init__
+    def R(self,E,theta,phi):
+        """*INHERIT*"""
+        raise NotImplementedError # TODO - 2-d interp
     
-class CR_insep_asym(CR_insep_sym):
+class CR_insep_asym(ChannelResponse):
     """
     CR_insep_asym
     energy-inseparable, phi-asymmetric channel response
@@ -1137,6 +1434,10 @@ class CR_insep_asym(CR_insep_sym):
     def is_mine(cls,*args,**kwargs):
         keyword_check('RESP_TYPE',**kwargs)
         return (kwargs['RESP_TYPE'] == '[E,TH,PH]')
+    # TODO - __init__
+    def R(self,E,theta,phi):
+        """*INHERIT*"""
+        raise NotImplementedError # TODO - 3-d interp
 
 # inherit dosctrings for everythin descended from FactoryConstructorMixin
 # includes ChannelResponse and its internal classes EnergyResponse and AngleResponse
@@ -1191,7 +1492,6 @@ if __name__ == '__main__':
         print(e)
     
     # very simple test of RFL class instantiation
-    print('Omni',ChannelResponse(RESP_TYPE='[E]'))
-    print('CR_insep_sym',ChannelResponse(RESP_TYPE='[E,TH]'))
-    print('CR_Esep_asym',ChannelResponse(RESP_TYPE='[E][TH,PH]'))
-    print('AR_Tele_asym',ChannelResponse.AngleResponse(TP_TYPE='RECT_TELE'))
+    print('Omni int',ChannelResponse(RESP_TYPE='[E]',E_TYPE='INT',E0=2))
+    print('Tele_sym wide',ChannelResponse(RESP_TYPE='[E][TH]',E_TYPE='WIDE',E0=2,E1=3,TH_TYPE='CYL_TELE',R1=1,R2=2,D=3.0))
+    print('Tele_asym diff',ChannelResponse(RESP_TYPE='[E][TH,PH]',E_TYPE='DIFF',E0=2,DE=1,TP_TYPE='RECT_TELE',W1=1.0,H1=2.0,W2=0.5,H2=1.0,D=3.0))
