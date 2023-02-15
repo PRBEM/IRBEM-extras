@@ -29,7 +29,7 @@ class methods:
 (E,alpha,beta,time)
 rfl_make_hEiso.m - make weights for numerical integral over E
 rfl_make_hEalpha.m - make weights for double numerical integral over E,alpha
-rfl_make_hEalphabeta.m - make weights for triple numerical integral over E,alpha,beta
+*rfl_make_hEalphabeta.m - make weights for triple numerical integral over E,alpha,beta
 rfl_make_halpha.m - make weights for numerical integral over alpha
 rfl_make_halphabeta.m - make weights for double numerical integral over alpha,beta
 (E,theta,phi)
@@ -39,7 +39,7 @@ rfl_make_hEthetaphi.m - make weights for triple numerical integral over E,theta,
 rfl_make_htheta.m - make weights for numerical integral over theta
 rfl_make_hthetaphi.m - make weights for double numerical integral over theta,phi
 
-internal utilities:
+internal utilities: (did not go this way)
 rfl_interp_weights_1d.m - make weights to interpolate in 1 D with boundary condition
 rfl_interp_weights_2d.m - make weights to interpolate in 2 D with boundary conditions
 rfl_interp_weights_3d.m - make weights to interpolate in 3 D with boundary conditions
