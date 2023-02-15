@@ -278,11 +278,11 @@ def squeeze(val):
         val = val.item() # reduce singleton to scalar (replaces .asscalar)
     return val
 
-def interp_weights(xgrid,xhat,extrap_left=False,extrap_right=False,period=None):
+def interp_weights_1d(xgrid,xhat,extrap_left=False,extrap_right=False,period=None):
     """
-        v = interp_weights(xgrid,xhat,extrap_left=False,extrap_right=False,period=None)
+        v = interp_weights_1d(xgrid,xhat,extrap_left=False,extrap_right=False,period=None)
         xgrid is list of grid x values (Nx,)
-        xhat is list of query x values (N,)
+        xhat is list of query x values (N,) or scalar
         extrap_left - 
             0,False - zero for xhat < xgrid[0]
             True - linearly extrapolate for xhat < xgrid[0]
@@ -343,6 +343,77 @@ def interp_weights(xgrid,xhat,extrap_left=False,extrap_right=False,period=None):
     if isscalar:
         v = v[0,:] # (1,Nx) -> (Nx,)
     return v
+
+def interp_weights_3d(xgrid,xhat,ygrid,yhat,zgrid=None,zhat=None,xopts={},yopts={},zopts={}):
+    """
+        v = interp_weights_2d(xgrid,xhat,ygrid,yhat,zgrid=None,zhat=None,xopts={},yopts={},zopts={})
+        xgrid is list of grid x values (Nx,)
+        xhat is list of query x values (N,) or scalar
+        ygrid is list of grid y values (Ny,)
+        yhat is list of query y values (N,) or scalar
+        zgrid is list of grid y values (Nz,)
+        zhat is list of query z values (N,) or scalar
+        xopts is a dict of options for interp_weigths_1d for x
+        yopts is a dict of options for interp_weigths_1d for y
+        zopts is a dict of options for interp_weigths_1d for z
+        v is the value of the interpolation weights from the 
+          xgrid x ygrid x zgrid to points xhat,yhat,zhat
+        v is (N,Nx,Ny,Nz)
+        if xhat, yhat and zhat are scalar, then v will be (Nx,Ny,Nz)
+        if zgrid and zhat are None, produce 2-d interpolation weights 
+          without Nz axis on output
+    """
+    if (zgrid is None) != (zhat is None):
+        raise ValueError('if either zgrid or zhat is None, both must be')
+
+    isscalar = np.isscalar(xhat) and np.isscalar(yhat)
+    xhat = np.atleast_1d(xhat).ravel()
+    yhat = np.atleast_1d(yhat).ravel()
+    N = max(len(xhat),len(yhat),len(zhat))
+    if zhat is not None:
+        isscalar = isscalar and np.isscalar(zhat)
+        zhat = np.atleast_1d(zhat).ravel()
+        N = max(N,len(zhat))
+
+    if len(xhat) not in [1,N]:
+        raise ValueError('xhat must be broadcastable to same size as yhat,zhat')
+    wx = interp_weights_1d(xgrid,xhat,**xopts) # len(xhat) x Nx
+    if len(yhat) not in [1,N]:
+        raise ValueError('yhat must be broadcastable to same size as xhat,zhat')
+    wy = interp_weights_1d(ygrid,yhat,**yopts) # len(yhat) x Ny
+    if zhat is not None:
+        if len(zhat) not in [1,N]:
+            N = max(N,len(zhat))
+            raise ValueError('zhat must be broadcastable to same size as xhat,yhat')
+        wz = interp_weights_1d(zgrid,zhat,**zopts) # len(zhat) x Nz
+
+    if zhat is not None: # make broadcastable to (N,Nx,Ny,Nz)
+        wy = np.expand_dims(np.expand_dims(wy,1),3) 
+        wz = np.expand_dims(np.expand_dims(wz,1),1)
+    else: # make broadcastable to (N,Nx,Ny)
+        wy = np.expand_dims(wy,1)
+        wz = 1 # dummy
+
+    w = wx*wy*wz
+    if isscalar: # remove first dim
+        w = np.squeeze(w,axis=0)
+    return w
+
+def interp_weights_2d(xgrid,xhat,ygrid,yhat,xopts={},yopts={}):
+    """
+        v = interp_weights_2d(xgrid,xhat,ygrid,yhat,xopts={},yopts={})
+        xgrid is list of grid x values (Nx,)
+        xhat is list of query x values (N,) or scalar
+        ygrid is list of grid y values (Ny,)
+        yhat is list of query y values (N,) or scalar
+        xopts is a dict of options for interp_weigths_1d for x
+        yopts is a dict of options for interp_weigths_1d for y
+        v is the value of the interpolation weights from the 
+          xgrid x ygrid to points xhat,yhat
+        v is (N,Nx,Ny)
+        if xhat and yhat are scalar, then v will be (Nx,Ny)
+    """
+    return interp_weights_3d(xgrid,xhat,ygrid,yhat,xopts,yopts)
 
 class FactoryConstructorMixin(object):
     """
@@ -468,7 +539,7 @@ class ER_Diff(EnergyResponse):
 
     def hE(self,Egrid,**kwargs):
         """*INHERIT*"""
-        hE = interp_weights(Egrid,self.E0)*self.dE*self.EPS
+        hE = interp_weights_1d(Egrid,self.E0)*self.dE*self.EPS
         return hE / self.CROSSCALIB
         
 class ER_Int(EnergyResponse):
@@ -924,7 +995,7 @@ class AR_Pinhole(AngleResponse):
         """*INHERIT*"""
         # compute interpolation weight in -cos(theta)
         # so that integral over dcos(theta) gives unity
-        w = interp_weights(-np.cos(np.radians(thetagrid)),-1.0) # -cos(0)=-1
+        w = interp_weights_1d(-np.cos(np.radians(thetagrid)),-1.0) # -cos(0)=-1
         w = np.broadcast_to(w,np.broadcast(thetagrid,phigrid).shape)
         tmp = w/w.sum()*self.G # ensure tmp sums to G
         if self.bidirectional: # special case of actually calling hAtheta
@@ -934,7 +1005,7 @@ class AR_Pinhole(AngleResponse):
         """*INHERIT*"""
         # compute interpolation weight in -cos(theta)
         # so that integral over dcos(theta) gives unity
-        w = interp_weights(-np.cos(np.radians(thetagrid)),-1.0) # -cos(0)=-1
+        w = interp_weights_1d(-np.cos(np.radians(thetagrid)),-1.0) # -cos(0)=-1
         tmp = w/w.sum()*self.G # ensure tmp sums to G
         if self.bidirectional: # special case of actually calling hAtheta
             tmp += self.backward.hAtheta(180-thetagrid,phigrid,**kwargs)
@@ -946,8 +1017,8 @@ class AR_Pinhole(AngleResponse):
         beta0 = np.broadast_to(beta0,dt.shape)
         # compute interpolation weight in -cos(alpha)
         # so that integral over dcos(alpha) gives unity
-        dha = interp_weights(-np.cos(np.radians(alphagrid)),-np.cos(np.radians(alpha0))) # len(tgrid) x len(alphagrid)
-        dhb = interp_weights(betagrid,beta0) # len(tgrid) x len(betagrid)
+        dha = interp_weights_1d(-np.cos(np.radians(alphagrid)),-np.cos(np.radians(alpha0))) # len(tgrid) x len(alphagrid)
+        dhb = interp_weights_1d(betagrid,beta0) # len(tgrid) x len(betagrid)
         # reshape to allow broadcast
         dha.shape = (len(dt),len(alphagrid),1)
         dhb.shape = (len(dt),1,len(betagrid))
@@ -963,7 +1034,7 @@ class AR_Pinhole(AngleResponse):
         alpha0 = np.broadast_to(alpha0,dt.shape)
         # compute interpolation weight in -cos(alpha)
         # so that integral over dcos(alpha) gives unity
-        dh = interp_weights(-np.cos(np.radians(alphagrid)),-np.cos(np.radians(alpha0))) # len(tgrid) x len(alphagrid)
+        dh = interp_weights_1d(-np.cos(np.radians(alphagrid)),-np.cos(np.radians(alpha0))) # len(tgrid) x len(alphagrid)
         h = np.dot(dt,dh) # sum over time
         h = h*self.G*sum(dt)/sum(h) # force to integrate to Gdt
         if self.bidirectional:
@@ -1074,6 +1145,8 @@ class AR_Table_asym(AngleResponse):
         self._Ainterpolator = None
         if self.A_GRID.shape != (len(self.TH_GRID),len(self.PH_GRID)):
             raise ArgSizeError('A does not have shape (TH_GRID,PH_GRID)')
+        if (self.PH_GRID[0] !=0) or (self.PH_GRID[-1] != 360):
+            raise ValueError('PH_GRID should span [0,360]')
     def A(self,theta,phi):
         """*INHERIT*"""
         if self._Ainterpolator is None:
@@ -1459,6 +1532,8 @@ class CR_Table_asym(ChannelResponse):
         if self._R.shape != (self.E_GRID.size,self.TH_GRID.size,self.PH_GRID.size):
             raise ArgSizeError('R is not shape (E_GRID x TH_GRID x PH_GRID')
         self._Rinterpolator = None
+        if (self.PH_GRID[0] !=0) or (self.PH_GRID[-1] != 360):
+            raise ValueError('PH_GRID should span [0,360]')
     def R(self,E,theta,phi):
         """*INHERIT*"""
         if self._Rinterpolator is None:
