@@ -36,11 +36,6 @@ defined from ChannelResponse, EnergyResponse, and AngleResponse
 
 """
 
-"""
-TODO:
-    apply CROSSCALIB for hE and h* (but not hA*)
-"""
-
 # NOTE: in this code where the docstring is *INHERIT* that means
 # the string *INHERIT* will be replaced by the docstring for the
 # parent class's corresponding method
@@ -574,7 +569,7 @@ class ER_Table(EnergyResponse):
     def __init__(self,**kwargs):
         super().__init__(**kwargs) # handles CROSSCALIB and EPS
         keyword_check_numeric('E_GRID',**kwargs)
-        self.E_GRID = squeeze(kwargs['E_GRID'])
+        self.E_GRID = squeeze(kwargs['E_GRID']) # TODO convert to MeV
         if not validate_grid(self.E_GRID):
             raise ValueError('E_GRID is not a valid grid: 1-d, unique')
 
@@ -1071,12 +1066,10 @@ class AR_Table_asym(AngleResponse):
     def __init__(self,**kwargs):
         super().__init__(**kwargs)
         keyword_check_numeric('TH_GRID','PH_GRID','A',**kwargs)
-        self.TH_GRID = squeeze(kwargs['TH_GRID'])
-        if not validate_grid(self.TH_GRID):
-            raise ValueError('TH_GRID is not a valid grid: 1-d, unique')
-        self.PH_GRID = squeeze(kwargs['PH_GRID'])
-        if not validate_grid(self.PH_GRID):
-            raise ValueError('PH_GRID is not a valid grid: 1-d, unique')
+        for arg in ['TH_GRID','PH_GRID']:
+            setattr(self,arg,squeeze(kwargs[arg]))
+            if not validate_grid(getattr(self,arg)):
+                raise ValueError('%s is not a valid grid: 1-d, unique' % arg)
         self._A = squeeze(kwargs['A']) # TODO: convert to cm^2
         self._Ainterpolator = None
         if self.A_GRID.shape != (len(self.TH_GRID),len(self.PH_GRID)):
@@ -1085,7 +1078,7 @@ class AR_Table_asym(AngleResponse):
         """*INHERIT*"""
         if self._Ainterpolator is None:
             # extrapolate beyond grid with nearest edge with zero
-            self._Ainterpolator = RegularGridInterpolator((self.TH_GRID,self.PH_GRID),self.A,'linear',bounds_error=False,fill_value=0.0)
+            self._Ainterpolator = RegularGridInterpolator((self.TH_GRID,self.PH_GRID),self._A,'linear',bounds_error=False,fill_value=0.0)
         return self._Ainterpolator(theta,phi)
             
 
@@ -1385,8 +1378,7 @@ class CR_Omni(CR_Esep):
     
     @classmethod
     def is_mine(cls,*args,**kwargs):
-        keyword_check('RESP_TYPE',**kwargs)
-        return (kwargs['RESP_TYPE'] == '[E]')
+        return ('RESP_TYPE' in kwargs) and (kwargs['RESP_TYPE'] == '[E]')
     # no further customization required
     
 class CR_Esep_sym(CR_Esep):
@@ -1396,8 +1388,7 @@ class CR_Esep_sym(CR_Esep):
     """
     @classmethod
     def is_mine(cls,*args,**kwargs):
-        keyword_check('RESP_TYPE',**kwargs)
-        return (kwargs['RESP_TYPE'] == '[E][TH]')
+        return ('RESP_TYPE' in kwargs) and (kwargs['RESP_TYPE'] == '[E][TH]')
     # no further customization required
     
 class CR_Esep_asym(CR_Esep):
@@ -1407,37 +1398,73 @@ class CR_Esep_asym(CR_Esep):
     """
     @classmethod
     def is_mine(cls,*args,**kwargs):
-        keyword_check('RESP_TYPE',**kwargs)
-        return (kwargs['RESP_TYPE'] == '[E][TH,PH]')
+        return ('RESP_TYPE' in kwargs) and (kwargs['RESP_TYPE'] == '[E][TH,PH]')
     # no further customization required
 
-class CR_insep_sym(ChannelResponse):
+class CR_Table_sym(ChannelResponse):
     """
-    CR_insep_sym
+    CR_Table_sym
     energy-inseparable, phi-symmetric channel response
+    response defined by 2-D table
+    initializer requires ET_TYPE, E_GRID, TH_GRID, and R
     """
     @classmethod
     def is_mine(cls,*args,**kwargs):
         keyword_check('RESP_TYPE',**kwargs)
-        return (kwargs['RESP_TYPE'] == '[E,TH]')
-    # TODO - __init__
+        return ('RESP_TYPE' in kwargs) and \
+                (kwargs['RESP_TYPE'] == '[E,TH]') \
+                ('ET_TYPE' in kwargs) and \
+                (kwargs['ET_TYPE'] == 'TBL')
+    def __init__(self,**kwargs):
+        super().__init__(**kwargs)
+        keyword_check_numeric('E_GRID','TH_GRID','R',**kwargs)
+        for arg in ['E_GRID','TH_GRID']:
+            setattr(self,arg,squeeze(kwargs[arg]))
+            if not validate_grid(getattr(self,arg)):
+                raise ValueError('%s is not a valid grid: 1-d, unique' % arg)
+        # TODO convert E_GRID to MeV
+        self._R = squeeze(kwargs['R']) # TODO: convert to cm^2
+        if self._R.shape != (self.E_GRID.size,self.TH_GRID.size):
+            raise ArgSizeError('R is not shape (E_GRID x TH_GRID')
+        self._Rinterpolator = None
     def R(self,E,theta,phi):
         """*INHERIT*"""
-        raise NotImplementedError # TODO - 2-d interp
+        if self._Rinterpolator is None:
+            # extrapolate beyond grid with nearest edge with zero
+            self._Rinterpolator = RegularGridInterpolator((self.E_GRID,self.TH_GRID),self._R,'linear',bounds_error=False,fill_value=0.0)
+        return self._Rinterpolator(E,theta)
     
-class CR_insep_asym(ChannelResponse):
+class CR_Table_asym(ChannelResponse):
     """
-    CR_insep_asym
+    CR_Table_asym
     energy-inseparable, phi-asymmetric channel response
+    response defined by 3-D table
+    initializer requires ETP_TYPE, E_GRID, TH_GRID, PH_GRID, and R
     """
     @classmethod
     def is_mine(cls,*args,**kwargs):
-        keyword_check('RESP_TYPE',**kwargs)
-        return (kwargs['RESP_TYPE'] == '[E,TH,PH]')
-    # TODO - __init__
+        return ('RESP_TYPE' in kwargs) and \
+                (kwargs['RESP_TYPE'] == '[E,TH,PH]') \
+                ('ETP_TYPE' in kwargs) and \
+                (kwargs['ETP_TYPE'] == 'TBL')
+    def __init__(self,**kwargs):
+        super().__init__(**kwargs)
+        keyword_check_numeric('E_GRID','TH_GRID','PH_GRID','R',**kwargs)
+        for arg in ['E_GRID','TH_GRID','PH_GRID']:
+            setattr(self,arg,squeeze(kwargs[arg]))
+            if not validate_grid(getattr(self,arg)):
+                raise ValueError('%s is not a valid grid: 1-d, unique' % arg)
+        # TODO convert E_GRID to MeV
+        self._R = squeeze(kwargs['R']) # TODO: convert to cm^2
+        if self._R.shape != (self.E_GRID.size,self.TH_GRID.size,self.PH_GRID.size):
+            raise ArgSizeError('R is not shape (E_GRID x TH_GRID x PH_GRID')
+        self._Rinterpolator = None
     def R(self,E,theta,phi):
         """*INHERIT*"""
-        raise NotImplementedError # TODO - 3-d interp
+        if self._Rinterpolator is None:
+            # extrapolate beyond grid with nearest edge with zero
+            self._Rinterpolator = RegularGridInterpolator((self.E_GRID,self.TH_GRID,self.PH_GRID),self._R,'linear',bounds_error=False,fill_value=0.0)
+        return self._Rinterpolator(E,theta,phi)
 
 # inherit dosctrings for everythin descended from FactoryConstructorMixin
 # includes ChannelResponse and its internal classes EnergyResponse and AngleResponse
