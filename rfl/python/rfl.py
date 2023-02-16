@@ -800,7 +800,19 @@ class AngleResponse(FactoryConstructorMixin):
         output units are cm^2-sr or cm^2-sr-s if tgrid supplied
         hAalphabeta is scalar or shape (len(alphagrid),len(betagrid))
         """
-        raise NotImplementedError # TODO
+        dcosa = make_deltas(-cosd(alphagrid),**kwargs) # (Na,)
+        db = np.radians(make_deltas(betagrid,**kwargs)) # (Nb,)
+        dt = make_deltas(tgrid,**kwargs); #(Nt,) or scalar
+        dcosa,db = broadcast_grids(dcosa,db) # (Na,Nb)
+        theta,phi = alphabeta2thetaphi(alphagrid,betagrid,alpha0,beta0,phib) # (Na,Nb,Nt) or (NA,Nb)
+        A = self.A(E,theta,phi) # (Na,Nb,*Nt)
+        if np.isscalar(dt):
+            h = A*dt
+        else:
+            h = np.tensordot(A,dt,axes=((2,),(0,))) # dot product along Nt dimension
+        # now h is (Na,Nb)
+        h = h*dcosa*db/self.CROSSCALIB
+        return h
     def hAalpha(self,alpha0,beta0,phib,alphagrid,betagrid=None,tgrid=None,**kwargs):
         """
         hAalpha = .hAalpha(alpha0,beta0,phib,alphagrid,betagrid=None,tgrid=None,...)
@@ -1471,7 +1483,6 @@ class CR_Esep(ChannelResponse):
         return self._merge_hEhA(hE,hA)
     def hEtheta(self,Egrid,thetagrid,phigrid=None,**kwargs):
         """*INHERIT*"""
-        raise NotImplementedError # TODO
         if phigrid is None:
             if hasattr(self,'PH_GRID'):
                 phigrid = self.PH_GRID
@@ -1482,7 +1493,6 @@ class CR_Esep(ChannelResponse):
         return self._merge_hEhA(hE,hA)
     def hE(self,Egrid,thetagrid=None,phigrid=None,**kwargs):
         """*INHERIT*"""
-        raise NotImplementedError # TODO
         if thetagrid is None:
             if hasattr(self,'TH_GRID'):
                 thetagrid = self.TH_GRID
