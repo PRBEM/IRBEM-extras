@@ -27,33 +27,33 @@ could use @classmethod functions to dispatch for subclassing
 
 class methods:
 (E,alpha,beta,time)
-rfl_make_hEiso.m - make weights for numerical integral over E
-rfl_make_hEalpha.m - make weights for double numerical integral over E,alpha
-*rfl_make_hEalphabeta.m - make weights for triple numerical integral over E,alpha,beta
-rfl_make_halpha.m - make weights for numerical integral over alpha
+.rfl_make_hEiso.m - make weights for numerical integral over E
+.rfl_make_hEalpha.m - make weights for double numerical integral over E,alpha
+rfl_make_hEalphabeta.m - make weights for triple numerical integral over E,alpha,beta
+.rfl_make_halpha.m - make weights for numerical integral over alpha
 rfl_make_halphabeta.m - make weights for double numerical integral over alpha,beta
 (E,theta,phi)
-rfl_make_hE.m - make weights for numerical integral over E, (integrated over theta,phi)
-rfl_make_hEtheta.m - make weights for double numerical integral over E,theta
-rfl_make_hEthetaphi.m - make weights for triple numerical integral over E,theta,phi
-rfl_make_htheta.m - make weights for numerical integral over theta
-rfl_make_hthetaphi.m - make weights for double numerical integral over theta,phi
+.rfl_make_hE.m - make weights for numerical integral over E, (integrated over theta,phi).
+.rfl_make_hEtheta.m - make weights for double numerical integral over E,theta
+.rfl_make_hEthetaphi.m - make weights for triple numerical integral over E,theta,phi
+.rfl_make_htheta.m - make weights for numerical integral over theta
+.rfl_make_hthetaphi.m - make weights for double numerical integral over theta,phi
 
 internal utilities: (did not go this way)
-rfl_interp_weights_1d.m - make weights to interpolate in 1 D with boundary condition
-rfl_interp_weights_2d.m - make weights to interpolate in 2 D with boundary conditions
-rfl_interp_weights_3d.m - make weights to interpolate in 3 D with boundary conditions
-rfl_lbf_eval.m - evaluate linear basis function with boyndary condition
+.rfl_interp_weights_1d.m - make weights to interpolate in 1 D with boundary condition
+.rfl_interp_weights_2d.m - make weights to interpolate in 2 D with boundary conditions
+.rfl_interp_weights_3d.m - make weights to interpolate in 3 D with boundary conditions
+.rfl_lbf_eval.m - evaluate linear basis function with boyndary condition
 
 external utilities:
 rfl_alphabeta2thetaphi.m - convert alpha,beta to theta,phi
-rfl_get_list_neighbors.m - find point's bounding neighbors in list
+.rfl_get_list_neighbors.m - find point's bounding neighbors in list
 rfl_latlon_to_euler_angles.m - convert context vectors in lat/lon to euler angles
 rfl_load_inst_info.m - load a inst_info object from file or dict
-rfl_make_deltas.m - make integration weights for a 1 D grid
+.rfl_make_deltas.m - make integration weights for a 1 D grid
 rfl_make_grid.m - make evenly spaced grid from rule
 rfl_vectors_to_euler_angles.m - conver tcontext vectors to euler angles
-rfl_result_code_to_string.m - convert result code to string
+.rfl_result_code_to_string.m - convert result code to string
 rfl_struct2cdf.m - save inst_info as CDF
 rfl_struct2h5.m - save inst_info as HDF5
 rfl_struct2mat.m - save inst_info as .mat

@@ -44,6 +44,17 @@ import numpy as np
 from scipy.interpolate import interp1d,RegularGridInterpolator
 
 # utilities
+
+# degrees versions of common trig ops
+sind = lambda x: np.sin(np.radians(x))
+cosd = lambda x: np.cos(np.radians(x))
+tand = lambda x: np.tan(np.radians(x))
+asind = lambda x: np.degrees(np.arcsin(x))
+acosd = lambda x: np.degrees(np.arccos(x))
+atand = lambda x: np.degrees(np.arctan(x))
+atan2d = lambda x,y: np.degrees(np.arctan2(y,x))
+
+
 def inherit_docstrings(cls,parent = None):
     """
     inherit_docstrings(cls,parent = None)
@@ -184,6 +195,58 @@ def default_betagrid(**kwargs):
     """
     # TODO: implement some keyword controls
     return np.linspace(0.0,360.0,361) # 1 degree spacing, closed endpoints
+
+def alphabeta2thetaphi(alpha,beta,alpha0,beta0,phib):
+    """
+    (theta,phi) = alphabeta2thetaphi(alpha,beta,alpha0,beta0,phib)
+    Convert pitch angle and gyrophase to instrument angles. All angles
+    degrees. When theta=0,180 phi=0.
+    alpha, beta, should all be mutually broadcastable
+    alpha0, beta0, phib should all be mutually broadcastable
+    output will be (*broadcast(alpha,beta).shape,*broadcast(alpha0,beta0,phib).shape)
+    """
+    
+    try:
+        _ = np.broadcast(alpha,beta)
+    except ValueError:
+        raise ValueError('alpha, and beta must be mutually broadcastable')
+    try:
+        _ = np.broadcast(alpha0,beta0,phib)
+    except ValueError:
+        raise ValueError('alpha0, beta0, and phib must be mutually broadcastable')
+
+        
+    # define rotation matrix
+    # columns are coefficients of c,d,b terms of inst basis vectors
+    # rows are coefficients of s1,s2,s0 terms of mag basis vectors
+    # note: python inner lists are columns, in matlab row of code is row of matrix, so this code is transposed from matlab
+    R = np.array([
+        [-sind(beta0)*sind(phib)-cosd(alpha0)*cosd(beta0)*cosd(phib), cosd(beta0)*sind(phib)- cosd(alpha0)*cosd(phib)*sind(beta0),cosd(phib)*sind(alpha0)]
+        [cosd(phib)*sind(beta0)-cosd(alpha0)*cosd(beta0)*sind(phib), -cosd(beta0)*cosd(phib)-cosd(alpha0)*sind(beta0)*sind(phib),sind(alpha0)*sind(phib)]
+        [cosd(beta0)*sind(alpha0), -cosd(beta0)*cosd(phib)-cosd(alpha0)*sind(beta0)*sind(phib), sind(alpha0)*sind(beta0),cosd(alpha0)]
+        ])
+
+
+    x = np.array([sind(alpha)*cosd(beta),sind(alpha)*sind(beta),cosd(alpha)])
+    # y = R*x ( sum over 2nd dim of R and 1st dim of x )
+    y = np.tensordot(x,R,axies=((0,),(1,))) # do it in this order to get alpha,beta shape before alpha0,beta0,phib shape
+    theta = acosd(y[3])
+    phi = atan2d(y[2],y[1])
+    return theta,phi
+
+function varargout = rfl_thetaphi2alphabeta(theta,phi,alpha0,beta0,phib)
+% [alpha,beta,result_code] = thetaphi2alphabeta(theta,phi,alpha0,beta0,phib);
+% Convert instrument angles to pitch angle and gyrophase. All angles
+% degrees. When alpha=0,180 beta=0
+
+varargout = cell(1,nargout);
+[varargout{:}] = rfl_alphabeta2thetaphi(theta,phi,alpha0,phib,beta0); % note phib <-> beta0
+
+% the alpha,beta -> theta,phi transform is identical under
+% alpha <-> theta
+% beta <-> phi
+% beta0 <-> phib (makes R <-> R')
+
 
 # classes
 
@@ -704,7 +767,7 @@ class AngleResponse(FactoryConstructorMixin):
         hAthetaphi is a scalar or shape (len(thetagrid),len(phigrid))
         see module glossary for input meanings
         """
-        dcostheta = np.abs(make_deltas(-np.cos(np.radians(thetagrid)),**kwargs))
+        dcostheta = np.abs(make_deltas(-cosd(thetagrid),**kwargs))
         dphi = make_deltas(np.radians(phigrid),**kwargs)
         thetaI,phiI = broadcast_grids(thetagrid,phigrid)
         dcosthetaI,dphiI = self.broadcast_grids(dcostheta,dphi)
@@ -772,7 +835,7 @@ class AR_csym(AngleResponse):
                 
     def hAtheta(self,thetagrid,phigrid=None,**kwargs):
         """*INHERIT*"""
-        dcostheta = np.abs(make_deltas(-np.cos(np.radians(thetagrid)),**kwargs))
+        dcostheta = np.abs(make_deltas(-cosd(thetagrid),**kwargs))
         if phigrid is None:
             dphi = 2*np.phi
         else:
@@ -842,7 +905,7 @@ class AR_SingleElement(AR_Omni):
         super().__init__(G=None,**kwargs) # handles BIDIRECTIONAL
     def A(self,theta,phi):
         """*INHERIT*"""
-        return super().A(theta,phi)*np.abs(np.cos(np.radians(theta,phi)))
+        return super().A(theta,phi)*np.abs(cosd(theta))
     @property
     def G(self):
         """
@@ -901,8 +964,8 @@ class AR_Tele_Cyl(AR_csym):
         self.R2 = squeeze(kwargs['R1']) # TODO: convert to cm
         self.D = squeeze(kwargs['D']) # TODO: convert to cm
         self.Rs = min(self.R1,self.R2)
-        self.thetac = np.degrees(np.arctan(np.abs(self.R1-self.R2)/self.D))
-        self.thetam = np.degrees(np.arctan((self.R1+self.R2)/self.D))
+        self.thetac = atand(np.abs(self.R1-self.R2)/self.D)
+        self.thetam = atand((self.R1+self.R2)/self.D)
         self.area = np.pi*self.Rs**2 # area at normal incidence
         tmp = self.R1**2+self.R2**2+self.D**2
         self.G = np.pi**2/2*(tmp-np.sqrt(tmp**2-4*self.R1**2*self.R2**2)) # eqn 8
@@ -995,7 +1058,7 @@ class AR_Pinhole(AngleResponse):
         """*INHERIT*"""
         # compute interpolation weight in -cos(theta)
         # so that integral over dcos(theta) gives unity
-        w = interp_weights_1d(-np.cos(np.radians(thetagrid)),-1.0) # -cos(0)=-1
+        w = interp_weights_1d(-cosd(thetagrid),-1.0) # -cos(0)=-1
         w = np.broadcast_to(w,np.broadcast(thetagrid,phigrid).shape)
         tmp = w/w.sum()*self.G # ensure tmp sums to G
         if self.bidirectional: # special case of actually calling hAtheta
@@ -1005,7 +1068,7 @@ class AR_Pinhole(AngleResponse):
         """*INHERIT*"""
         # compute interpolation weight in -cos(theta)
         # so that integral over dcos(theta) gives unity
-        w = interp_weights_1d(-np.cos(np.radians(thetagrid)),-1.0) # -cos(0)=-1
+        w = interp_weights_1d(-cosd(thetagrid),-1.0) # -cos(0)=-1
         tmp = w/w.sum()*self.G # ensure tmp sums to G
         if self.bidirectional: # special case of actually calling hAtheta
             tmp += self.backward.hAtheta(180-thetagrid,phigrid,**kwargs)
@@ -1017,7 +1080,7 @@ class AR_Pinhole(AngleResponse):
         beta0 = np.broadast_to(beta0,dt.shape)
         # compute interpolation weight in -cos(alpha)
         # so that integral over dcos(alpha) gives unity
-        dha = interp_weights_1d(-np.cos(np.radians(alphagrid)),-np.cos(np.radians(alpha0))) # len(tgrid) x len(alphagrid)
+        dha = interp_weights_1d(-cosd(alphagrid),-cosd(alpha0)) # len(tgrid) x len(alphagrid)
         dhb = interp_weights_1d(betagrid,beta0) # len(tgrid) x len(betagrid)
         # reshape to allow broadcast
         dha.shape = (len(dt),len(alphagrid),1)
@@ -1034,7 +1097,7 @@ class AR_Pinhole(AngleResponse):
         alpha0 = np.broadast_to(alpha0,dt.shape)
         # compute interpolation weight in -cos(alpha)
         # so that integral over dcos(alpha) gives unity
-        dh = interp_weights_1d(-np.cos(np.radians(alphagrid)),-np.cos(np.radians(alpha0))) # len(tgrid) x len(alphagrid)
+        dh = interp_weights_1d(-cosd(alphagrid),-cosd(alpha0)) # len(tgrid) x len(alphagrid)
         h = np.dot(dt,dh) # sum over time
         h = h*self.G*sum(dt)/sum(h) # force to integrate to Gdt
         if self.bidirectional:
@@ -1061,32 +1124,31 @@ class AR_Tele_Rect(AngleResponse):
         self.W2 = squeeze(kwargs['W2']) # TODO: convert to cm
         self.H2 = squeeze(kwargs['H2']) # TODO: convert to cm
         self.D = squeeze(kwargs['D']) # TODO: convert to cm
-        # initialize some Sullivan variables
-        self.alpha = (self.H1+self.H2)/2
-        self.beta = (self.W1+self.W2)/2
-        self.gamma = (self.H1-self.H2)/2
-        self.delta = (self.W1-self.W2)/2
-        # Sullivan's 11
-
+        # initialize some Sullivan variables, radians
+        alpha = (self.H1+self.H2)/2
+        beta = (self.W1+self.W2)/2
+        gamma = (self.H1-self.H2)/2
+        delta = (self.W1-self.W2)/2
+        # Sullivan's 11:
         self.G = self.D**2*np.log(
-                ((self.D**2+self.alpha**2+self.delta**2)/(self.D**2+self.alpha**2+self.beta**2))  
-                *(self.D**2+self.gamma**2+self.beta**2)/(self.D**2+self.gamma**2+self.delta**2)) \
-                +2*self.alpha*np.sqrt(self.D**2+self.beta**2) \
-                *np.arctan(self.alpha/np.sqrt(self.D**2+self.beta**2)) \
-                +2*self.beta*np.sqrt(self.D**2+self.alpha**2) \
-                *np.arctan(self.beta/np.sqrt(self.D**2+self.alpha**2)) \
-                -2*self.alpha*np.sqrt(self.D**2+self.delta**2) \
-                *np.arctan(self.alpha/np.sqrt(self.D**2+self.delta**2)) \
-                -2*self.beta*np.sqrt(self.D**2+self.gamma**2) \
-                *np.arctan(self.beta/np.sqrt(self.D**2+self.gamma**2)) \
-                -2*self.gamma*np.sqrt(self.D**2+self.beta**2) \
-                *np.arctan(self.gamma/np.sqrt(self.D**2+self.beta**2)) \
-                -2*self.delta*np.sqrt(self.D**2+self.alpha**2) \
-                *np.arctan(self.delta/np.sqrt(self.D**2+self.alpha**2)) \
-                +2*self.gamma*np.sqrt(self.D**2+self.delta**2) \
-                *np.arctan(self.gamma/np.sqrt(self.D**2+self.delta**2)) \
-                +2*self.delta*np.sqrt(self.D**2+self.gamma**2) \
-                *np.arctan(self.delta/np.sqrt(self.D**2+self.gamma**2))
+                ((self.D**2+alpha**2+delta**2)/(self.D**2+alpha**2+beta**2))  
+                *(self.D**2+gamma**2+beta**2)/(self.D**2+gamma**2+delta**2)) \
+                +2*alpha*np.sqrt(self.D**2+beta**2) \
+                *np.arctan(alpha/np.sqrt(self.D**2+beta**2)) \
+                +2*beta*np.sqrt(self.D**2+alpha**2) \
+                *np.arctan(beta/np.sqrt(self.D**2+alpha**2)) \
+                -2*alpha*np.sqrt(self.D**2+delta**2) \
+                *np.arctan(alpha/np.sqrt(self.D**2+delta**2)) \
+                -2*beta*np.sqrt(self.D**2+gamma**2) \
+                *np.arctan(beta/np.sqrt(self.D**2+gamma**2)) \
+                -2*gamma*np.sqrt(self.D**2+beta**2) \
+                *np.arctan(gamma/np.sqrt(self.D**2+beta**2)) \
+                -2*delta*np.sqrt(self.D**2+alpha**2) \
+                *np.arctan(delta/np.sqrt(self.D**2+alpha**2)) \
+                +2*gamma*np.sqrt(self.D**2+delta**2) \
+                *np.arctan(gamma/np.sqrt(self.D**2+delta**2)) \
+                +2*delta*np.sqrt(self.D**2+gamma**2) \
+                *np.arctan(delta/np.sqrt(self.D**2+gamma**2))
 
         if self.bidirectional:
             backw = kwargs.copy()
@@ -1108,7 +1170,7 @@ class AR_Tele_Rect(AngleResponse):
         A = np.zeros(np.broadcast(theta,phi).shape)
         thetarads = np.radians(theta)
         phirads = np.radians(phi)
-        tantheta = np.tan(theta)
+        tantheta = np.tan(thetarads)
         zeta = self.D*tantheta*np.cos(phirads)
         eta = self.D*tantheta*np.sin(phirads)
         X = self._X(zeta,self.W1,self.W2)
@@ -1216,7 +1278,7 @@ class ChannelResponse(FactoryConstructorMixin):
             else:
                 raise ValueError('Egrid input cannot be None for object without its own E_GRID')
         dE = make_deltas(Egrid,**kwargs)
-        dcostheta = np.abs(make_deltas(-np.cos(np.radians(thetagrid)),**kwargs))
+        dcostheta = np.abs(make_deltas(-cosd(thetagrid),**kwargs))
         dphi = make_deltas(np.radians(phigrid),**kwargs)
         EI,thetaI,phiI = broadcast_grids(Egrid,thetagrid,phigrid)
         dEI,dcosthetaI,dphiI = self.broadcast_grids(dE,dcostheta,dphi)
