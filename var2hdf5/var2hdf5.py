@@ -91,9 +91,9 @@ def var2hdf5(var,filename,converter=None):
                 return
 
             if isinstance(sample,(dt.datetime,dt.date))                    :
-                new_var = np.array([v.isotime() for v in var.ravel()])
+                new_var = np.array([v.isoformat() for v in var.ravel()],dtype='S')
                 new_var.shape = var.shape
-                fp[group] = new_var
+                fp[group] = np.array(new_var,dtype='S')
                 fp[group].attrs['type'] = 'array'
                 fp[group].attrs['subtype'] = 'date'
                 return
@@ -208,7 +208,7 @@ def hdf52var(filename,converter=None):
     """
     var = hdf52var(filename,converter=None)
     read variable from hdf5 file
-    filename - HDF5 filename to write
+    filename - HDF5 filename to read
     converter - function pointer that converts variables to HDF5-recognized types
     calls var = conveter(var,attrs) before trying to handle the variable
     var - variable that was read
@@ -239,9 +239,34 @@ def hdf52var(filename,converter=None):
         retrieve value from hdf5 file pointer
         """
         
+        def decode_str(var):
+            """
+            var = decode_str(var)
+                decode various string types
+                returns a str
+            """
+            if isinstance(var,str):
+                return var
+            return var.decode('utf-8')
+        def decode_date(var):
+            """
+            decodes date in YYYY-MM-DD:HH:MM:SS...Z format
+            a bit smarter than strptime: allows more precision on
+            seconds, allows with or without 'Z' suffix
+            """
+            var = decode_str(var)
+            parts = var.replace('Z','').replace('-',':').replace('T',':').split(':')
+            ints = [int(v) for v in parts[:5]]
+            parts[5] = float(parts[5])
+            parts[5] = round(parts[5]*1e6)/1e6 # round to nearest microsecond
+            s = int(np.floor(parts[5])) # seconds
+            us = int(round((parts[5]-s)*1e6)) # microseconds
+            date = dt.datetime(*ints,s,us)
+            return date
+        
         nonlocal converter
             
-        ty = fp[group].attrs['type']
+        ty = decode_str(fp[group].attrs['type'])
         if isinstance(fp[group],h5py.Dataset):
             # not a group, read & process dataset
             if hasattr(fp[group],'value'):
@@ -254,9 +279,9 @@ def hdf52var(filename,converter=None):
             if ty in ['int','float','bool']:
                 return var
             if ty == 'str':
-                return var.decode('utf-8')
+                return decode_str(var)
             if ty == 'date':
-                return dt.datetime.strptime(var.decode('utf-8'),"%Y-%m-%dT%H:%M:%S.%f")
+                return decode_date(var)
             if ty == 'timedelta':
                 return dt.timedelta(seconds=var)
             if ty == 'null':
@@ -264,11 +289,11 @@ def hdf52var(filename,converter=None):
             if ty == 'list':
                 return read_list(fp,var,fp[group].attrs['list_length'])
             if ty == 'array':
-                subtype = fp[group].attrs['subtype']
+                subtype = decode_str(fp[group].attrs['subtype'])
                 if subtype in ['int','float','bool']:
                     return var
                 if subtype == 'str':
-                    new_var = [v.decode('utf-8') for v in var.ravel()]
+                    new_var = [decode_str(v) for v in var.ravel()]
                     new_var = np.array(new_var,dtype='U')
                     new_var.shape = var.shape
                     return new_var
@@ -278,7 +303,7 @@ def hdf52var(filename,converter=None):
                         new_var.shape = var.shape
                     return new_var
                 if subtype == 'date':
-                    new_var = np.array([dt.datetime.strptime(v.decode('utf-8'), "%Y-%m-%dT%H:%M:%S") for v in var.ravel()])
+                    new_var = np.array([decode_date(v) for v in var.ravel()])
                     new_var.shape = var.shape
                     return new_var
                 if subtype == 'timedelta':
@@ -425,7 +450,16 @@ def test():
             print('%s: FAIL' % key)
             fails += 1
 
-    print('TOTAL FAILS: %d' % fails)            
+    print('TOTAL FAILS: %d' % fails)        
+
+    # now do IDL tests    
+    idl_count = 0
+    for file in os.listdir():
+        if not file.endswith('_idl.h5'): continue
+        print('Reading IDL file %s' % file)
+        var = hdf52var(file)
+        idl_count += 1
+    print('Total IDL files read: %d' % idl_count)
 
 
 if __name__ == '__main__':
