@@ -46,7 +46,7 @@ internal utilities: (did not go this way)
 .rfl_lbf_eval.m - evaluate linear basis function with boyndary condition
 
 external utilities:
-rfl_alphabeta2thetaphi.m - convert alpha,beta to theta,phi
+.rfl_alphabeta2thetaphi.m - convert alpha,beta to theta,phi
 .rfl_get_list_neighbors.m - find point's bounding neighbors in list
 rfl_latlon_to_euler_angles.m - convert context vectors in lat/lon to euler angles
 rfl_load_inst_info.m - load a inst_info object from file or dict
@@ -57,7 +57,7 @@ rfl_vectors_to_euler_angles.m - conver tcontext vectors to euler angles
 rfl_struct2cdf.m - save inst_info as CDF
 rfl_struct2h5.m - save inst_info as HDF5
 rfl_struct2mat.m - save inst_info as .mat
-rfl_thetaphi2alphabeta.m - convert theta,phi to alpha,beta
+.rfl_thetaphi2alphabeta.m - convert theta,phi to alpha,beta
 
 applications:
 rfl_bowtie.m - perform bowtie analysis
