@@ -232,20 +232,25 @@ def alphabeta2thetaphi(alpha,beta,alpha0,beta0,phib):
     y = np.tensordot(x,R,axies=((0,),(1,))) # do it in this order to get alpha,beta shape before alpha0,beta0,phib shape
     theta = acosd(y[3])
     phi = atan2d(y[2],y[1])
+    phi[(theta==0.0)|(theta==180.0)] = 0
     return theta,phi
 
-function varargout = rfl_thetaphi2alphabeta(theta,phi,alpha0,beta0,phib)
-% [alpha,beta,result_code] = thetaphi2alphabeta(theta,phi,alpha0,beta0,phib);
-% Convert instrument angles to pitch angle and gyrophase. All angles
-% degrees. When alpha=0,180 beta=0
+def thetaphi2alphabeta(theta,phi,alpha0,beta0,phib):
+    """
+    (alpha,beta) = thetaphi2alphabeta(theta,phi,alpha0,beta0,phib)
+    convert instrument angles to pitch angle and gyrophase. All angles
+    degrees. When alpha=0,180 beta=0.
+    theta,phi, should all be mutually broadcastable
+    alpha0, beta0, phib should all be mutually broadcastable
+    output will be (*broadcast(theta,phi).shape,*broadcast(alpha0,beta0,phib).shape)
+    """
+    # the alpha,beta -> theta,phi transform is identical under
+    # alpha <-> theta
+    # beta <-> phi
+    # beta0 <-> phib (makes R <-> R')
+    # so just call alphabeta2thetaphi with phib,beta0 swapped
 
-varargout = cell(1,nargout);
-[varargout{:}] = rfl_alphabeta2thetaphi(theta,phi,alpha0,phib,beta0); % note phib <-> beta0
-
-% the alpha,beta -> theta,phi transform is identical under
-% alpha <-> theta
-% beta <-> phi
-% beta0 <-> phib (makes R <-> R')
+    return alphabeta2thetaphi(theta,phi,alpha0,phib,beta0) # phib <-> beta0
 
 
 # classes
@@ -770,7 +775,7 @@ class AngleResponse(FactoryConstructorMixin):
         dcostheta = np.abs(make_deltas(-cosd(thetagrid),**kwargs))
         dphi = make_deltas(np.radians(phigrid),**kwargs)
         thetaI,phiI = broadcast_grids(thetagrid,phigrid)
-        dcosthetaI,dphiI = self.broadcast_grids(dcostheta,dphi)
+        dcosthetaI,dphiI = broadcast_grids(dcostheta,dphi)
         # includes backward response if present
         return self.A(thetaI,phiI)*dcosthetaI*dphiI
     def hAtheta(self,thetagrid,phigrid=None,**kwargs):
@@ -1281,7 +1286,7 @@ class ChannelResponse(FactoryConstructorMixin):
         dcostheta = np.abs(make_deltas(-cosd(thetagrid),**kwargs))
         dphi = make_deltas(np.radians(phigrid),**kwargs)
         EI,thetaI,phiI = broadcast_grids(Egrid,thetagrid,phigrid)
-        dEI,dcosthetaI,dphiI = self.broadcast_grids(dE,dcostheta,dphi)
+        dEI,dcosthetaI,dphiI = broadcast_grids(dE,dcostheta,dphi)
         return self.R(EI,thetaI,phiI)*dEI*dcosthetaI*dphiI
     def hEtheta(self,Egrid,thetagrid,phigrid=None,**kwargs):
         """
@@ -1324,10 +1329,26 @@ class ChannelResponse(FactoryConstructorMixin):
             expects alpha0,beta0,phi0 to depend on tgird
         output units are cm^2-sr-MeV or cm^2-sr-MeV-s if tgrid supplied
         if Egrid is None, object will attempt to supply its own
-        hEalphabeta is scalar or shape (len(alphagrid),len(betagrid))
+        hEalphabeta is scalar or shape (len(Egrid),len(alphagrid),len(betagrid))
         see module glossary for input meanings
         """
-        raise NotImplementedError # TODO
+        dE = make_deltas(Egrid,**kwargs) # (NE,)
+        dcosa = make_deltas(-cosd(alphagrid),**kwargs) # (Na,)
+        db = np.radians(make_deltas(betagrid,**kwargs)) # (Nb,)
+        dt = make_deltas(tgrid,**kwargs); #(Nt,) or scalar
+        dE,dcosa,db = broadcast_grids(dE,dcosa,db) # (NE,Na,Nb)
+        theta,phi = alphabeta2thetaphi(alphagrid,betagrid,alpha0,beta0,phib) # (Na,Nb,Nt) or (NA,Nb)
+        E = np.reshape(Egrid,(len(Egrid),*np.ones(theta.ndim))) # (NE,1,1,*1)
+        theta = np.expand_dims(theta,axis=0) # (1,Na,Nb,*Nt)
+        phi = np.expand_dims(phi,axis=0) # (1,Na,Nb,*Nt)
+        R = self.R(E,theta,phi) # (NE,Na,Nb,*Nt)
+        if np.isscalar(dt):
+            h = R*dt
+        else:
+            h = np.tensordot(h,dt,axes=((3,),(0,))) # dot product along Nt dimension
+        # now h is (NE,Na,Nb)
+        h = h*dE*dcosa*db/self.CROSSCALIB
+        return h
     def hEalpha(self,alpha0,beta0,phib,Egrid,alphagrid,betagrid=None,tgrid=None,**kwargs):
         """
         hEalpha = .hEalpha(alpha0,beta0,phib,Egrid,alphagrid,betagrid=None,tgrid=None,...)
