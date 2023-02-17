@@ -43,7 +43,7 @@ This is where we would implement the inside and area functions.
 
 Edge would be a base class for StraightEdge and CurvedEdge. We would have 
 intersection rules for curved and straight edges. We would also have 
-projection and rotation rules for edges.
+rotation rules for edges.
 
 Edge
 . StraightEdge 
@@ -73,7 +73,7 @@ Segments, Circles, and Ellipses get their xy2v from the edge
 
 Will need a way to merge patches with a common edge. Will work best if can 
 do pointer compare (is) vs numeric compare. Can hopefully compare edge type 
-value and pointer compare chord ends. Will use a Rotation object to rotate 
+value and pointer compare chord ends. Will use a Rotation object to rotate
 points, which will cache any points it's already seen by pointer and return 
 same pointer for any other rotations of that same point by other edges. 
 This should enable pointer comparisons of points without worrying about 
@@ -86,6 +86,84 @@ numpy array.
 import numpy as np
 from rfl import AngleResponse, inherit_docstrings
 
+class Rotation(object):
+    """
+    rotate a point from one 3-d system to another
+    caches points to so that if the same point is rotated
+    again, its prior result is returned (same object)
+    propertis:
+        R - (3,3) rotation matrix
+        Rt - (3,3) transpose of R (reverse rotation matrix)
+        cache - cached points that were prevously rotated
+        reverse_cache - chace points that were previously inverse rotated
+        (cache is used to ensure points are the same object if rotated again later)
+    methods:
+        rotate - rotate from old to new coordinates
+        reverse_rotate - rotate from new to old coordinates
+        inverse - return new rotation
+    using cache is actually probably slower on large rotations, but it
+        preserves object identity for "is" vs nearly-equal comparisons
+    """
+    def __init__(self,xhat,yhat,zhat):
+        """
+        Rotation(xhat,yhat,zhat)
+        unit vectors of new system in old system
+        """
+        for hat in (xhat,yhat,zhat):
+            if np.size(hat) != 3:
+                raise ValueError('xhat, yhat, and zhat must each have 3 elements')
+        self.cache = {}
+        self.reverse_cache = {}
+        self.R = np.row_stack((np.array(xhat).ravel(),np.array(yhat).ravel(),np.array(zhat).ravel()))
+        self.Rt = self.R.transpose()
+    def _rotate(self,x,R,use_cache,cache,reverse_cache):
+        """
+        y = _rotate(x)
+        rotate x using rotation R
+        with bool flag use_cache
+        cache stores the x->y map
+        reverse_cache stores the y->x map        
+        """
+        shape = np.shape(x)
+        x = np.atlesat_2d(x) # (N,3)
+        if use_cache:
+            y = []
+            for ix in x:
+                k = x.tobytes()
+                if k in self.cache:
+                    iy = self.cache[k]
+                else:
+                    iy = self.dot(self.R,ix)
+                    cache[k] = iy
+                    reverse_cache[iy.tobytes()] = ix
+                y.append(iy)
+            y = np.array(y)
+        else:
+            y = np.tensordot(x,R,axes=(1,1)) # 2nd dim of R time 2nd dim of x
+        y.shape = shape
+        return y
+    def rotate(self,x,use_cache=False):
+        """
+        y = rotate(x,use_cache=True)
+        rotate x into the new coordinate system
+        x can be (3,) or (N,3)
+        y will be the same shape
+        use_cache = use cache or not
+        """
+        return self._rotate(x,self.R,use_cache,self.cache,self.reverse_cache)
+    def reverse_rotate(self,y,use_cache=True):
+        """
+        x = reverse_rotate(y,use_cache=True)
+        rotate y into the old coordinate system
+        y can be (3,) or (N,3)
+        x will be the same shape
+        use_cache = use cache or not
+        """
+        return self._rotate(y,self.Rt,use_cache,self.reverse_cache,self.cache)
+    def inverse(self):
+        """return the inverse rotation as a new Rotation object"""
+        return Rotation(self.Rt[0,:],self.Rt[1,:],self.Rt[2,:])
+        
 
 class Edge(object):
     """
@@ -100,7 +178,7 @@ class Edge(object):
         (y1,y2) = ylim(x) - y limits in Edge's coordinate sytem
         v = xy2v(x,y) convert x,y from Edge's coordinates to point in 3-d frame
         points = intersect(other) returns a list of points of intersection between self and other
-        edge = transform(Transform) returns the edge rotated and translated
+        edge = rotate(rot) returns the edge rotated by Rotation rot
         bool = inside(point) returns True if a point is inside the edge
             Always False for straight edges
             True for curved eges if point lies between curve and chord
@@ -138,9 +216,9 @@ class Edge(object):
         else: # oops, coding error, neither class has intersect for the other
             raise NotImplementedError('No intersection method found for %s,%s' %
                                       (self.__class__.__name__,other.__class__.__name__))
-    def transform(self,tform):
+    def rotate(self,rot):
         """
-        edge = transform(Transform) returns the edge rotated and translated
+        edge = rotate(rot) returns the edge rotated by Rotation rot
         """
         return NotImplementedError # Abstract base class
     def inside(self,point):
@@ -184,7 +262,7 @@ class StraightEdge(Edge):
             raise NotImplementedError # TODO
         else:
             super().intersect(other,try_other) # pass up the chain
-    def transform(self,tform):
+    def rotate(self,rot):
         """*INHERIT*"""
         return NotImplementedError # TODO
     def inside(self,point):
@@ -240,7 +318,7 @@ class EllipseArc(CurvedEdge):
             raise NotImplementedError # TODO
         else:
             super().intersect(other,try_other) # pass up the chain
-    def transform(self,tform):
+    def rotate(self,rot):
         """*INHERIT*"""
         return NotImplementedError # TODO
     def inside(self,point):
@@ -280,7 +358,7 @@ class FullEllipse(EllipseArc):
             raise NotImplementedError # TODO
         else:
             super().intersect(other,try_other) # pass up the chain
-    def transform(self,tform):
+    def rotate(self,rot):
         """*INHERIT*"""
         return NotImplementedError # TODO
     def inside(self,point):
@@ -312,7 +390,7 @@ class Patch(object):
         (y1,y2) = ylim(x) - y limits in Edge's coordinate sytem
         v = xy2v(x,y) convert x,y from Edge's coordinates to point in 3-d frame
         bool = inside(point) returns True if a point is inside the Patch
-        patch = transform(Transform) returns the edge rotated and translated
+        patch = rotate(rot) returns the Patch rotated by Rotation rot
         patch = overlap(other) returns patch representing overlap of self and other
         
     Note: only component Patches (Triangles and Curved Edges) implement xlim, ylim, and xy2v
@@ -373,9 +451,9 @@ class Patch(object):
             if c.inside(point):
                 return True
         return False
-    def transform(self,tform):
+    def rotate(self,rot):
         """
-        patch = transform(Transform) returns the patch rotated and translated
+        patch = rotate(rot) returns the patch rotated by Rotation rot
         """
         return NotImplementedError # Abstract base class
     def overlap(self,other,try_other=True):
