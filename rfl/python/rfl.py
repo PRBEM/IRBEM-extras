@@ -252,6 +252,73 @@ def thetaphi2alphabeta(theta,phi,alpha0,beta0,phib):
 
     return alphabeta2thetaphi(theta,phi,alpha0,phib,beta0) # phib <-> beta0
 
+def vectors_to_euler_angles(B,C,S0,S1):
+    """
+    (alpha0,beta0,phib) = vectors_to_euler_angles(B,C,S0,S1)
+    Compute pitch angle (alpha0) and gyrophase angle (beta0) of boresight
+    and longitude of B (phib), the Euler angles of the Euler
+    rotations for converting between instrument coordinates 
+    and magnetic coordinates. All four inputs are 3-vectors in some common 
+    Cartesian coordinate system (e.g., Cartesian GEI). B is parallel to the 
+    magnetic field, C defines the B-C plane, in which beta=0. 
+    S0 points into the instrument, parallel to normally incident particles. 
+    S1 defines the S0-S1 plane in
+    which phi=0. Vectors need not have unit length, and neither B-C nor S0-S1
+    need to be orthogonal
+    expect input vectors to be (N,3) or (3,)
+    output angles will be (N,) or scalar, in degrees
+    """
+    N = None
+    isscalar = True
+    for x in [B,C,S0,S1]:
+        s = np.shape(x)
+        if s != (3,):
+            isscalar = False
+            N = 1
+        if len(s)==2:
+            N = s[0]
+    if N is None:
+        raise ValueError('B,C,S0,S1 inputs must be (3,), or (N,3) with common N')
+    B = np.atleast_2d(B)
+    C = np.atleast_2d(C)
+    S0 = np.atleast_2d(S0)
+    S1 = np.atleast_2d(S1)
+    for x in [B,C,S0,S1]:
+        if x.shape[0] not in (1,N):
+            raise ValueError('B,C,S0,S1 inputs must be (3,), or (N,3) with common N')
+            
+    hat = lambda x : x/np.sqrt((x**2).sum(axis=1,keepdims=True))
+    dot = lambda x,y : (x*y).sum(axis=1)
+    bhat = hat(B)
+    dhat = hat(np.cross(B,C))
+    chat = np.cross(dhat,bhat)
+    S0hat = hat(S0)
+    S2hat = hat(np.cross(S0,S1))
+    S1hat = np.cross(S2hat,S0hat)
+    cosa0 = max(-1.0,min(1.0,dot(bhat,S0hat))) # bound to -1,1
+    alpha0 = acosd(cosa0)
+    
+    
+    phib = np.full((N,),np.nan) # default phib is NaN
+    i0 = alpha0==0
+    if any(i0):
+        phib[i0] = atan2d(dot(S1hat[i0],dhat[i0]),-dot(S2hat[i0],dhat[i0]))
+    
+    beta0 = np.zeros(N) # beta=0 when alpha0=0
+    beta0[np.logical_not(np.isfinite(alpha0))] = 0 # beta0=Nan when alpha0=Nan
+
+    i0 = alpha0>0
+    if any(i0):
+        beta0[i0] = atan2d(dot(S0hat[i0],dhat[i0]),-dot(S0hat[i0],chat[i0]))
+        phib[i0] = atan2d(dot(S2hat[i0],bhat[i0]),-dot(S1hat[i0],bhat[i0]))
+
+    if isscalar:
+        alpha0 = np.squeeze(alpha0,axis=0)
+        beta0 = np.squeeze(beta0,axis=0)
+        phib = np.squeeze(phib,axis=0)
+    
+    return alpha0,beta0,phib
+       
 
 # classes
 
