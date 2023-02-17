@@ -29,9 +29,9 @@ class methods:
 (E,alpha,beta,time)
 .rfl_make_hEiso.m - make weights for numerical integral over E
 .rfl_make_hEalpha.m - make weights for double numerical integral over E,alpha
-rfl_make_hEalphabeta.m - make weights for triple numerical integral over E,alpha,beta
+.rfl_make_hEalphabeta.m - make weights for triple numerical integral over E,alpha,beta
 .rfl_make_halpha.m - make weights for numerical integral over alpha
-rfl_make_halphabeta.m - make weights for double numerical integral over alpha,beta
+.rfl_make_halphabeta.m - make weights for double numerical integral over alpha,beta
 (E,theta,phi)
 .rfl_make_hE.m - make weights for numerical integral over E, (integrated over theta,phi).
 .rfl_make_hEtheta.m - make weights for double numerical integral over E,theta
@@ -51,7 +51,7 @@ external utilities:
 rfl_latlon_to_euler_angles.m - convert context vectors in lat/lon to euler angles
 rfl_load_inst_info.m - load a inst_info object from file or dict
 .rfl_make_deltas.m - make integration weights for a 1 D grid
-rfl_make_grid.m - make evenly spaced grid from rule
+.rfl_make_grid.m - make evenly spaced grid from rule
 rfl_vectors_to_euler_angles.m - conver tcontext vectors to euler angles
 .rfl_result_code_to_string.m - convert result code to string
 rfl_struct2cdf.m - save inst_info as CDF
