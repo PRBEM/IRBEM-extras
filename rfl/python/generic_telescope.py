@@ -86,6 +86,67 @@ numpy array.
 import numpy as np
 from rfl import AngleResponse, inherit_docstrings
 
+def between_rays(a,b,p,n=None):
+    """
+    bool = between_rays(a,b,p,n=None)
+    is p between rays connecting origin to a and b
+    a and b - points defining rays
+    p - test point
+    n - normal vector. if None, n=cross(a,b)
+    """
+    if n is None:
+        n = np.cross(a,b)
+    # both a x p and p x b must go in same direction as n = a x b
+    return (np.dot(np.cross(a,p),n) >=0) and (np.dot(np.cross(p,b),n)>0)
+    
+def make_axes(xyz=(None,)*3):
+    """
+    make unit axes
+    (xhat,yhat,zhat) = make_axes((x,y,z))
+    input is a tuple or other iterable of 3-vectors
+    None is alos allowed in place of one or more vectors
+    if all xyz are None(default): returns identity basis functions
+    if one xyz is None: uses cross product to find third (right hand rule)
+    if two xyz are None: generates other two axes perpendicular to non-None one
+    xhat, yhat, and zhat are unit vectors
+    """
+    if len(xyz) != 3:
+        raise ValueError('make_axes requires a 3-element input')
+    ivec = []
+    for i,x in enumerate(xyz):
+        if x is None: continue
+        if np.size(x) != 3:
+            raise ValueError('All inputs to make_axes must be 3-vectors or None')
+        ivec.append(i)
+    if len(ivec) == 3:
+        unitize = lambda x : np.array(x).ravel()/np.linalg.norm(x)
+        return tuple(unitize(x) for x in xyz)
+    elif len(ivec) == 2:
+        xnew = np.cross(xyz[ivec[0]],xyz[ivec[1]])
+        if ivec[1]-ivec[0] == 2: # x,z provided
+            xnew = -xnew # y = z cross x, not x cross z
+        tmp = [xnew]*3
+        for i in ivec: tmp[i] = xyz[i]
+        return make_axes(tmp)
+    elif len(ivec) == 1:
+        z = xyz[ivec[0]]
+        x = np.roll(z,1)
+        y = np.cross(z,np.roll(z,1)) # use roll to create non-parallel vector
+        x = np.cross(y,z)
+        return make_axes(np.roll([z,x,y],ivec[0],axis=0)) # use roll to get z in right spot
+    else:
+        return tuple(np.eye(3))
+"""        
+print('xyz',make_axes())
+print('xyz',make_axes(([2,0,0],None,None)))
+print('xtz',make_axes((None,None,[0,0,3])))
+print('xyz',make_axes(([5,0,0],[0,4,0],None)))
+print('xyz',make_axes(([6,0,0],None,[0,0,7])))
+print('xyz',make_axes(([8,0,0],[0,9,0],[0,0,1])))
+raise Exception('stop')
+"""
+    
+
 class Rotation(object):
     """
     rotate a point from one 3-d system to another
