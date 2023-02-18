@@ -29,7 +29,7 @@ used for determining area and whether a point is inside the patch.
 A Patch is made up of Edges.
 
 A generic CurvedEdge should exist which has .area and .inside methods for 
-the area between the curve and it's chord. Then getting an area of a patch 
+the area between the curve and its chord. Then getting an area of a patch 
 with such features would be to get the area of the curved edges and then 
 the area of the left over polygon.
 
@@ -49,8 +49,8 @@ Edge
 . StraightEdge 
 . CurvedEdge
 ..EllipseArc
-...Ellipse
-....Circle
+...FullEllipse
+....FullCircle
 
 .intersect returns None if class cannot do intersection with other class. 
 Returns list of intersecting points otherwise. Algorithm:
@@ -62,18 +62,19 @@ Patch
 . Polygon
 .. Triangle
 . Rectangle
-.. Square
 . Segment
+. EllipsePatch
+.. CirclePatch
 
-.xy2v converts from local coords x,y to 3-d vector, e.g p+x*a+y*b for ellipse.
-Triangles generate their own xy2v
-Segments, Circles, and Ellipses get their xy2v from the edge
+.xy2p converts from local coords x,y to 3-d vector, e.g origin+x*xhat+y*yhat.
+Triangles generate their own xy2p
+Segments, Circles, and Ellipses get their xy2p from the edge
 
 .overlap reruns a new patch that is the overlap of self with another patch.
 
 Will need a way to merge patches with a common edge. Will work best if can 
 do pointer compare (is) vs numeric compare. Can hopefully compare edge type 
-value and pointer compare chord ends. Will use a Rotation object to rotate
+value and pointer compare endpoints. Will use a Rotation object to rotate
 points, which will cache any points it's already seen by pointer and return 
 same pointer for any other rotations of that same point by other edges. 
 This should enable pointer comparisons of points without worrying about 
@@ -230,24 +231,36 @@ class Edge(object):
     """
     Abstract Base Class for edges
     properties:
-        a,b = chord returns StraightEdge that closes edge
+        a,b = endpoints returns Edges' end points
             or None for closed edges (e.g., full ellipses)
         area - area of edge for curved edes, zero for straight
         nhat - unit vector normal to Edge's plane
         (x1,x2) = xlim - lower and upper limit of x in Patch's coordinate system
+        Properties are read only. Managed by private _ variables that are 
+            initilized to None in the Edge base class constructor. 
+            Only getters are provided.
     methods:
         (y1,y2) = ylim(x) - y limits in Edge's coordinate sytem
-        v = xy2v(x,y) convert x,y from Edge's coordinates to point in 3-d frame
+        v = xy2p(x,y) convert x,y from Edge's coordinates to point in 3-d frame
         points = intersect(other) returns a list of points of intersection between self and other
         edge = rotate(rot) returns the edge rotated by Rotation rot
         bool = inside(point) returns True if a point is inside the edge
             Always False for straight edges
-            True for curved eges if point lies between curve and chord
+            True for curved eges if point lies between curve and its chord
+            also available as "in" operator
     """
+    def __init__(self,*args,**kwargs):
+        """edge = Edge()
+        initializes underscore cache variables for all properties
+        """
+        self._endpoints = None
+        self._nhat = None
+        self._area = None
+        self._xlim = None
     @property
-    def chord(self):
-        """a,b = chord() returns end points of Edge's chord"""
-        return NotImplementedError # Abstract base class
+    def endpoints(self):
+        """a,b = endpoints returns end points of Edge"""
+        return self._endpoints
     @property
     def area(self):
         """area of Edge"""
@@ -263,8 +276,8 @@ class Edge(object):
     def ylim(self,x):
         """(y1,y2) = ylim(x) - y limits in Edge's coordinate sytem at x"""
         return NotImplementedError # Abstract base class
-    def xy2v(self,x,y):
-        """v = xy2v(x,y) convert x,y from Edge's coordinates to point in 3-d frame"""
+    def xy2p(self,x,y):
+        """v = xy2p(x,y) convert x,y from Edge's coordinates to point in 3-d frame"""
         return NotImplementedError # Abstract base class
     def intersect(self,other,try_other=True):
         """points = intersect(other,try_other=True) 
@@ -288,17 +301,23 @@ class Edge(object):
         can also accept list of points and return list of bools
         """
         return NotImplementedError # Abstract base class
+    def __contains__(self,point): # in operator calls inside
+        return self.inside(point)
     
 class StraightEdge(Edge):
     """StraightEdge implements Edge for edges that are line segments"""
-    def __init__(self):
-        raise NotImplementedError # TODO
-    @property
-    def chord(self):
-        """*INHERIT*
-        returns self for straight edges
+    def __init__(self,p1,p2,*args,**kwargs):
+        """straight = StraightEdge(p1,p2,...)
+        p1 - 3-d location of start of line segment
+        p2 - 3-d location of end of line segment
         """
-        return self
+        super().__init__(*args,**kwargs)
+        for p in [p1,p2]:
+            if np.size(p) != 3:
+                raise ValueError('Inputs p1 and p2 to StraightEdge must be 3-vectors')
+        self._p1 = np.array(p1).ravel()
+        self._p2 = np.array(p2).ravel()
+        self._endpoints = (p1,p2)
     @property
     def area(self):
         """*INHERIT*
@@ -312,7 +331,7 @@ class StraightEdge(Edge):
     def ylim(self,x):
         """*INHERIT"""
         return NotImplementedError # TODO    
-    def xy2v(self,x,y):
+    def xy2p(self,x,y):
         """*INHERIT*"""
         return NotImplementedError # TODO
     def intersect(self,other,try_other=True):
@@ -335,25 +354,23 @@ class StraightEdge(Edge):
 class CurvedEdge(Edge):
     """CurvedEdge base subclass of Edge for curved edges"""
     @property
-    def chord(self):
-        """*INHERIT*
-        Returns a straight edge that closes the curve
-        """
-        raise NotImplementedError # Abstract method
-    @property
     def area(self):
         """*INHERIT*
-        area between curve and chord
+        area between curve and its chord
         """
         raise NotImplementedError # Abstract method
 
 class EllipseArc(CurvedEdge):
     """EllipseArc Edge, subclass of CurvedEdge, for elliptical arcs"""
     def __init__(self):
-        raise NotImplementedError # TODO
-    @property
-    def chord(self):
-        """*INHERIT*"""
+        """ellpiseArc = FullEllipse(center,a,b,p1,p2)
+        center- 3-d location of ellipse's center
+        a - 3-d location of point on semimajor axis (theta=0)
+        b - 3-d location of point on semiminor axis (theta=90 degrees)
+        p1 - theta or 3-d location of first point on arc
+        p2 - theta or 3-d location of second point on arc
+        arc spans from p1 to p2 anticlockwise (around a x b)
+        """
         raise NotImplementedError # TODO
     @property
     def area(self):
@@ -366,7 +383,7 @@ class EllipseArc(CurvedEdge):
     def ylim(self,x):
         """*INHERIT"""
         return NotImplementedError # TODO    
-    def xy2v(self,x,y):
+    def xy2p(self,x,y):
         """*INHERIT*"""
         return NotImplementedError # TODO
     def intersect(self,other,try_other=True):
@@ -389,13 +406,18 @@ class EllipseArc(CurvedEdge):
 class FullEllipse(EllipseArc):
     """FullEllipse Edge, subclass of EllipseArc, full ellipse"""
     def __init__(self):
+        """fullEllpise = FullEllipse(center,a,b)
+        center- 3-d location of ellipse's center
+        a - 3-d location of point on semimajor axis (theta=0)
+        b - 3-d location of point on semiminor axis (theta=90 degrees)
+        """
         raise NotImplementedError # TODO
     @property
-    def chord(self):
+    def endpoints(self):
         """*INHERIT*
-        closed curve, has no chord (always None)
+        closed curve, has no endpoints (always None)
         """
-        raise None
+        return None
     @property
     def area(self):
         """*INHERIT*
@@ -429,6 +451,11 @@ class FullEllipse(EllipseArc):
 class FullCricle(FullEllipse):
     """FullCircle Edge, subclass of Ellipse, full circle"""
     def __init__(self):
+        """circle = FullCircle(center,r,nhat)
+        center - 3-d location of circle's center
+        r - 3-d point on circle
+        nhat - 3-vector normal to plane of circle
+        """
         raise NotImplementedError # TODO
 
 inherit_docstrings(Edge)
@@ -440,27 +467,48 @@ class Patch(object):
     convex patches only
     properties:
         is_component - bool if this Patch is a component (Triangle or CurvedEdge)
-        edges = list of Edges that make up the Patch
-        corners - list of points that make up the Patch (chord ends)
+        edges = tuple of Edges that make up the Patch
+        corners - tuple of points that make up the Patch (edge endpoints)
           edges and corners are ordered anticlockwise
         area - area of patch
         nhat - unit vector normal to Pacth's plane
         components - constituent component Patches
         (x1,x2) = xlim - lower and upper limit of x in Patch's coordinate system
+        chord_poly - a polygon made up of the endpoints for all edges
+        Properties are read only. Managed by private _ variables and getters
     methods:
         (y1,y2) = ylim(x) - y limits in Edge's coordinate sytem
-        v = xy2v(x,y) convert x,y from Edge's coordinates to point in 3-d frame
+        v = xy2p(x,y) convert x,y from Edge's coordinates to point in 3-d frame
         bool = inside(point) returns True if a point is inside the Patch
+            also available as "in" operator
         patch = rotate(rot) returns the Patch rotated by Rotation rot
         patch = overlap(other) returns patch representing overlap of self and other
         
-    Note: only component Patches (Triangles and Curved Edges) implement xlim, ylim, and xy2v
+    Note: only component Patches (Triangles and Curved Edges) implement xlim, ylim, and xy2p
     """
-    def __init__(self):
+    def __init__(self,edges):
+        """
+        patch = Patch(edges)
+        edges - array of Edge objects
+        """
+
+        for edge in edges:
+            if not isinstance(edge,Edge):
+                raise ValueError('Patch should be initialized with list of Edge objects')
+
+        edges = tuple(edges)
+        self._edges = tuple(edges)
+        
+        corners = list(edges[0].endpoints)
+        for edge in self._edges[1:]:
+            if edge[0] != corners[-1]:
+                raise ValueError('Supplied edges do not connect')
+            corners.append(edge.endpoints[1])
+        self._corners = tuple(corners) # corners (Edge endpoints) that make up this patch        
+        self._chord_poly = Polygon(self._corners)
+        # initialize cached properties
         self._components = None
         self._area = None
-        self._edges = [] # list of edges that make up this Patch
-        self._corners = [] # list of corners (chord ends) tha tmake up this patch
     def __str__(self):
         return 'Patch %s' % (','.join([e.__class__.__name__ for e in self.edges]))
     @property
@@ -472,8 +520,12 @@ class Patch(object):
         return self._edges
     @property
     def corners(self):
-        """a list of points that make up the Patch (from each Edge.chord)"""
+        """a list of points that make up the Patch (from each Edge.endpoints)"""
         return self._corners
+    @property
+    def chord_poly(self):
+        """a Polygon made from the Patch's corners"""
+        return self._chord_poly
     @property
     def area(self):
         """area of Patch"""
@@ -492,7 +544,15 @@ class Patch(object):
     @property
     def components(self):
         """constinuent components (Triangles and CurvedEdges)"""
-        return NotImplementedError # Abstract base class
+        if self._components is None:
+            components = []
+            origin = self.edges.endpoints[0]
+            for edge in self.edges:
+                if isinstance(edge,CurvedEdge):
+                    components.append(edge)
+                components.append(Triangle((origin,*edge.endpoints)))
+            self._components = tuple(components)
+        return self._components
     @property
     def xlim(self):
         """(x1,x2) = xlim - lower and upper limit of x in Patch's coordinate system"""
@@ -500,18 +560,20 @@ class Patch(object):
     def ylim(self,x):
         """(y1,y2) = ylim(x) - y limits in Patch's coordinate sytem at x"""
         return NotImplementedError # Abstract base class
-    def xy2v(self,x,y):
-        """v = xy2v(x,y) convert x,y from Patch's coordinates to point in 3-d frame"""
+    def xy2p(self,x,y):
+        """v = xy2p(x,y) convert x,y from Patch's coordinates to point in 3-d frame"""
         return NotImplementedError # Abstract base class
     def inside(self,point):
         """
         bool = inside(point) returns True if a point is inside the patch
         can also accept list of points and return list of bools
         """
-        for c in self.components:
-            if c.inside(point):
+        for c in [*self.edges,*self.components]:
+            if point in c:
                 return True
         return False
+    def __contains__(self,point): # in operator calls inside
+        return self.inside(point)
     def rotate(self,rot):
         """
         patch = rotate(rot) returns the patch rotated by Rotation rot
@@ -524,25 +586,83 @@ class Patch(object):
 
 class Polygon(Patch):
     """Patch composed entirely of StraightEdges"""
-    pass # TODO
+    def __init__(self,points,*args,sorted=False,nhat=None,**kwargs):
+        """poly = Polygon(points,sorted=False)
+        points - list of points that define the polygon
+        sorted - if True, points will be assumed to already form a convex polygon
+          otherwise, they will be sorted to form a convex polygon
+        nhat - ignored if sorted, otherwise used to determine how to sort points
+            defines normal vector to polygon. Points will be anticlockwise about nhat
+        """
+        if not sorted:
+            # sort points such that angles increase in nhat plane
+            center = np.zeros(3) # average point
+            for i,p in enumerate(points):
+                if np.size(p) != 3:
+                    raise ValueError('Polygon requires points input to be list of 3-d vectors')
+                points[i] = p = np.array(p).ravel()
+                center += p
+            center = center/len(points) # average
+            if nhat is None:
+                nhat = 0
+                for p in points[1:]:
+                    nhat = np.cross(p-points[0])
+                    if np.norm(nhat)>0: break
+            if np.norm(nhat) == 0:
+                raise ValueError('points provided to Polygon are degenerate (co-linear)')
+            (xhat,yhat,zhat) = make_axes((points[0]-center,None,nhat))
+            angles = []
+            for (i,p) in enumerate(points):
+                dp = p-center
+                x = np.dot(dp,xhat)
+                y = np.dot(dp,yhat)
+                z = np.dot(dp.zhat)
+                angles.append(np.atan2(y,x))
+                zfrac = z/np.norm(dp) > 1/360
+                if zfrac > 1e-3: # more than a degree off
+                    raise ValueError('Polygon input points not coplanar')
+                if zfrac > 1e-10:
+                    print('Warning: adjusting slightly non-coplanar point')
+                    points[i] = p = center + x*xhat+y*yhat
+            angles,isort = np.unique(angles) # remove duplicates
+            if len(angles) < 3:
+                raise ValueError('All points in polygon are coplanar')
+            points = points[isort]
+
+        edges = []
+        for i,p in enumerate(points):
+            p1 = points[i]
+            p2 = points[(i+1)%len(points)]
+            edges.append(StraightEdge(p1,p2))
+            
+        super().__init__(edges)
 
 class Triangle(Polygon):
     """Patch composed of a single triangle"""
+    def __init__(self,*args,**kwargs): # TODO -- add other arguments
+        """*INHERIT*
+        A Triangle has exactly 3 points
+        """
+        super().__init__(*args,**kwargs)
+        if len(self.corners) != 3:
+            raise ValueError('Attempt to initialize Triangle with %d points' % len(self.corners))
+        self._nhat = None
+        self._components = (self,)
+        # define local: x along first segment, y = nhat cross x, z = nhat
+        (self._xhat,self._yhat,_) = make_axes((self.corners[1]-self.corners[0],None,self.nhat))
     @property
     def is_component(self):
         return True
     @property
     def nhat(self):
         """*INHERIT*"""
-        # unit vector defined by 1st cross 2nd edge
-        a = self.corners[1]-self.corners[0] # 1st edge vector
-        b = self.corners[2]-self.corners[1] # 2nd edge vector
-        n = np.cross(a,b)
-        return n/np.sum(n**2)
-    @property
-    def components(self):
-        """*INHERIT*"""
-        return [self]
+        if self._nhat is None:
+            # unit vector defined by 1st cross 2nd edge
+            a = self.corners[1]-self.corners[0] # 1st edge vector
+            b = self.corners[2]-self.corners[1] # 2nd edge vector
+            n = np.cross(a,b)
+            self._nhat = n/np.sum(n**2)
+        return self._nhat
     @property
     def xlim(self):
         """*INHERIT*"""
@@ -550,18 +670,42 @@ class Triangle(Polygon):
     def ylim(self,x):
         """*INHERIT*"""
         return NotImplementedError # TODO
-    def xy2v(self,x,y):
+    def xy2p(self,x,y):
         """*INHERIT*"""
         return NotImplementedError # TODO
-    pass # TODO
+    def p2xy(self,p):
+        """*INHERIT*"""
+        return NotImplementedError # TODO
+    def inside(self,point):
+        """*INHERIT*"""
+        n = self.nhat
+        for i in range(3):
+            origin = self.corners[i]
+            a = self.corners[(i+1) % 3]-origin
+            b = self.corners[(i+2) % 3]-origin
+            c = point-origin
+            if not between_rays(a,b,c,nhat=n): return False
+        return True
     
 class Rectangle(Polygon):
     """Patch composed of a rectangle"""
-    pass # TODO
-
-class Square(Rectangle):
-    """Patch composed of a square"""
-    pass # TODO
+    def __init__(self,points,*args,**kwargs):
+        """*INHERIT*
+        Rectangle(points,...,sorted=False)
+        A Rectangle is specified by three points: (corner,a,b)
+        where (a-corner) and (b-corner) must make a right angle
+        forth corner is found by projecting corner across diagonal ab
+        """
+        if len(points) != 4:
+            raise ValueError('A Rectangle must be initialized with 3 points')
+        corner,a,b = points
+        da = a-corner
+        db = b-corner
+        if np.dot(da,db)>1e-10*np.norm(da)*np.norm(db):
+            raise ValueError('A Rectangle must be initialized with the first point being a right angle: corner,a,b')
+        points = [corner,a,corner+da+db,b]
+        kwargs['sorted'] = True # for sorted arg to be true
+        super().__init__(points,*args,**kwargs)
 
 class Segment(Patch):
     """Patch composed of a segment of an ellipse segment"""
@@ -587,6 +731,7 @@ class AR_Tele_Generic(AngleResponse):
     circular and rectangular elements, allowed to be at
     offsets and tilted. However, it can handle any convex
     shape whose edges are a combination of lines and elliptical arcs
+    Initialize with an array of Patch objects that define coincidence geometry
     """
 
 inherit_docstrings(AngleResponse) # re-inherit tree
