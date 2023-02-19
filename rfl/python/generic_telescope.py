@@ -72,20 +72,25 @@ Segments, Circles, and Ellipses get their xy2p from the edge
 
 .overlap reruns a new patch that is the overlap of self with another patch.
 
-Will need a way to merge patches with a common edge. Will work best if can 
-do pointer compare (is) vs numeric compare. Can hopefully compare edge type 
-value and pointer compare endpoints. Will use a Rotation object to rotate
-points, which will cache any points it's already seen by pointer and return 
-same pointer for any other rotations of that same point by other edges. 
-This should enable pointer comparisons of points without worrying about 
-floating point equality issues. Rotation can cache with dict of points' 
-tobytes(). That's an efficient way to make a unique hashable value from a 
-numpy array.
+Will need a way to merge patches with a common edge. We will use 
+REFERENCE_LENGTH and SMALL_FRACTION to identify points that are the same.
+
+module settings:
+REFERENCE_LENGTH - 1.0. A "typical" length in the units being used
+SMALL_FRACTION - 1e-6 - de minimis distance offset. Points closer than this
+  fraction of REFERENCE_LENGTH are assumed to be the same point. 
+  A value of 1e-6 means that if length units are mm, then any points 
+  within a nm are "the same". Since we normally work in cm (or inches) this 
+  should be sufficient. Also defines the smallest dot product considered to be 
+  zero. Equivalent to two 1 mm long unit vectors whose tips differ by 1 nm
 
 """
 
 import numpy as np
 from rfl import AngleResponse, inherit_docstrings
+
+REFERENCE_LENGTH = 1.0 # "typical" length in units being used
+SMALL_FRACTION = 1e-6 # nm if using mm
 
 def between_rays(a,b,p,n=None):
     """
@@ -99,6 +104,15 @@ def between_rays(a,b,p,n=None):
         n = np.cross(a,b)
     # both a x p and p x b must go in same direction as n = a x b
     return (np.dot(np.cross(a,p),n) >=0) and (np.dot(np.cross(p,b),n)>0)
+
+def points_equal(a,b):
+    """
+    bool = points_equal(a,b)
+    a,b are 3-vectors
+    returns true if a and b are effectively equal.
+    Formally, returns ||a-b|| < REFERENCE_LENGTH*SMALL_FRACTION
+    """
+    return (np.linalg.norm(a-b) < REFERENCE_LENGTH*SMALL_FRACTION)
     
 def make_axes(xyz=(None,)*3):
     """
@@ -119,24 +133,25 @@ def make_axes(xyz=(None,)*3):
         if np.size(x) != 3:
             raise ValueError('All inputs to make_axes must be 3-vectors or None')
         ivec.append(i)
+
     if len(ivec) == 3:
         unitize = lambda x : np.array(x).ravel()/np.linalg.norm(x)
         return tuple(unitize(x) for x in xyz)
-    elif len(ivec) == 2:
+    if len(ivec) == 2:
         xnew = np.cross(xyz[ivec[0]],xyz[ivec[1]])
         if ivec[1]-ivec[0] == 2: # x,z provided
             xnew = -xnew # y = z cross x, not x cross z
         tmp = [xnew]*3
         for i in ivec: tmp[i] = xyz[i]
         return make_axes(tmp)
-    elif len(ivec) == 1:
+    if len(ivec) == 1:
         z = xyz[ivec[0]]
         x = np.roll(z,1)
         y = np.cross(z,np.roll(z,1)) # use roll to create non-parallel vector
         x = np.cross(y,z)
         return make_axes(np.roll([z,x,y],ivec[0],axis=0)) # use roll to get z in right spot
-    else:
-        return tuple(np.eye(3))
+    # len(ivec) == 0
+    return tuple(np.eye(3))
 """        
 print('xyz',make_axes())
 print('xyz',make_axes(([2,0,0],None,None)))
@@ -151,20 +166,13 @@ raise Exception('stop')
 class Rotation(object):
     """
     rotate a point from one 3-d system to another
-    caches points to so that if the same point is rotated
-    again, its prior result is returned (same object)
     propertis:
         R - (3,3) rotation matrix
         Rt - (3,3) transpose of R (reverse rotation matrix)
-        cache - cached points that were prevously rotated
-        reverse_cache - chace points that were previously inverse rotated
-        (cache is used to ensure points are the same object if rotated again later)
     methods:
         rotate - rotate from old to new coordinates
         reverse_rotate - rotate from new to old coordinates
-        inverse - return new rotation
-    using cache is actually probably slower on large rotations, but it
-        preserves object identity for "is" vs nearly-equal comparisons
+        inverse - return new rotation object that reverses this rotation
     """
     def __init__(self,xhat,yhat,zhat):
         """
@@ -174,54 +182,34 @@ class Rotation(object):
         for hat in (xhat,yhat,zhat):
             if np.size(hat) != 3:
                 raise ValueError('xhat, yhat, and zhat must each have 3 elements')
-        self.cache = {}
-        self.reverse_cache = {}
         self.R = np.row_stack((np.array(xhat).ravel(),np.array(yhat).ravel(),np.array(zhat).ravel()))
         self.Rt = self.R.transpose()
-    def _rotate(self,x,R,use_cache,cache,reverse_cache):
+    def _rotate(self,x,R):
         """
-        y = _rotate(x)
+        y = _rotate(x,R)
         rotate x using rotation R
-        with bool flag use_cache
-        cache stores the x->y map
-        reverse_cache stores the y->x map        
         """
         shape = np.shape(x)
         x = np.atlesat_2d(x) # (N,3)
-        if use_cache:
-            y = []
-            for ix in x:
-                k = x.tobytes()
-                if k in self.cache:
-                    iy = self.cache[k]
-                else:
-                    iy = self.dot(self.R,ix)
-                    cache[k] = iy
-                    reverse_cache[iy.tobytes()] = ix
-                y.append(iy)
-            y = np.array(y)
-        else:
-            y = np.tensordot(x,R,axes=(1,1)) # 2nd dim of R time 2nd dim of x
+        y = np.tensordot(x,R,axes=(1,1)) # 2nd dim of R time 2nd dim of x
         y.shape = shape
         return y
-    def rotate(self,x,use_cache=False):
+    def rotate(self,x):
         """
-        y = rotate(x,use_cache=True)
+        y = rotate(x)
         rotate x into the new coordinate system
         x can be (3,) or (N,3)
-        y will be the same shape
-        use_cache = use cache or not
+        y will be the same shape as x
         """
-        return self._rotate(x,self.R,use_cache,self.cache,self.reverse_cache)
-    def reverse_rotate(self,y,use_cache=True):
+        return self._rotate(x,self.R)
+    def reverse_rotate(self,y):
         """
-        x = reverse_rotate(y,use_cache=True)
+        x = reverse_rotate(y)
         rotate y into the old coordinate system
         y can be (3,) or (N,3)
-        x will be the same shape
-        use_cache = use cache or not
+        x will be the same shape as y
         """
-        return self._rotate(y,self.Rt,use_cache,self.reverse_cache,self.cache)
+        return self._rotate(y,self.Rt)
     def inverse(self):
         """return the inverse rotation as a new Rotation object"""
         return Rotation(self.Rt[0,:],self.Rt[1,:],self.Rt[2,:])
@@ -231,8 +219,10 @@ class Edge(object):
     """
     Abstract Base Class for edges
     properties:
+        points = identity - tuple of points that uniquely identify a class instance
         a,b = endpoints returns Edges' end points
             or None for closed edges (e.g., full ellipses)
+        len = length - length of edge
         area - area of edge for curved edes, zero for straight
         nhat - unit vector normal to Edge's plane
         (x1,x2) = xlim - lower and upper limit of x in Patch's coordinate system
@@ -248,19 +238,38 @@ class Edge(object):
             Always False for straight edges
             True for curved eges if point lies between curve and its chord
             also available as "in" operator
+    overloaded operators:
+        in (__contains__) - "p in edge" is the same as edge.inside(p)
+        == (__eq__) - chesk that both edges are same class and 
+            have same identity property, using points_equal function to test
     """
     def __init__(self,*args,**kwargs):
         """edge = Edge()
         initializes underscore cache variables for all properties
         """
-        self._endpoints = None
-        self._nhat = None
+        self._identity = ()
+        self._endpoints = ()
+        self._length = None
         self._area = None
+        self._nhat = None
         self._xlim = None
+    @property
+    def identity(self):
+        """points = identity returns tuple of points that uniquely identify Edge"""
+        return self._identity
+    def __eq__(self,other):
+        if self.__class__ != other.__class__: return False
+        for s,o in zip(self.identity,other.identity):
+            if not points_equal(s,o): return False
+        return True
     @property
     def endpoints(self):
         """a,b = endpoints returns end points of Edge"""
         return self._endpoints
+    @property
+    def length(self):
+        """length of Edge"""
+        return NotImplementedError # Abstract base class
     @property
     def area(self):
         """area of Edge"""
@@ -318,6 +327,13 @@ class StraightEdge(Edge):
         self._p1 = np.array(p1).ravel()
         self._p2 = np.array(p2).ravel()
         self._endpoints = (p1,p2)
+        self._identity = self._endpoints
+    @property
+    def length(self):
+        """length of Edge"""
+        if self._length is None:
+            self._length = np.linalg.norm(self._endpoints[1]-self._endpoints[0])
+        return self._length
     @property
     def area(self):
         """*INHERIT*
@@ -370,6 +386,13 @@ class EllipseArc(CurvedEdge):
         p1 - theta or 3-d location of first point on arc
         p2 - theta or 3-d location of second point on arc
         arc spans from p1 to p2 anticlockwise (around a x b)
+        """
+        raise NotImplementedError # TODO
+    @property
+    def length(self):
+        """
+        *INHERIT*
+        length is computed along arc
         """
         raise NotImplementedError # TODO
     @property
@@ -499,14 +522,18 @@ class Patch(object):
         edges = tuple(edges)
         self._edges = tuple(edges)
         
-        corners = list(edges[0].endpoints)
+        corners = [*edges[0].endpoints]
         for edge in self._edges[1:]:
-            if edge[0] != corners[-1]:
+            if not points_equal(edge.endpoints[0],corners[-1]):
                 raise ValueError('Supplied edges do not connect')
             corners.append(edge.endpoints[1])
+        if points_equal(corners[0],corners[-1]):
+            corners.pop() # remove duplicate 1st/last point
+        else:
+            raise ValueError('Supplied edges do not connect')
         self._corners = tuple(corners) # corners (Edge endpoints) that make up this patch        
-        self._chord_poly = Polygon(self._corners)
         # initialize cached properties
+        self._chord_poly = None
         self._components = None
         self._area = None
     def __str__(self):
@@ -525,6 +552,8 @@ class Patch(object):
     @property
     def chord_poly(self):
         """a Polygon made from the Patch's corners"""
+        if self._chord_poly is None:
+            self._chord_poly = Polygon(self._corners)
         return self._chord_poly
     @property
     def area(self):
@@ -545,13 +574,23 @@ class Patch(object):
     def components(self):
         """constinuent components (Triangles and CurvedEdges)"""
         if self._components is None:
-            components = []
-            origin = self.edges.endpoints[0]
-            for edge in self.edges:
-                if isinstance(edge,CurvedEdge):
-                    components.append(edge)
-                components.append(Triangle((origin,*edge.endpoints)))
-            self._components = tuple(components)
+            if self.is_component:
+                self._components = (self,)
+            else: # make list of Triangles and CurvedEdges
+                components = []
+                origin = self.edges.endpoints[0]
+                for edge in self.edges:
+                    add_triangle = False
+                    if isinstance(edge,CurvedEdge):
+                        components.append(edge)
+                    elif isinstance(edge,StraightEdge):
+                        # don't add triangle if first edge is straight
+                        add_triangle = (edge != self.edges[0]) 
+                    else:
+                        raise ValueError("Patch has edges that's neither straight nor curved")
+                    if add_triangle:
+                        components.append(Triangle((origin,*edge.endpoints)))
+                self._components = tuple(components)
         return self._components
     @property
     def xlim(self):
@@ -597,37 +636,36 @@ class Polygon(Patch):
         if not sorted:
             # sort points such that angles increase in nhat plane
             center = np.zeros(3) # average point
+            points = list(points) # make mutable
             for i,p in enumerate(points):
                 if np.size(p) != 3:
                     raise ValueError('Polygon requires points input to be list of 3-d vectors')
                 points[i] = p = np.array(p).ravel()
                 center += p
             center = center/len(points) # average
-            if nhat is None:
-                nhat = 0
-                for p in points[1:]:
-                    nhat = np.cross(p-points[0])
-                    if np.norm(nhat)>0: break
-            if np.norm(nhat) == 0:
+            zhat = nhat
+            if zhat is None:
+                zhat = 0
+                for i,p in enumerate(points):
+                    zhat = np.cross(p-center,points[(i+1) % len(points)])
+                    if np.linalg.norm(zhat)>0: break
+            if np.linalg.norm(zhat) == 0:
                 raise ValueError('points provided to Polygon are degenerate (co-linear)')
-            (xhat,yhat,zhat) = make_axes((points[0]-center,None,nhat))
+            (zhat,xhat,yhat) = make_axes((zhat,points[0]-center,None))
             angles = []
             for (i,p) in enumerate(points):
                 dp = p-center
                 x = np.dot(dp,xhat)
                 y = np.dot(dp,yhat)
-                z = np.dot(dp.zhat)
-                angles.append(np.atan2(y,x))
-                zfrac = z/np.norm(dp) > 1/360
-                if zfrac > 1e-3: # more than a degree off
+                z = np.dot(dp,zhat)
+                if z > SMALL_FRACTION*np.linalg.norm(dp):
                     raise ValueError('Polygon input points not coplanar')
-                if zfrac > 1e-10:
-                    print('Warning: adjusting slightly non-coplanar point')
-                    points[i] = p = center + x*xhat+y*yhat
-            angles,isort = np.unique(angles) # remove duplicates
+                points[i] = p = center + x*xhat+y*yhat # ensure coplanar
+                angles.append(np.arctan2(y,x))
+            angles,isort = np.unique(angles,return_index=True) # remove duplicates
             if len(angles) < 3:
                 raise ValueError('All points in polygon are coplanar')
-            points = points[isort]
+            points = [points[i] for i in isort]
 
         edges = []
         for i,p in enumerate(points):
@@ -636,6 +674,7 @@ class Polygon(Patch):
             edges.append(StraightEdge(p1,p2))
             
         super().__init__(edges)
+        self._chord_poly = self # a polygon is its own chord_poly, prevents infinite recursion        
 
 class Triangle(Polygon):
     """Patch composed of a single triangle"""
@@ -647,12 +686,19 @@ class Triangle(Polygon):
         if len(self.corners) != 3:
             raise ValueError('Attempt to initialize Triangle with %d points' % len(self.corners))
         self._nhat = None
-        self._components = (self,)
         # define local: x along first segment, y = nhat cross x, z = nhat
         (self._xhat,self._yhat,_) = make_axes((self.corners[1]-self.corners[0],None,self.nhat))
     @property
     def is_component(self):
         return True
+    @property
+    def area(self):
+        """area of Patch"""
+        if self._area is None:
+            sp = np.sum([edge.length for edge in self.edges])/2 # semiperimiter
+            # Heron's formula for the area of a Triangle
+            self._area = np.sqrt(sp*np.prod([sp-edge.length for edge in self.edges]))
+        return self._area
     @property
     def nhat(self):
         """*INHERIT*"""
@@ -678,15 +724,21 @@ class Triangle(Polygon):
         return NotImplementedError # TODO
     def inside(self,point):
         """*INHERIT*"""
-        n = self.nhat
         for i in range(3):
             origin = self.corners[i]
             a = self.corners[(i+1) % 3]-origin
             b = self.corners[(i+2) % 3]-origin
             c = point-origin
-            if not between_rays(a,b,c,nhat=n): return False
+            if not between_rays(a,b,c,n=self.nhat): return False
         return True
-    
+
+"""    
+t = Triangle([[0,0,0],[1,0,0],[0,1,0]])
+print('area',t.area) # 0.5 w/in SMALL_FRACTION**2
+print('inside',t.inside([0.25,0.25,0])) # True
+print('inside',t.inside([0.75,0.75,0])) # False
+"""
+
 class Rectangle(Polygon):
     """Patch composed of a rectangle"""
     def __init__(self,points,*args,**kwargs):
@@ -701,7 +753,7 @@ class Rectangle(Polygon):
         corner,a,b = points
         da = a-corner
         db = b-corner
-        if np.dot(da,db)>1e-10*np.norm(da)*np.norm(db):
+        if np.dot(da,db)>SMALL_FRACTION*np.linalg.norm(da)*np.linalg.norm(db):
             raise ValueError('A Rectangle must be initialized with the first point being a right angle: corner,a,b')
         points = [corner,a,corner+da+db,b]
         kwargs['sorted'] = True # for sorted arg to be true
