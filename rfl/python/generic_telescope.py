@@ -173,6 +173,7 @@ class Rotation(object):
         rotate - rotate from old to new coordinates
         reverse_rotate - rotate from new to old coordinates
         inverse - return new rotation object that reverses this rotation
+        project - project into plane, i.e., rotate and then zero-out an axis
     """
     def __init__(self,xhat,yhat,zhat):
         """
@@ -213,7 +214,71 @@ class Rotation(object):
     def inverse(self):
         """return the inverse rotation as a new Rotation object"""
         return Rotation(self.Rt[0,:],self.Rt[1,:],self.Rt[2,:])
+    def project(self,x,nullaxis=2):
+        """
+        y = project(x,nullaxis=2)
+        rotate x into the new coordinate system
+        and then project along nullaxis (i.e., set y[:,nullaxis]=0)
+        (by default projects into the xhat,yhat plane)
+        x can be (3,) or (N,3)
+        y will be the same shape as x
+        """
+        y = self._rotate(x,self.R)
+        if y.ndim==1:
+            y[nullaxis] = 0.0
+        else:
+            y[:,nullaxis] = 0.0
+        return y
+
+class LocalCoordsMixin(object):
+    """
+    LocalCoordsMixin - mixin to provide local coordinate system info
+    properties:
+        origin - 3-d origin of system
+        xhat,yhat,zhat - 3-d unit vectors that define system
+        (x1,x2) = xlim - lower and upper limit of x in object's coordinate system
+    Properties are read only. Managed by private _ variables that are 
+        initilized to None in the Edge base class constructor. 
+        Only getters are provided.
+    methods:
+        (y1,y2) = ylim(x) - y limits in object's coordinate sytem
+        p = xy2p(x,y) convert x,y from object's coordinates to point in 3-d frame
+        (x,y) = p2xy(p) convert point from 3-d frame to object's local coordinate system
         
+    Derived class must populate _origin, _xhat, _yhat, _zhat, and _xlim
+        and overload __init__ and ylim
+    
+    """
+    def __init__(self,*args,**kwargs):
+        """
+        Initialzies private underscore variables to None
+        """
+        self._origin = self._xhat = self._yhat = self._zhat = self._xlim = None
+    @property
+    def origin(self):
+        return self._origin
+    @property
+    def xhat(self):
+        return self._xhat
+    @property
+    def yhat(self):
+        return self._yhat
+    @property
+    def zhat(self):
+        return self._zhat
+    @property
+    def xlim(self):
+        return self._xlim
+    def ylim(self,x):
+        """(y1,y2) = ylim(x) - y limits in object's coordinate sytem"""
+        raise NotImplementedError # Abstract method
+    def xy2p(self,x,y):
+        """p = xy2p(x,y) convert x,y from object's coordinates to point in 3-d frame"""
+        return self.origin+x*self.xhat+y*self.yhat
+    def p2xy(self,p):
+        """(x,y) = p2xy(p) convert point from 3-d frame to object's local coordinate system"""
+        dp = p-self.origin
+        return (np.dot(dp,self.xhat),np.dot(dp,self.yhat))
 
 class Edge(object):
     """
@@ -225,14 +290,11 @@ class Edge(object):
         len = length - length of edge
         area - area of edge for curved edes, zero for straight
         nhat - unit vector normal to Edge's plane
-        (x1,x2) = xlim - lower and upper limit of x in Patch's coordinate system
         Properties are read only. Managed by private _ variables that are 
             initilized to None in the Edge base class constructor. 
             Only getters are provided.
     methods:
-        (y1,y2) = ylim(x) - y limits in Edge's coordinate sytem
-        v = xy2p(x,y) convert x,y from Edge's coordinates to point in 3-d frame
-        points = intersect(other) returns a list of points of intersection between self and other
+        points = intersect(other) returns a tuple of points of intersection between self and other
         edge = rotate(rot) returns the edge rotated by Rotation rot
         bool = inside(point) returns True if a point is inside the edge
             Always False for straight edges
@@ -252,12 +314,12 @@ class Edge(object):
         self._length = None
         self._area = None
         self._nhat = None
-        self._xlim = None
     @property
     def identity(self):
         """points = identity returns tuple of points that uniquely identify Edge"""
         return self._identity
     def __eq__(self,other):
+        if other is self: return True
         if self.__class__ != other.__class__: return False
         for s,o in zip(self.identity,other.identity):
             if not points_equal(s,o): return False
@@ -269,28 +331,18 @@ class Edge(object):
     @property
     def length(self):
         """length of Edge"""
-        return NotImplementedError # Abstract base class
+        return self._length
     @property
     def area(self):
         """area of Edge"""
-        return NotImplementedError # Abstract base class
+        return self._area
     @property
     def nhat(self):
         """nhat - unit vector normal to Edge's plane"""
-        return None
-    @property
-    def xlim(self):
-        """(x1,x2) = xlim - lower and upper limit of x in Edge's coordinate system"""
-        return NotImplementedError # Abstract base class
-    def ylim(self,x):
-        """(y1,y2) = ylim(x) - y limits in Edge's coordinate sytem at x"""
-        return NotImplementedError # Abstract base class
-    def xy2p(self,x,y):
-        """v = xy2p(x,y) convert x,y from Edge's coordinates to point in 3-d frame"""
-        return NotImplementedError # Abstract base class
+        return self._nhat
     def intersect(self,other,try_other=True):
         """points = intersect(other,try_other=True) 
-        returns a list of points of intersection between self and Edge other
+        returns a typle of points of intersection between self and Edge other
         try_other: try other's intersect method if this one doesn't support other's type
         """
         # we got here because self did not implement intersect with otheer        
@@ -321,6 +373,7 @@ class StraightEdge(Edge):
         p2 - 3-d location of end of line segment
         """
         super().__init__(*args,**kwargs)
+        self._area = 0.0
         for p in [p1,p2]:
             if np.size(p) != 3:
                 raise ValueError('Inputs p1 and p2 to StraightEdge must be 3-vectors')
@@ -334,30 +387,39 @@ class StraightEdge(Edge):
         if self._length is None:
             self._length = np.linalg.norm(self._endpoints[1]-self._endpoints[0])
         return self._length
-    @property
-    def area(self):
-        """*INHERIT*
-        returns zero for straight edges
+    def _intersect_with_straight(self,other):
         """
-        return 0.0
-    @property
-    def xlim(self):
-        """*INHERIT"""
-        return NotImplementedError # TODO
-    def ylim(self,x):
-        """*INHERIT"""
-        return NotImplementedError # TODO    
-    def xy2p(self,x,y):
-        """*INHERIT*"""
-        return NotImplementedError # TODO
+        same as intersect, but when other is known to be a StraightEdge
+        """
+        # self is: p(t) = p1+(p2-p1)*t
+        # other is: q(s) = q1+(q2-q1)*s
+        # find t,s such that p(t) = q(s)
+        # solve A*x = y
+        # A = [p2-p1,q2-q1] (stack as two rows)
+        # y = q1-p1
+        # x = (t,s)
+        # use least squares since A is overspecified
+        (p1,p2) = self.endpoints[0]
+        (q1,q2) = other.endpoints[1]
+        A = np.column_stack([p2-p1,q1-q2])
+        y = q1-p1
+        (t,s) = np.linalg.solve(A,y,rcond=None)[0] # 1st output is solution
+        empty = tuple()
+        if t > self.length:
+            return empty # intersection is past the end of self
+        if s > other.length:
+            return empty # intersection is past the end of other
+        if not points_equal(p1+(p2-p1)*t,q1+(q1-q2)*s):
+            return empty # points do not intersect
+        return (p1+(p2-p1)*t,) # return tuple of single intersecting point        
     def intersect(self,other,try_other=True):
         """*INHERIT*"""
         # try intersect with types self knows about
         # then hand off to parent class
         if isinstance(other,StraightEdge):
-            raise NotImplementedError # TODO
+            return self._intersect_with_straight(other)
         else:
-            super().intersect(other,try_other) # pass up the chain
+            return super().intersect(other,try_other) # pass up the chain
     def rotate(self,rot):
         """*INHERIT*"""
         return NotImplementedError # TODO
@@ -367,8 +429,11 @@ class StraightEdge(Edge):
         """
         return False
 
-class CurvedEdge(Edge):
-    """CurvedEdge base subclass of Edge for curved edges"""
+class CurvedEdge(Edge,LocalCoordsMixin):
+    """
+    CurvedEdge base subclass of Edge for curved edges
+    Also implements LocalCoordsMixin to represent local coordinate system
+    """
     @property
     def area(self):
         """*INHERIT*
@@ -394,6 +459,8 @@ class EllipseArc(CurvedEdge):
         *INHERIT*
         length is computed along arc
         """
+        # https://math.stackexchange.com/questions/433094/how-to-determine-the-arc-length-of-ellipse
+        # https://docs.scipy.org/doc/scipy/reference/generated/scipy.special.ellipeinc.html#scipy.special.ellipeinc
         raise NotImplementedError # TODO
     @property
     def area(self):
@@ -471,12 +538,23 @@ class FullEllipse(EllipseArc):
         """*INHERIT*"""
         raise NotImplementedError # TODO
 
+class CircleArc(EllipseArc):
+    """CircleArc Edge, subclass of EllipseArc, for circular arcs"""
+    def __init__(self,center,p1,p2):
+        """arc = CircleArc(center,p1,p2)
+        center- 3-d location of circle's center
+        p1 - 3-d location of first point on arc
+        p2 - 3-d location of second point on arc
+        arc spans from p1 to p2 anticlockwise (around p1 x p2)
+        """
+        raise NotImplementedError # TODO
+
 class FullCricle(FullEllipse):
     """FullCircle Edge, subclass of Ellipse, full circle"""
-    def __init__(self):
-        """circle = FullCircle(center,r,nhat)
+    def __init__(self,center,r,nhat):
+        """circle = FullCircle(center,r)
         center - 3-d location of circle's center
-        r - 3-d point on circle
+        r - radius of circle
         nhat - 3-vector normal to plane of circle
         """
         raise NotImplementedError # TODO
@@ -496,12 +574,9 @@ class Patch(object):
         area - area of patch
         nhat - unit vector normal to Pacth's plane
         components - constituent component Patches
-        (x1,x2) = xlim - lower and upper limit of x in Patch's coordinate system
         chord_poly - a polygon made up of the endpoints for all edges
         Properties are read only. Managed by private _ variables and getters
     methods:
-        (y1,y2) = ylim(x) - y limits in Edge's coordinate sytem
-        v = xy2p(x,y) convert x,y from Edge's coordinates to point in 3-d frame
         bool = inside(point) returns True if a point is inside the Patch
             also available as "in" operator
         patch = rotate(rot) returns the Patch rotated by Rotation rot
@@ -592,16 +667,6 @@ class Patch(object):
                         components.append(Triangle((origin,*edge.endpoints)))
                 self._components = tuple(components)
         return self._components
-    @property
-    def xlim(self):
-        """(x1,x2) = xlim - lower and upper limit of x in Patch's coordinate system"""
-        return NotImplementedError # Abstract base class
-    def ylim(self,x):
-        """(y1,y2) = ylim(x) - y limits in Patch's coordinate sytem at x"""
-        return NotImplementedError # Abstract base class
-    def xy2p(self,x,y):
-        """v = xy2p(x,y) convert x,y from Patch's coordinates to point in 3-d frame"""
-        return NotImplementedError # Abstract base class
     def inside(self,point):
         """
         bool = inside(point) returns True if a point is inside the patch
@@ -676,18 +741,31 @@ class Polygon(Patch):
         super().__init__(edges)
         self._chord_poly = self # a polygon is its own chord_poly, prevents infinite recursion        
 
-class Triangle(Polygon):
-    """Patch composed of a single triangle"""
+class Triangle(Polygon,LocalCoordsMixin):
+    """Patch composed of a single triangle
+    Also implements LocalCoordsMixin to represent local coordinate system
+    """
     def __init__(self,*args,**kwargs): # TODO -- add other arguments
         """*INHERIT*
         A Triangle has exactly 3 points
         """
+        
         super().__init__(*args,**kwargs)
         if len(self.corners) != 3:
             raise ValueError('Attempt to initialize Triangle with %d points' % len(self.corners))
         self._nhat = None
+
+        ilongest = np.argmax([edge.length for edge in self._edges])
+        longest = self._edges[ilongest]
+        
         # define local: x along first segment, y = nhat cross x, z = nhat
-        (self._xhat,self._yhat,_) = make_axes((self.corners[1]-self.corners[0],None,self.nhat))
+        # call it in z,x,y order to ensure self.nhat->self._zhat
+        (self._zhat,self._xhat,self._yhat) = make_axes((self.nhat,longest.endpoints[1]-longest.endpoints[0],None))
+        self._apex3 = self.corners[(ilongest+2)%3] # 3-d apex, edge goes from corners[i] to corners[i+1]
+        self._origin = longest.endpoints[0] # a 3-d vector
+        self._base = longest # an edge
+        self._apex2 = self.p2xy(self._apex3)# (x,y) in local coordinates, y may be negative if triangle entered left-handed
+        self._xlim = (0,self._base.length)
     @property
     def is_component(self):
         return True
@@ -695,9 +773,7 @@ class Triangle(Polygon):
     def area(self):
         """area of Patch"""
         if self._area is None:
-            sp = np.sum([edge.length for edge in self.edges])/2 # semiperimiter
-            # Heron's formula for the area of a Triangle
-            self._area = np.sqrt(sp*np.prod([sp-edge.length for edge in self.edges]))
+            self._area = self._base.length*abs(self._apex2[1])/2 # base*height/2
         return self._area
     @property
     def nhat(self):
@@ -707,21 +783,20 @@ class Triangle(Polygon):
             a = self.corners[1]-self.corners[0] # 1st edge vector
             b = self.corners[2]-self.corners[1] # 2nd edge vector
             n = np.cross(a,b)
-            self._nhat = n/np.sum(n**2)
+            self._nhat = n/np.linalg.norm(n)
         return self._nhat
-    @property
-    def xlim(self):
-        """*INHERIT*"""
-        return NotImplementedError # TODO
     def ylim(self,x):
-        """*INHERIT*"""
-        return NotImplementedError # TODO
-    def xy2p(self,x,y):
-        """*INHERIT*"""
-        return NotImplementedError # TODO
-    def p2xy(self,p):
-        """*INHERIT*"""
-        return NotImplementedError # TODO
+        """*INHERIT*"""        
+        if (x <= 0.0) or (x>=self._base.length):
+            ymax = 0.0
+        elif x <= self._apex2[0]:
+            ymax = self._apex2[1]*x/self.apex2[0]
+        elif x < self._base.length:
+            ymax = self._apex2[1]*(self._base.length-x)/self._base.length
+        if ymax < 0.0: # shouldn't happen but could
+            return (-ymax,0.0)
+        else:
+            return (0.0,ymax)
     def inside(self,point):
         """*INHERIT*"""
         for i in range(3):
@@ -732,12 +807,12 @@ class Triangle(Polygon):
             if not between_rays(a,b,c,n=self.nhat): return False
         return True
 
-"""    
+#"""    
 t = Triangle([[0,0,0],[1,0,0],[0,1,0]])
 print('area',t.area) # 0.5 w/in SMALL_FRACTION**2
 print('inside',t.inside([0.25,0.25,0])) # True
 print('inside',t.inside([0.75,0.75,0])) # False
-"""
+#"""
 
 class Rectangle(Polygon):
     """Patch composed of a rectangle"""
@@ -787,3 +862,25 @@ class AR_Tele_Generic(AngleResponse):
     """
 
 inherit_docstrings(AngleResponse) # re-inherit tree
+
+"""
+Projecting an ellipse and recovering its axes.
+https://en.wikipedia.org/wiki/Rytz%27s_construction#Computer_aided_solution
+ 
+First, project the ellipse into the plane by removing all vector components parallel to the normal direction:
+x = x-(x.n)n
+the original semiaxes are a and b, and the original center is c. The projected axes are a, b, and the projected center is c.
+The new ellipse is given by:
+r(t) = c+a*cos(t)+b*sin(t)
+find t0 such that tan(2t0) = (2*a.b)/(|a|^2-|b|^2)
+The semiaxes occur at t0, t0+pi/2, t0+pi, and t0+3pi/2
+Test the first two semiaxes at t0, t0+pi/2 . The longer one is the semimajor axis. The semiminor axis is pi/2 later.
+ 
+Computing ellipse arc length:
+https://en.wikipedia.org/wiki/Ellipse#Arc_length 
+The length of an arc from 0 to alpha for an ellipse with semiaxes of length a,b is:
+L(alpha,a,b) = -a*ellipseinc(pi/2-a,sqrt(1-b^2/a^2))
+Note Wikipedia reverses a,b.
+The arc length from theta1 to theta2 is L(theta2,a,b)-L(theta1,a,b)
+
+"""
