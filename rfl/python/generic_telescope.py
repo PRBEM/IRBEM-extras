@@ -89,6 +89,8 @@ SMALL_FRACTION - 1e-6 - de minimis distance offset. Points closer than this
 import numpy as np
 from rfl import AngleResponse, inherit_docstrings
 
+norm = np.linalg.norm # shorthand
+
 REFERENCE_LENGTH = 1.0 # "typical" length in units being used
 SMALL_FRACTION = 1e-6 # nm if using mm
 
@@ -103,7 +105,10 @@ def between_rays(a,b,p,n=None):
     if n is None:
         n = np.cross(a,b)
     # both a x p and p x b must go in same direction as n = a x b
-    return (np.dot(np.cross(a,p),n) >=0) and (np.dot(np.cross(p,b),n)>0)
+    pn = norm(p)*norm(n)
+    if np.dot(np.cross(a,p),n) < -SMALL_FRACTION*norm(a)*pn: return False
+    if np.dot(np.cross(p,b),n) < -SMALL_FRACTION*norm(b)*pn:return False
+    return True
 
 def points_equal(a,b):
     """
@@ -112,7 +117,7 @@ def points_equal(a,b):
     returns true if a and b are effectively equal.
     Formally, returns ||a-b|| < REFERENCE_LENGTH*SMALL_FRACTION
     """
-    return (np.linalg.norm(a-b) < REFERENCE_LENGTH*SMALL_FRACTION)
+    return (norm(a-b) < REFERENCE_LENGTH*SMALL_FRACTION)
     
 def make_axes(xyz=(None,)*3):
     """
@@ -135,7 +140,7 @@ def make_axes(xyz=(None,)*3):
         ivec.append(i)
 
     if len(ivec) == 3:
-        unitize = lambda x : np.array(x).ravel()/np.linalg.norm(x)
+        unitize = lambda x : np.array(x).ravel()/norm(x)
         return tuple(unitize(x) for x in xyz)
     if len(ivec) == 2:
         xnew = np.cross(xyz[ivec[0]],xyz[ivec[1]])
@@ -223,7 +228,7 @@ class Rotation(object):
         x can be (3,) or (N,3)
         y will be the same shape as x
         """
-        y = self._rotate(x,self.R)
+        y = self.rotate(x)
         if y.ndim==1:
             y[nullaxis] = 0.0
         else:
@@ -244,6 +249,9 @@ class LocalCoordsMixin(object):
         (y1,y2) = ylim(x) - y limits in object's coordinate sytem
         p = xy2p(x,y) convert x,y from object's coordinates to point in 3-d frame
         (x,y) = p2xy(p) convert point from 3-d frame to object's local coordinate system
+        xy2p and p2xy will accept scalar or 1-d input, adding the extra dimension to
+        the output of p,x,y. So, e.g., if x,y are (N,) then p will be (N,3), but 
+        if x,y are scalar, then p will be(3,)
         
     Derived class must populate _origin, _xhat, _yhat, _zhat, and _xlim
         and overload __init__ and ylim
@@ -273,12 +281,32 @@ class LocalCoordsMixin(object):
         """(y1,y2) = ylim(x) - y limits in object's coordinate sytem"""
         raise NotImplementedError # Abstract method
     def xy2p(self,x,y):
-        """p = xy2p(x,y) convert x,y from object's coordinates to point in 3-d frame"""
-        return self.origin+x*self.xhat+y*self.yhat
+        """p = xy2p(x,y) convert x,y from object's coordinates to point in 3-d frame
+        if x or y is (N,) then output will be (N,3), otherwise output is (3,)
+        """
+        isscalar = np.isscalar(x) and np.isscalar(y)
+        if isscalar:
+            return self.origin+x*self.xhat+y*self.yhat
+        else:
+            # reshape x,y to (N,1) or (1,1)
+            x = np.reshape(np.array(x),(np.size(x),1)) # (N,1) or (1,1)
+            y = np.reshape(np.array(y),(np.size(y),1)) # (N,1) or (1,1)
+            if (x.size>1) and (y.size>1) and (y.size != x.size):
+                raise ValueError('x and y must be scalar or same length')
+            # reshape origin, xhat, yhat to (1,3)
+            origin = np.expand_dims(self.origin,0) # (3,) -> (1,3)
+            xhat= np.expand_dims(self.xhat,0) # (3,) -> (1,3)
+            yhat= np.expand_dims(self.yhat,0) # (3,) -> (1,3)
+            # now do the formula and let it broadast
+            return origin+x*xhat+y*yhat # broadcasts to = (N,3)
+            
     def p2xy(self,p):
-        """(x,y) = p2xy(p) convert point from 3-d frame to object's local coordinate system"""
+        """(x,y) = p2xy(p) convert point from 3-d frame to object's local coordinate system
+        if p is (N,3) x and y will be (N,). Otherwise, x,y will be scalar
+        """
         dp = p-self.origin
-        return (np.dot(dp,self.xhat),np.dot(dp,self.yhat))
+        return (np.dot(dp,self.xhat),np.dot(dp,self.yhat)) # self-broadcasting
+            
 
 class Edge(object):
     """
@@ -295,11 +323,12 @@ class Edge(object):
             Only getters are provided.
     methods:
         points = intersect(other) returns a tuple of points of intersection between self and other
-        edge = rotate(rot) returns the edge rotated by Rotation rot
+        edge = rotate(rot,project=True) returns the edge rotated by Rotation rot, and if project, removes "z" component
         bool = inside(point) returns True if a point is inside the edge
             Always False for straight edges
             True for curved eges if point lies between curve and its chord
             also available as "in" operator
+        h = plot(ax,...) - plot on axes
     overloaded operators:
         in (__contains__) - "p in edge" is the same as edge.inside(p)
         == (__eq__) - chesk that both edges are same class and 
@@ -351,9 +380,9 @@ class Edge(object):
         else: # oops, coding error, neither class has intersect for the other
             raise NotImplementedError('No intersection method found for %s,%s' %
                                       (self.__class__.__name__,other.__class__.__name__))
-    def rotate(self,rot):
+    def rotate(self,rot,project=True):
         """
-        edge = rotate(rot) returns the edge rotated by Rotation rot
+        edge = rotate(rot,project=True) returns the edge rotated by Rotation rot
         """
         return NotImplementedError # Abstract base class
     def inside(self,point):
@@ -364,6 +393,14 @@ class Edge(object):
         return NotImplementedError # Abstract base class
     def __contains__(self,point): # in operator calls inside
         return self.inside(point)
+    def plot(self,ax,*args,**kwargs):
+        """
+        h = plot(self,ax,*args,**kwargs)
+        call ax.plot on axis with args and kwargs
+        returns result of ax.plot
+        """
+        return NotImplementedError # Abstract base class
+        
     
 class StraightEdge(Edge):
     """StraightEdge implements Edge for edges that are line segments"""
@@ -385,7 +422,7 @@ class StraightEdge(Edge):
     def length(self):
         """length of Edge"""
         if self._length is None:
-            self._length = np.linalg.norm(self._endpoints[1]-self._endpoints[0])
+            self._length = norm(self._endpoints[1]-self._endpoints[0])
         return self._length
     def _intersect_with_straight(self,other):
         """
@@ -405,10 +442,10 @@ class StraightEdge(Edge):
         y = q1-p1
         (t,s) = np.linalg.solve(A,y,rcond=None)[0] # 1st output is solution
         empty = tuple()
-        if t > self.length:
-            return empty # intersection is past the end of self
-        if s > other.length:
-            return empty # intersection is past the end of other
+        if (t<0.0) or (t>1.0):
+            return empty # intersection is not between p1,p2
+        if (s<0.0) or (s>1.0):
+            return empty # intersection is not between q1,q2
         if not points_equal(p1+(p2-p1)*t,q1+(q1-q2)*s):
             return empty # points do not intersect
         return (p1+(p2-p1)*t,) # return tuple of single intersecting point        
@@ -420,7 +457,7 @@ class StraightEdge(Edge):
             return self._intersect_with_straight(other)
         else:
             return super().intersect(other,try_other) # pass up the chain
-    def rotate(self,rot):
+    def rotate(self,rot,project=True):
         """*INHERIT*"""
         return NotImplementedError # TODO
     def inside(self,point):
@@ -428,6 +465,13 @@ class StraightEdge(Edge):
         always false for straight edges
         """
         return False
+    def plot(self,ax,*args,**kwargs):
+        """*INHERIT*"""
+        # make the colors match
+        h = ax.plot(*np.array(self.endpoints).transpose(),*args,**kwargs)
+        for hi in h[1:]:
+            hi.set_color(h[0].get_color())
+        return h
 
 class CurvedEdge(Edge,LocalCoordsMixin):
     """
@@ -486,7 +530,7 @@ class EllipseArc(CurvedEdge):
             raise NotImplementedError # TODO
         else:
             super().intersect(other,try_other) # pass up the chain
-    def rotate(self,rot):
+    def rotate(self,rot,project=True):
         """*INHERIT*"""
         return NotImplementedError # TODO
     def inside(self,point):
@@ -531,7 +575,7 @@ class FullEllipse(EllipseArc):
             raise NotImplementedError # TODO
         else:
             super().intersect(other,try_other) # pass up the chain
-    def rotate(self,rot):
+    def rotate(self,rot,project=True):
         """*INHERIT*"""
         return NotImplementedError # TODO
     def inside(self,point):
@@ -579,7 +623,8 @@ class Patch(object):
     methods:
         bool = inside(point) returns True if a point is inside the Patch
             also available as "in" operator
-        patch = rotate(rot) returns the Patch rotated by Rotation rot
+        patch = rotate(rot,project=True) returns the Patch rotated by Rotation rot, and optionally projected along the z axis
+        h = plot(ax,...) - plot on axes
         patch = overlap(other) returns patch representing overlap of self and other
         
     Note: only component Patches (Triangles and Curved Edges) implement xlim, ylim, and xy2p
@@ -653,14 +698,14 @@ class Patch(object):
                 self._components = (self,)
             else: # make list of Triangles and CurvedEdges
                 components = []
-                origin = self.edges.endpoints[0]
-                for edge in self.edges:
+                origin = self.edges[0].endpoints[0]
+                for i,edge in enumerate(self.edges):
                     add_triangle = False
                     if isinstance(edge,CurvedEdge):
                         components.append(edge)
                     elif isinstance(edge,StraightEdge):
                         # don't add triangle if first edge is straight
-                        add_triangle = (edge != self.edges[0]) 
+                        add_triangle = (i not in [0,len(self.edges)-1])
                     else:
                         raise ValueError("Patch has edges that's neither straight nor curved")
                     if add_triangle:
@@ -678,11 +723,23 @@ class Patch(object):
         return False
     def __contains__(self,point): # in operator calls inside
         return self.inside(point)
-    def rotate(self,rot):
+    def rotate(self,rot,project=True):
         """
-        patch = rotate(rot) returns the patch rotated by Rotation rot
+        patch = rotate(rot,project=True) returns the patch rotated by Rotation rot, and optionally projected along the z axis
         """
         return NotImplementedError # Abstract base class
+    def plot(self,ax,*args,**kwargs):
+        """
+        h = plot(self,ax,*args,**kwargs)
+        plots all edges, returns concatenated results as list
+        """
+        h = []
+        for edge in self.edges:
+            h = h+edge.plot(ax,*args,**kwargs)
+        # make the colors match
+        for hi in h[1:]:
+            hi.set_color(h[0].get_color())
+        return h
     def overlap(self,other,try_other=True):
         """patch = overlap(other) returns patch representing overlap of self and other"""
         # we got here because self did not implement intersect with otheer        
@@ -712,9 +769,9 @@ class Polygon(Patch):
             if zhat is None:
                 zhat = 0
                 for i,p in enumerate(points):
-                    zhat = np.cross(p-center,points[(i+1) % len(points)])
-                    if np.linalg.norm(zhat)>0: break
-            if np.linalg.norm(zhat) == 0:
+                    zhat = np.cross(p-center,points[(i+1) % len(points)]-center)
+                    if norm(zhat)>0: break
+            if norm(zhat) < REFERENCE_LENGTH*SMALL_FRACTION:
                 raise ValueError('points provided to Polygon are degenerate (co-linear)')
             (zhat,xhat,yhat) = make_axes((zhat,points[0]-center,None))
             angles = []
@@ -723,7 +780,7 @@ class Polygon(Patch):
                 x = np.dot(dp,xhat)
                 y = np.dot(dp,yhat)
                 z = np.dot(dp,zhat)
-                if z > SMALL_FRACTION*np.linalg.norm(dp):
+                if abs(z) > SMALL_FRACTION*norm(dp):
                     raise ValueError('Polygon input points not coplanar')
                 points[i] = p = center + x*xhat+y*yhat # ensure coplanar
                 angles.append(np.arctan2(y,x))
@@ -783,7 +840,7 @@ class Triangle(Polygon,LocalCoordsMixin):
             a = self.corners[1]-self.corners[0] # 1st edge vector
             b = self.corners[2]-self.corners[1] # 2nd edge vector
             n = np.cross(a,b)
-            self._nhat = n/np.linalg.norm(n)
+            self._nhat = n/norm(n)
         return self._nhat
     def ylim(self,x):
         """*INHERIT*"""        
@@ -807,12 +864,12 @@ class Triangle(Polygon,LocalCoordsMixin):
             if not between_rays(a,b,c,n=self.nhat): return False
         return True
 
-#"""    
+"""    
 t = Triangle([[0,0,0],[1,0,0],[0,1,0]])
 print('area',t.area) # 0.5 w/in SMALL_FRACTION**2
 print('inside',t.inside([0.25,0.25,0])) # True
 print('inside',t.inside([0.75,0.75,0])) # False
-#"""
+"""
 
 class Rectangle(Polygon):
     """Patch composed of a rectangle"""
@@ -821,18 +878,34 @@ class Rectangle(Polygon):
         Rectangle(points,...,sorted=False)
         A Rectangle is specified by three points: (corner,a,b)
         where (a-corner) and (b-corner) must make a right angle
+        cross(a,b) should point in the rectangle's normal direciton
         forth corner is found by projecting corner across diagonal ab
         """
-        if len(points) != 4:
+        if len(points) != 3:
             raise ValueError('A Rectangle must be initialized with 3 points')
-        corner,a,b = points
+        corner,a,b = np.array(points)
         da = a-corner
         db = b-corner
-        if np.dot(da,db)>SMALL_FRACTION*np.linalg.norm(da)*np.linalg.norm(db):
+        if np.dot(da,db)>SMALL_FRACTION*norm(da)*norm(db):
             raise ValueError('A Rectangle must be initialized with the first point being a right angle: corner,a,b')
         points = [corner,a,corner+da+db,b]
         kwargs['sorted'] = True # for sorted arg to be true
         super().__init__(points,*args,**kwargs)
+
+r = Rectangle(([0,0,0],[1,0,0],[0,1,0]))
+print('area',r.area) # 0.5 w/in SMALL_FRACTION**2
+print('inside',r.inside([0.2,0.1,0])) # True
+print('inside',r.inside([1.75,0.75,0])) # False
+print('inside',r.inside([0.1,0.1,0])) # True
+r2 = Rectangle(([0,0,2],[1,0,2],[0,1,2]))
+import matplotlib.pyplot as plt
+from mpl_toolkits import mplot3d # enables 3d projection
+plt.close('all')
+ax = plt.axes(projection='3d')
+for r_ in [r,r2]:
+    r_.plot(ax)
+    for c in r_.components: # now draw components
+        c.plot(ax,linestyle='--')
 
 class Segment(Patch):
     """Patch composed of a segment of an ellipse segment"""
