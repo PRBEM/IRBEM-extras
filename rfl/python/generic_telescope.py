@@ -91,7 +91,7 @@ SMALL_FRACTION - 1e-6 - de minimis distance offset. Points closer than this
 #TODO Pull out sort_points.
 
 import numpy as np
-from rfl import AngleResponse, inherit_docstrings
+from rfl import AngleResponse, inherit_docstrings, sind, cosd
 
 norm = np.linalg.norm # shorthand
 
@@ -380,8 +380,8 @@ class StraightEdge(Edge):
         for p in [p1,p2]:
             if np.size(p) != 3:
                 raise ValueError('Inputs p1 and p2 to StraightEdge must be 3-vectors')
-        self._p1 = np.array(p1).ravel()
-        self._p2 = np.array(p2).ravel()
+        p1 = np.array(p1).ravel()
+        p2 = np.array(p2).ravel()
         self._endpoints = (p1,p2)
         self._identity = self._endpoints
     @classmethod
@@ -427,9 +427,6 @@ class StraightEdge(Edge):
             return self._intersect_with_straight(other)
         else:
             return super().intersect(other,try_other) # pass up the chain
-    def rotate(self,rot,project=True):
-        """*INHERIT*"""
-        return NotImplementedError # TODO
     def inside(self,point):
         """*INHERIT*
         always false for straight edges
@@ -457,19 +454,28 @@ class CurvedEdge(Edge,LocalCoordsMixin):
 
 class EllipseArc(CurvedEdge):
     """EllipseArc Edge, subclass of CurvedEdge, for elliptical arcs"""
-    def __init__(self):
-        """ellpiseArc = FullEllipse(center,r1,r2,p1,p2)
+    def __init__(self,center,r1,r2,p1,p2,*args,**kwargs):
+        """ellpiseArc = Ellipse(center,r1,r2,p1,p2)
         center- 3-d location of ellipse's center
         r1 - 3-d location of point on ellipse
         r2 - 3-d location of point on ellipse along conjugated diamater to r1
         (if r1 perpendicular to r2, then they are the semimajor and semiminnor axes)
         p1 - theta or 3-d location of first point on arc
         p2 - theta or 3-d location of second point on arc
-        if p1 and p2 are given as angles then they are taken to be:
+        if p1 and p2 are given as angles then they are taken to be degrees, such that:
             p = r1*cos(theta) + r2*sin(theta)
         arc spans from p1 to p2 anticlockwise (around r1 x r2)
         """
-        raise NotImplementedError # TODO
+        super().__init__()
+        r1 = np.array(r1)
+        r2 = np.array(r2)
+        if np.isscalar(p1): # theta in degrees
+            p1 = center+r1*cosd(p1) + r2*sind(p1)
+        if np.isscalar(p2): # theta in degrees
+            p2 = center+r1*cosd(p2) + r2*sind(p2)
+        self._endpoints = (p1,p2)
+        self._identity = self._endpoints
+        # raise NotImplementedError # TODO
     @classmethod
     def from_identity(cls,id):
         """*INHERIT*"""
@@ -516,23 +522,18 @@ class EllipseArc(CurvedEdge):
 
 class FullEllipse(EllipseArc):
     """FullEllipse Edge, subclass of EllipseArc, full ellipse"""
-    def __init__(self):
+    def __init__(self,center,r1,r2,*args,**kwargs):
         """fullEllpise = FullEllipse(center,r1,r2)
         center- 3-d location of ellipse's center
         r1 - 3-d location of point on ellipse
         r2 - 3-d location of point on ellipse along conjugated diamater to r1
+        (if r1 perpendicular to r2, then they are the semimajor and semiminnor axes)
         """
-        raise NotImplementedError # TODO
+        super().__init__(center,r1,r2,0.0,360.0)
     @classmethod
     def from_identity(cls,id):
         """*INHERIT*"""
         raise NotImplementedError # TODO
-    @property
-    def endpoints(self):
-        """*INHERIT*
-        closed curve, has no endpoints (always None)
-        """
-        return None
     @property
     def area(self):
         """*INHERIT*
@@ -623,7 +624,7 @@ class Patch(object):
         patch = Patch(edges)
         edges - array of Edge objects
         """
-
+        
         for edge in edges:
             if not isinstance(edge,Edge):
                 raise ValueError('Patch should be initialized with list of Edge objects')
@@ -920,12 +921,8 @@ class Segment(Patch):
     def __init__(self,edge,*args,**kwargs):
         """
         seg = Segment(curved,...)
-        curved = a CurvedEdge instance or class type
-        if a class type is provided, it will be initialized with
-        subsequent arguments (the ...)
+        curved = a CurvedEdge instance
         """
-        if type(edge) == type: # need to initialize requested type
-            edge = edge(*args,**kwargs)
         if not isinstance(edge,CurvedEdge):
             raise ValueError('edge input expected to be a CurvedEdge instance')
         super().__init__((edge,))
@@ -936,19 +933,8 @@ class Segment(Patch):
         return self._components
     @classmethod
     def from_edges(cls,edges):
-        """*INHERIT*"""
-        # only has one edge, duplicate it
-        cls(edges[0])
-
-class EllipseArcPatch(Segment):
-    """Patch composed of a segment of an ellipse"""
-    def __init__(self,*args,**kwargs):
-        """
-        seg = EllipseArcPatch(...)
-        produce an EllipseArcPatch by passing parameters to
-        EllipseArc Edge
-        """
-        super().__init__(EllipseArc,*args,**kwargs)
+        """*INHERIT*"""        
+        cls(edges[0]) # only has one edge
 
 class EllipsePatch(Segment):
     """Patch composed of a full ellipse"""
@@ -958,17 +944,7 @@ class EllipsePatch(Segment):
         produce an EllipsePatch by passing parameters to
         FullElipse Edge
         """
-        super().__init__(FullEllipse,*args,**kwargs)
-
-class CircleArcPatch(Segment):
-    """Patch composed of a segment of a circle"""
-    def __init__(self,*args,**kwargs):
-        """
-        seg = CircleArcPatch(...)
-        produce a CircleArcPatch by passing parameters to
-        CircleArc Edge
-        """
-        super().__init__(CircleArc,*args,**kwargs)
+        super().__init__(FullEllipse(*args,**kwargs))
 
 class CirclePatch(Segment):
     """Patch composed of a full circle"""
@@ -978,7 +954,7 @@ class CirclePatch(Segment):
         produce a CirclePatch by passing parameters to
         FullCircle Edge
         """
-        super().__init__(FullCircle,*args,**kwargs)
+        super().__init__(FullCircle(*args,**kwargs))
 
 inherit_docstrings(Patch)
 # end of patches
