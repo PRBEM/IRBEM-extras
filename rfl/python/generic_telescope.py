@@ -934,30 +934,45 @@ class Segment(Patch):
     @classmethod
     def from_edges(cls,edges):
         """*INHERIT*"""        
-        cls(edges[0]) # only has one edge
+        return cls(edges[0]) # lose subclass-ness
 
 class EllipsePatch(Segment):
     """Patch composed of a full ellipse"""
     def __init__(self,*args,**kwargs):
         """
         seg = EllipsePatch(...)
-        produce an EllipsePatch by passing parameters to
-        FullElipse Edge
+        produce an EllipsePatch by passing parameters to FullElipse Edge
+        Also allows
+        seg = EllipsePatch(edge,...) for edge of type FullEllipse
         """
-        super().__init__(FullEllipse(*args,**kwargs))
+        if isinstance(args[0],FullEllipse):
+            super().__init__(*args,**kwargs)
+        else:
+            super().__init__(FullEllipse(*args,**kwargs))
 
 class CirclePatch(Segment):
     """Patch composed of a full circle"""
     def __init__(self,*args,**kwargs):
         """
         seg = CirclePatch(...)
-        produce a CirclePatch by passing parameters to
-        FullCircle Edge
+        produce a CirclePatch by passing parameters to FullCircle Edge
+        Also allows
+        seg = CirclePatch(edge,...) for edge of type FullCircle
         """
-        super().__init__(FullCircle(*args,**kwargs))
+        if isinstance(args[0],FullCircle):
+            super().__init__(*args,**kwargs)
+        else:
+            super().__init__(FullCircle(*args,**kwargs))
 
 inherit_docstrings(Patch)
 # end of patches
+
+#"""
+# Test code for EllipsePatch from_edges
+p = EllipsePatch([0,0,0],[1,0,0],[0,1,0])
+q = p.from_edges(p.edges)
+print(p.edges[0] == q.edges[0]) # True
+#"""
 
 class AR_Tele_Generic(AngleResponse):
     """
