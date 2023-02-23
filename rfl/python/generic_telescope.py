@@ -88,8 +88,6 @@ SMALL_FRACTION - 1e-6 - de minimis distance offset. Points closer than this
 
 #TODO Creat an edge "cut" method that produces a new edge that only has part of the old edge in it.
 
-#TODO Pull out sort_points.
-
 import numpy as np
 from rfl import AngleResponse, inherit_docstrings, sind, cosd
 
@@ -185,6 +183,51 @@ def project(p,nhat,offset=0):
     if not np.scalar(offset):
         offset = np.dot(offset,nhat)
     return p-np.dot(p,nhat)*nhat + offset*nhat
+
+def sort_points(points,nhat=None,return_index=False):
+    """
+    sort points such that angles increase in nhat plane
+    points = sort_points(points,nhat=None,return_index=False)
+    points,isort = sort_points(points,return_index=True,...)
+    nhat - ignored if sorted, otherwise used to determine how to sort points
+        defines normal vector to polygon. Points will be anticlockwise about nhat
+    Note: identical points will be consolidated
+    """
+    center = np.zeros(3) # average point
+    points = list(points) # make mutable
+    for i,p in enumerate(points):
+        if np.size(p) != 3:
+            raise ValueError('points must be list of 3-d vectors')
+        points[i] = p = np.array(p).ravel()
+        center += p
+    center = center/len(points) # average
+    zhat = nhat
+    if zhat is None:
+        zhat = 0
+        for i,p in enumerate(points):
+            zhat = np.cross(p-center,points[(i+1) % len(points)]-center)
+            if norm(zhat)>SMALL_FRACTION*REFERENCE_LENGTH: break
+    if norm(zhat) <= REFERENCE_LENGTH*SMALL_FRACTION:
+        raise ValueError('all points provided are degenerate (co-linear)')
+    (zhat,xhat,yhat) = make_axes((zhat,points[0]-center,None))
+    angles = []
+    for (i,p) in enumerate(points):
+        dp = p-center
+        x = np.dot(dp,xhat)
+        y = np.dot(dp,yhat)
+        z = np.dot(dp,zhat)
+        if abs(z) > SMALL_FRACTION*norm(dp):
+            raise ValueError('points not coplanar')
+        points[i] = p = center + x*xhat+y*yhat # ensure coplanar
+        angles.append(np.arctan2(y,x))
+    angles,isort = np.unique(angles,return_index=True) # remove duplicates
+    if len(angles) < 3:
+        raise ValueError('All points in polygon are coplanar')
+    points = [points[i] for i in isort]
+    if return_index:
+        return points,isort
+    else:
+        return points
 
 # classes
     
@@ -385,9 +428,9 @@ class StraightEdge(Edge):
         self._endpoints = (p1,p2)
         self._identity = self._endpoints
     @classmethod
-    def from_identity(cls,id):
+    def from_identity(cls,identity):
         """*INHERIT*"""
-        return cls(*id) # identity is endpoints
+        return cls(*identity) # identity is endpoints
     @property
     def length(self):
         """length of Edge"""
@@ -466,20 +509,29 @@ class EllipseArc(CurvedEdge):
             p = r1*cos(theta) + r2*sin(theta)
         arc spans from p1 to p2 anticlockwise (around r1 x r2)
         """
+        # stub for testing. Does not compute semiaxes
         super().__init__()
-        r1 = np.array(r1)
-        r2 = np.array(r2)
+        center = np.array(center).ravel()
+        r1 = np.array(r1).ravel()
+        r2 = np.array(r2).ravel()
         if np.isscalar(p1): # theta in degrees
             p1 = center+r1*cosd(p1) + r2*sind(p1)
+        else:
+            p1 = np.array(p1)
         if np.isscalar(p2): # theta in degrees
             p2 = center+r1*cosd(p2) + r2*sind(p2)
+        else:
+            p2 = np.array(p2)
+        self.center = center
         self._endpoints = (p1,p2)
-        self._identity = self._endpoints
-        # raise NotImplementedError # TODO
+        self.a = r1 # TODO compute axes
+        self.b = r2 # TODO compute axes
+        print('Warning: ellipse did not compute axes, not implemented yet')
+        self._identity = (self.center,self.a,self.b,*self._endpoints)
     @classmethod
-    def from_identity(cls,id):
+    def from_identity(cls,identity):
         """*INHERIT*"""
-        raise NotImplementedError # TODO
+        return EllipseArc(*identity)
     @property
     def length(self):
         """
@@ -531,7 +583,7 @@ class FullEllipse(EllipseArc):
         """
         super().__init__(center,r1,r2,0.0,360.0)
     @classmethod
-    def from_identity(cls,id):
+    def from_identity(cls,identity):
         """*INHERIT*"""
         raise NotImplementedError # TODO
     @property
@@ -575,7 +627,7 @@ class CircleArc(EllipseArc):
         """
         raise NotImplementedError # TODO
     @classmethod
-    def from_identity(cls,id):
+    def from_identity(cls,identity):
         """*INHERIT*"""
         raise NotImplementedError # TODO
 
@@ -589,7 +641,7 @@ class FullCircle(FullEllipse):
         """
         raise NotImplementedError # TODO
     @classmethod
-    def from_identity(cls,id):
+    def from_identity(cls,identity):
         """*INHERIT*"""
         raise NotImplementedError # TODO
 
@@ -743,7 +795,7 @@ class Patch(object):
 class Polygon(Patch):
     """Patch composed entirely of StraightEdges"""
     def __init__(self,points,*args,sorted=False,nhat=None,**kwargs):
-        """poly = Polygon(points,sorted=False)
+        """poly = Polygon(points,sorted=False,nhat=None)
         points - list of points that define the polygon
         sorted - if True, points will be assumed to already form a convex polygon
           otherwise, they will be sorted to form a convex polygon
@@ -751,38 +803,7 @@ class Polygon(Patch):
             defines normal vector to polygon. Points will be anticlockwise about nhat
         """
         if not sorted:
-            # sort points such that angles increase in nhat plane
-            center = np.zeros(3) # average point
-            points = list(points) # make mutable
-            for i,p in enumerate(points):
-                if np.size(p) != 3:
-                    raise ValueError('Polygon requires points input to be list of 3-d vectors')
-                points[i] = p = np.array(p).ravel()
-                center += p
-            center = center/len(points) # average
-            zhat = nhat
-            if zhat is None:
-                zhat = 0
-                for i,p in enumerate(points):
-                    zhat = np.cross(p-center,points[(i+1) % len(points)]-center)
-                    if norm(zhat)>SMALL_FRACTION*REFERENCE_LENGTH: break
-            if norm(zhat) <= REFERENCE_LENGTH*SMALL_FRACTION:
-                raise ValueError('points provided to Polygon are degenerate (co-linear)')
-            (zhat,xhat,yhat) = make_axes((zhat,points[0]-center,None))
-            angles = []
-            for (i,p) in enumerate(points):
-                dp = p-center
-                x = np.dot(dp,xhat)
-                y = np.dot(dp,yhat)
-                z = np.dot(dp,zhat)
-                if abs(z) > SMALL_FRACTION*norm(dp):
-                    raise ValueError('Polygon input points not coplanar')
-                points[i] = p = center + x*xhat+y*yhat # ensure coplanar
-                angles.append(np.arctan2(y,x))
-            angles,isort = np.unique(angles,return_index=True) # remove duplicates
-            if len(angles) < 3:
-                raise ValueError('All points in polygon are coplanar')
-            points = [points[i] for i in isort]
+            points = sort_points(points,nhat)
 
         edges = []
         for i,p in enumerate(points):
