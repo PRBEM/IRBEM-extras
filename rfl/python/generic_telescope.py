@@ -86,6 +86,10 @@ SMALL_FRACTION - 1e-6 - de minimis distance offset. Points closer than this
 
 """
 
+#TODO Creat an edge "cut" method that produces a new edge that only has part of the old edge in it.
+
+#TODO Pull out sort_points.
+
 import numpy as np
 from rfl import AngleResponse, inherit_docstrings
 
@@ -166,74 +170,30 @@ print('xyz',make_axes(([6,0,0],None,[0,0,7])))
 print('xyz',make_axes(([8,0,0],[0,9,0],[0,0,1])))
 raise Exception('stop')
 """
-    
 
-class Rotation(object):
+def project(p,nhat,offset=0):
     """
-    rotate a point from one 3-d system to another
-    propertis:
-        R - (3,3) rotation matrix
-        Rt - (3,3) transpose of R (reverse rotation matrix)
-    methods:
-        rotate - rotate from old to new coordinates
-        reverse_rotate - rotate from new to old coordinates
-        inverse - return new rotation object that reverses this rotation
-        project - project into plane, i.e., rotate and then zero-out an axis
+    q = project(p,nhat,offset=0)
+    project p into plane perpendicular to nhat
+    by removing part of p along nhat
+    q = p-p.nhat*nhat + offset*nhat
+    accepts p as shape (3,) or (N,3)
+    if offset is given as a 3-vector, then offset is taken to be a point in 
+        the plane perpendicular to nhat:
+        offset -> offset.nhat
     """
-    def __init__(self,xhat,yhat,zhat):
-        """
-        Rotation(xhat,yhat,zhat)
-        unit vectors of new system in old system
-        """
-        for hat in (xhat,yhat,zhat):
-            if np.size(hat) != 3:
-                raise ValueError('xhat, yhat, and zhat must each have 3 elements')
-        self.R = np.row_stack((np.array(xhat).ravel(),np.array(yhat).ravel(),np.array(zhat).ravel()))
-        self.Rt = self.R.transpose()
-    def _rotate(self,x,R):
-        """
-        y = _rotate(x,R)
-        rotate x using rotation R
-        """
-        shape = np.shape(x)
-        x = np.atlesat_2d(x) # (N,3)
-        y = np.tensordot(x,R,axes=(1,1)) # 2nd dim of R time 2nd dim of x
-        y.shape = shape
-        return y
-    def rotate(self,x):
-        """
-        y = rotate(x)
-        rotate x into the new coordinate system
-        x can be (3,) or (N,3)
-        y will be the same shape as x
-        """
-        return self._rotate(x,self.R)
-    def reverse_rotate(self,y):
-        """
-        x = reverse_rotate(y)
-        rotate y into the old coordinate system
-        y can be (3,) or (N,3)
-        x will be the same shape as y
-        """
-        return self._rotate(y,self.Rt)
-    def inverse(self):
-        """return the inverse rotation as a new Rotation object"""
-        return Rotation(self.Rt[0,:],self.Rt[1,:],self.Rt[2,:])
-    def project(self,x,nullaxis=2):
-        """
-        y = project(x,nullaxis=2)
-        rotate x into the new coordinate system
-        and then project along nullaxis (i.e., set y[:,nullaxis]=0)
-        (by default projects into the xhat,yhat plane)
-        x can be (3,) or (N,3)
-        y will be the same shape as x
-        """
-        y = self.rotate(x)
-        if y.ndim==1:
-            y[nullaxis] = 0.0
-        else:
-            y[:,nullaxis] = 0.0
-        return y
+    if not np.scalar(offset):
+        offset = np.dot(offset,nhat)
+    return p-np.dot(p,nhat)*nhat + offset*nhat
+
+# classes
+    
+class IdentityMixin(object):
+    """
+    IdentityMixin - mixin to provide identity, from_identity, and __eq__
+    functions
+    
+    """
 
 class LocalCoordsMixin(object):
     """
@@ -322,8 +282,9 @@ class Edge(object):
             initilized to None in the Edge base class constructor. 
             Only getters are provided.
     methods:
+        edge = from_identity(identity) (class method) returns new object based on identity vectors
         points = intersect(other) returns a tuple of points of intersection between self and other
-        edge = rotate(rot,project=True) returns the edge rotated by Rotation rot, and if project, removes "z" component
+        edge = project(nhat,offset) returns the edge projected along nhat, with offset
         bool = inside(point) returns True if a point is inside the edge
             Always False for straight edges
             True for curved eges if point lies between curve and its chord
@@ -347,6 +308,9 @@ class Edge(object):
     def identity(self):
         """points = identity returns tuple of points that uniquely identify Edge"""
         return self._identity
+    @classmethod
+    def from_identity(cls,identity):
+        raise NotImplementedError # abstract method
     def __eq__(self,other):
         if other is self: return True
         if self.__class__ != other.__class__: return False
@@ -380,11 +344,13 @@ class Edge(object):
         else: # oops, coding error, neither class has intersect for the other
             raise NotImplementedError('No intersection method found for %s,%s' %
                                       (self.__class__.__name__,other.__class__.__name__))
-    def rotate(self,rot,project=True):
+    def project(self,nhat,offset=0):
         """
-        edge = rotate(rot,project=True) returns the edge rotated by Rotation rot
+        edge = project(nhat,offset=0) returns the edge projected into nhat plane with offset
+        see function project for how points are projected.
         """
-        return NotImplementedError # Abstract base class
+        return self.from_id(project(np.array(self.identity),nhat,offset))
+        
     def inside(self,point):
         """
         bool = inside(point) returns True if a point is inside the edge
@@ -418,6 +384,10 @@ class StraightEdge(Edge):
         self._p2 = np.array(p2).ravel()
         self._endpoints = (p1,p2)
         self._identity = self._endpoints
+    @classmethod
+    def from_identity(cls,id):
+        """*INHERIT*"""
+        return cls(*id) # identity is endpoints
     @property
     def length(self):
         """length of Edge"""
@@ -442,9 +412,9 @@ class StraightEdge(Edge):
         y = q1-p1
         (t,s) = np.linalg.solve(A,y,rcond=None)[0] # 1st output is solution
         empty = tuple()
-        if (t<0.0) or (t>1.0):
+        if (t<-SMALL_FRACTION) or (t>1.0+SMALL_FRACTION):
             return empty # intersection is not between p1,p2
-        if (s<0.0) or (s>1.0):
+        if (s<-SMALL_FRACTION) or (s>1.0+SMALL_FRACTION):
             return empty # intersection is not between q1,q2
         if not points_equal(p1+(p2-p1)*t,q1+(q1-q2)*s):
             return empty # points do not intersect
@@ -488,14 +458,21 @@ class CurvedEdge(Edge,LocalCoordsMixin):
 class EllipseArc(CurvedEdge):
     """EllipseArc Edge, subclass of CurvedEdge, for elliptical arcs"""
     def __init__(self):
-        """ellpiseArc = FullEllipse(center,a,b,p1,p2)
+        """ellpiseArc = FullEllipse(center,r1,r2,p1,p2)
         center- 3-d location of ellipse's center
-        a - 3-d location of point on semimajor axis (theta=0)
-        b - 3-d location of point on semiminor axis (theta=90 degrees)
+        r1 - 3-d location of point on ellipse
+        r2 - 3-d location of point on ellipse along conjugated diamater to r1
+        (if r1 perpendicular to r2, then they are the semimajor and semiminnor axes)
         p1 - theta or 3-d location of first point on arc
         p2 - theta or 3-d location of second point on arc
-        arc spans from p1 to p2 anticlockwise (around a x b)
+        if p1 and p2 are given as angles then they are taken to be:
+            p = r1*cos(theta) + r2*sin(theta)
+        arc spans from p1 to p2 anticlockwise (around r1 x r2)
         """
+        raise NotImplementedError # TODO
+    @classmethod
+    def from_identity(cls,id):
+        """*INHERIT*"""
         raise NotImplementedError # TODO
     @property
     def length(self):
@@ -540,11 +517,15 @@ class EllipseArc(CurvedEdge):
 class FullEllipse(EllipseArc):
     """FullEllipse Edge, subclass of EllipseArc, full ellipse"""
     def __init__(self):
-        """fullEllpise = FullEllipse(center,a,b)
+        """fullEllpise = FullEllipse(center,r1,r2)
         center- 3-d location of ellipse's center
-        a - 3-d location of point on semimajor axis (theta=0)
-        b - 3-d location of point on semiminor axis (theta=90 degrees)
+        r1 - 3-d location of point on ellipse
+        r2 - 3-d location of point on ellipse along conjugated diamater to r1
         """
+        raise NotImplementedError # TODO
+    @classmethod
+    def from_identity(cls,id):
+        """*INHERIT*"""
         raise NotImplementedError # TODO
     @property
     def endpoints(self):
@@ -592,15 +573,23 @@ class CircleArc(EllipseArc):
         arc spans from p1 to p2 anticlockwise (around p1 x p2)
         """
         raise NotImplementedError # TODO
+    @classmethod
+    def from_identity(cls,id):
+        """*INHERIT*"""
+        raise NotImplementedError # TODO
 
-class FullCricle(FullEllipse):
+class FullCircle(FullEllipse):
     """FullCircle Edge, subclass of Ellipse, full circle"""
     def __init__(self,center,r,nhat):
         """circle = FullCircle(center,r)
         center - 3-d location of circle's center
-        r - radius of circle
+        r - radius of circle (scalar)
         nhat - 3-vector normal to plane of circle
         """
+        raise NotImplementedError # TODO
+    @classmethod
+    def from_identity(cls,id):
+        """*INHERIT*"""
         raise NotImplementedError # TODO
 
 inherit_docstrings(Edge)
@@ -611,7 +600,6 @@ class Patch(object):
     Convex Patch object consisting of straight and curved edges
     convex patches only
     properties:
-        is_component - bool if this Patch is a component (Triangle or CurvedEdge)
         edges = tuple of Edges that make up the Patch
         corners - tuple of points that make up the Patch (edge endpoints)
           edges and corners are ordered anticlockwise
@@ -623,9 +611,10 @@ class Patch(object):
     methods:
         bool = inside(point) returns True if a point is inside the Patch
             also available as "in" operator
-        patch = rotate(rot,project=True) returns the Patch rotated by Rotation rot, and optionally projected along the z axis
+        patch = project(nhat,offset) returns the patch projected along nhat, with offset
         h = plot(ax,...) - plot on axes
         patch = overlap(other) returns patch representing overlap of self and other
+        from_edges(edges) - class method to create new object given edges
         
     Note: only component Patches (Triangles and Curved Edges) implement xlim, ylim, and xy2p
     """
@@ -656,11 +645,15 @@ class Patch(object):
         self._chord_poly = None
         self._components = None
         self._area = None
+    @classmethod
+    def from_edges(cls,edges):
+        """
+        obj = from_edges(edges)
+        create new object given edges
+        """
+        return cls(edges)
     def __str__(self):
         return 'Patch %s' % (','.join([e.__class__.__name__ for e in self.edges]))
-    @property
-    def is_component(self):
-        return False
     @property
     def edges(self):
         """a list of Edges that make up the Patch"""
@@ -694,23 +687,20 @@ class Patch(object):
     def components(self):
         """constinuent components (Triangles and CurvedEdges)"""
         if self._components is None:
-            if self.is_component:
-                self._components = (self,)
-            else: # make list of Triangles and CurvedEdges
-                components = []
-                origin = self.edges[0].endpoints[0]
-                for i,edge in enumerate(self.edges):
-                    add_triangle = False
-                    if isinstance(edge,CurvedEdge):
-                        components.append(edge)
-                    elif isinstance(edge,StraightEdge):
-                        # don't add triangle if first edge is straight
-                        add_triangle = (i not in [0,len(self.edges)-1])
-                    else:
-                        raise ValueError("Patch has edges that's neither straight nor curved")
-                    if add_triangle:
-                        components.append(Triangle((origin,*edge.endpoints)))
-                self._components = tuple(components)
+            components = []
+            origin = self.edges[0].endpoints[0]
+            for i,edge in enumerate(self.edges):
+                add_triangle = False
+                if isinstance(edge,CurvedEdge):
+                    components.append(edge)
+                elif isinstance(edge,StraightEdge):
+                    # don't add triangle if first edge is straight
+                    add_triangle = (i not in [0,len(self.edges)-1])
+                else:
+                    raise ValueError("Patch has edges that's neither straight nor curved")
+                if add_triangle:
+                    components.append(Triangle((origin,*edge.endpoints)))
+            self._components = tuple(components)
         return self._components
     def inside(self,point):
         """
@@ -723,11 +713,15 @@ class Patch(object):
         return False
     def __contains__(self,point): # in operator calls inside
         return self.inside(point)
-    def rotate(self,rot,project=True):
+    def project(self,nhat,offset=0):
         """
-        patch = rotate(rot,project=True) returns the patch rotated by Rotation rot, and optionally projected along the z axis
+        patch = project(nhat,offset=0) returns the patch projected along nhat, with offset
+        see project function definition for how offset works
         """
-        return NotImplementedError # Abstract base class
+        edges = []
+        for edge in self.edges:
+            edges.append(edge.project(nhat,offset))
+        return self.from_edges(edges)
     def plot(self,ax,*args,**kwargs):
         """
         h = plot(self,ax,*args,**kwargs)
@@ -770,8 +764,8 @@ class Polygon(Patch):
                 zhat = 0
                 for i,p in enumerate(points):
                     zhat = np.cross(p-center,points[(i+1) % len(points)]-center)
-                    if norm(zhat)>0: break
-            if norm(zhat) < REFERENCE_LENGTH*SMALL_FRACTION:
+                    if norm(zhat)>SMALL_FRACTION*REFERENCE_LENGTH: break
+            if norm(zhat) <= REFERENCE_LENGTH*SMALL_FRACTION:
                 raise ValueError('points provided to Polygon are degenerate (co-linear)')
             (zhat,xhat,yhat) = make_axes((zhat,points[0]-center,None))
             angles = []
@@ -797,6 +791,13 @@ class Polygon(Patch):
             
         super().__init__(edges)
         self._chord_poly = self # a polygon is its own chord_poly, prevents infinite recursion        
+    @classmethod
+    def from_edges(cls,edges):
+        """*INHERIT*"""
+        points = [*edges[0].endpoints]
+        for edge in edges[1:-1]:
+            points.append(edge.endpoints[1])
+        return cls(points)
 
 class Triangle(Polygon,LocalCoordsMixin):
     """Patch composed of a single triangle
@@ -824,8 +825,10 @@ class Triangle(Polygon,LocalCoordsMixin):
         self._apex2 = self.p2xy(self._apex3)# (x,y) in local coordinates, y may be negative if triangle entered left-handed
         self._xlim = (0,self._base.length)
     @property
-    def is_component(self):
-        return True
+    def components(self):
+        if self._components is None:
+            self._components = (self,)
+        return self._components
     @property
     def area(self):
         """area of Patch"""
@@ -891,6 +894,11 @@ class Rectangle(Polygon):
         points = [corner,a,corner+da+db,b]
         kwargs['sorted'] = True # for sorted arg to be true
         super().__init__(points,*args,**kwargs)
+    @classmethod
+    def from_edges(cls,edges):
+        """*INHERIT*"""
+        points = [*edges[0].endpoints,edges[-1].endpoints[0]]
+        return cls(points)
 
 r = Rectangle(([0,0,0],[1,0,0],[0,1,0]))
 print('area',r.area) # 0.5 w/in SMALL_FRACTION**2
@@ -908,19 +916,69 @@ for r_ in [r,r2]:
         c.plot(ax,linestyle='--')
 
 class Segment(Patch):
-    """Patch composed of a segment of an ellipse segment"""
+    """Patch composed of a single segment of an ellipse segment"""
+    def __init__(self,edge,*args,**kwargs):
+        """
+        seg = Segment(curved,...)
+        curved = a CurvedEdge instance or class type
+        if a class type is provided, it will be initialized with
+        subsequent arguments (the ...)
+        """
+        if type(edge) == type: # need to initialize requested type
+            edge = edge(*args,**kwargs)
+        if not isinstance(edge,CurvedEdge):
+            raise ValueError('edge input expected to be a CurvedEdge instance')
+        super().__init__((edge,))
     @property
-    def is_component(self):
-        return True
-    pass # TODO
+    def components(self):
+        if self._components is None:
+            self._components = (self,)
+        return self._components
+    @classmethod
+    def from_edges(cls,edges):
+        """*INHERIT*"""
+        # only has one edge, duplicate it
+        cls(edges[0])
+
+class EllipseArcPatch(Segment):
+    """Patch composed of a segment of an ellipse"""
+    def __init__(self,*args,**kwargs):
+        """
+        seg = EllipseArcPatch(...)
+        produce an EllipseArcPatch by passing parameters to
+        EllipseArc Edge
+        """
+        super().__init__(EllipseArc,*args,**kwargs)
 
 class EllipsePatch(Segment):
-    """Patch composed of a segment of an ellipse"""
-    pass # TODO
+    """Patch composed of a full ellipse"""
+    def __init__(self,*args,**kwargs):
+        """
+        seg = EllipsePatch(...)
+        produce an EllipsePatch by passing parameters to
+        FullElipse Edge
+        """
+        super().__init__(FullEllipse,*args,**kwargs)
 
-class CirclePach(EllipsePatch):
+class CircleArcPatch(Segment):
     """Patch composed of a segment of a circle"""
-    pass # TODO
+    def __init__(self,*args,**kwargs):
+        """
+        seg = CircleArcPatch(...)
+        produce a CircleArcPatch by passing parameters to
+        CircleArc Edge
+        """
+        super().__init__(CircleArc,*args,**kwargs)
+
+class CirclePatch(Segment):
+    """Patch composed of a full circle"""
+    def __init__(self,*args,**kwargs):
+        """
+        seg = CirclePatch(...)
+        produce a CirclePatch by passing parameters to
+        FullCircle Edge
+        """
+        super().__init__(FullCircle,*args,**kwargs)
 
 inherit_docstrings(Patch)
 # end of patches
