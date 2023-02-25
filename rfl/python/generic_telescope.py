@@ -86,10 +86,10 @@ SMALL_FRACTION - 1e-6 - de minimis distance offset. Points closer than this
 
 """
 
-#TODO Creat an edge "cut" method that produces a new edge that only has part of the old edge in it.
-
 import numpy as np
-from rfl import AngleResponse, inherit_docstrings, sind, cosd
+from rfl import AngleResponse,inherit_docstrings, \
+    default_thetagrid,default_phigrid, broadcast_grids, \
+    RFLError, sind, cosd
 
 norm = np.linalg.norm # shorthand
 
@@ -106,10 +106,19 @@ def between_rays(a,b,p,n=None):
     """
     if n is None:
         n = np.cross(a,b)
+
+    # check colinearity
+    norma = norm(a)
+    normp = norm(p)
+    if abs(np.dot(a,p)/norma/normp-1) < SMALL_FRACTION: return True # p along a
+    normb = norm(b)
+    if abs(np.dot(b,p)/normb/normp-1) < SMALL_FRACTION: return True # p along b
+    
     # both a x p and p x b must go in same direction as n = a x b
-    pn = norm(p)*norm(n)
-    if np.dot(np.cross(a,p),n) < -SMALL_FRACTION*norm(a)*pn: return False
-    if np.dot(np.cross(p,b),n) < -SMALL_FRACTION*norm(b)*pn:return False
+    pn = normp*norm(n)
+    if np.dot(np.cross(a,p),n) < -SMALL_FRACTION*norma*pn: return False
+    if np.dot(np.cross(p,b),n) < -SMALL_FRACTION*normb*pn:return False
+
     return True
 
 def points_equal(a,b):
@@ -180,15 +189,19 @@ def project(p,nhat,offset=0):
         the plane perpendicular to nhat:
         offset -> offset.nhat
     """
-    if not np.scalar(offset):
+    if not np.isscalar(offset):
         offset = np.dot(offset,nhat)
-    return p-np.dot(p,nhat)*nhat + offset*nhat
+    if p.ndim > 1:
+        nhat = np.reshape(nhat,(1,3))
+        return p-(p*nhat).sum(1,keepdims=1)*nhat + offset*nhat
+    else:
+        return p-np.dot(p,nhat)*nhat + offset*nhat
 
 def sort_points(points,nhat=None,return_index=False):
     """
     sort points such that angles increase in nhat plane
     points = sort_points(points,nhat=None,return_index=False)
-    points,isort = sort_points(points,return_index=True,...)
+    points,isort,ireverse = sort_points(points,return_index=True,...)
     nhat - ignored if sorted, otherwise used to determine how to sort points
         defines normal vector to polygon. Points will be anticlockwise about nhat
     Note: identical points will be consolidated
@@ -200,6 +213,10 @@ def sort_points(points,nhat=None,return_index=False):
             raise ValueError('points must be list of 3-d vectors')
         points[i] = p = np.array(p).ravel()
         center += p
+    for i,p in enumerate(points):
+        p2 = points[(i+1)%len(points)]
+        if points_equal(p,p2): points[i] = p2 # make true duplicates
+        
     center = center/len(points) # average
     zhat = nhat
     if zhat is None:
@@ -208,6 +225,11 @@ def sort_points(points,nhat=None,return_index=False):
             zhat = np.cross(p-center,points[(i+1) % len(points)]-center)
             if norm(zhat)>SMALL_FRACTION*REFERENCE_LENGTH: break
     if norm(zhat) <= REFERENCE_LENGTH*SMALL_FRACTION:
+        import matplotlib.pyplot as plt
+        plt.figure()
+        ax = plt.axes(projection='3d')
+        ax.plot(*np.array(points).transpose(),'k.-')
+        if nhat: ax.plot([0,nhat[0]],[0,nhat[1]],[0,nhat[2]],'r.-')
         raise ValueError('all points provided are degenerate (co-linear)')
     (zhat,xhat,yhat) = make_axes((zhat,points[0]-center,None))
     angles = []
@@ -220,12 +242,12 @@ def sort_points(points,nhat=None,return_index=False):
             raise ValueError('points not coplanar')
         points[i] = p = center + x*xhat+y*yhat # ensure coplanar
         angles.append(np.arctan2(y,x))
-    angles,isort = np.unique(angles,return_index=True) # remove duplicates
+    angles,isort,ireverse= np.unique(angles,return_index=True,return_inverse=True) # remove duplicates
     if len(angles) < 3:
         raise ValueError('All points in polygon are coplanar')
     points = [points[i] for i in isort]
     if return_index:
-        return points,isort
+        return points,isort,ireverse
     else:
         return points
 
@@ -282,7 +304,7 @@ class LocalCoordsMixin(object):
         return self._xlim
     def ylim(self,x):
         """(y1,y2) = ylim(x) - y limits in object's coordinate sytem"""
-        raise NotImplementedError # Abstract method
+        raise NotImplementedError('Method ylim must be overloaded in derived classes')
     def xy2p(self,x,y):
         """p = xy2p(x,y) convert x,y from object's coordinates to point in 3-d frame
         if x or y is (N,) then output will be (N,3), otherwise output is (3,)
@@ -332,6 +354,7 @@ class Edge(object):
             Always False for straight edges
             True for curved eges if point lies between curve and its chord
             also available as "in" operator
+        edge = cut(p1,p2) - return edge cut down to have endpoints p1,p2
         h = plot(ax,...) - plot on axes
     overloaded operators:
         in (__contains__) - "p in edge" is the same as edge.inside(p)
@@ -353,7 +376,8 @@ class Edge(object):
         return self._identity
     @classmethod
     def from_identity(cls,identity):
-        raise NotImplementedError # abstract method
+        """edge = from_identity(identity) (class method) returns new object based on identity vectors"""
+        raise NotImplementedError('Method from_identity must be overloaded in derived classes')
     def __eq__(self,other):
         if other is self: return True
         if self.__class__ != other.__class__: return False
@@ -381,7 +405,7 @@ class Edge(object):
         returns a typle of points of intersection between self and Edge other
         try_other: try other's intersect method if this one doesn't support other's type
         """
-        # we got here because self did not implement intersect with otheer        
+        # we got here because self did not implement intersect with other        
         if try_other:
             return other.intersect(self,try_other=False) # let other try
         else: # oops, coding error, neither class has intersect for the other
@@ -392,14 +416,17 @@ class Edge(object):
         edge = project(nhat,offset=0) returns the edge projected into nhat plane with offset
         see function project for how points are projected.
         """
-        return self.from_id(project(np.array(self.identity),nhat,offset))
+        return self.from_identity(project(np.array(self.identity),nhat,offset))
         
     def inside(self,point):
         """
         bool = inside(point) returns True if a point is inside the edge
         can also accept list of points and return list of bools
         """
-        return NotImplementedError # Abstract base class
+        raise NotImplementedError('Method inside must be overloaded in derived classes')
+    def cut(self,p1,p2):
+        """edge = cut(p1,p2) - return edge cut down to have endpoints p1,p2"""
+        raise NotImplementedError('Method cut must be overloaded in derived classes')
     def __contains__(self,point): # in operator calls inside
         return self.inside(point)
     def plot(self,ax,*args,**kwargs):
@@ -408,7 +435,7 @@ class Edge(object):
         call ax.plot on axis with args and kwargs
         returns result of ax.plot
         """
-        return NotImplementedError # Abstract base class
+        raise NotImplementedError('Method plot must be overloaded in derived classes')
         
     
 class StraightEdge(Edge):
@@ -441,31 +468,52 @@ class StraightEdge(Edge):
         """
         same as intersect, but when other is known to be a StraightEdge
         """
-        # self is: p(t) = p1+(p2-p1)*t
-        # other is: q(s) = q1+(q2-q1)*s
+        empty = tuple() # no intersection
+        # self is: p(t) = p1+(p2-p1)*t = p1 + dp*t
+        # other is: q(s) = q1+(q2-q1)*s = q1 + dq*s
         # find t,s such that p(t) = q(s)
+        
+        (p1,p2) = self.endpoints
+        (q1,q2) = other.endpoints
+        dp = p2-p1
+        dq = q2-q1
+        normdp = norm(dp)
+        # check colinear case: intersection is endpoints of overlap
+        dq1 = q1-p1
+        dq2 = q2-p1
+        if (abs(abs(np.dot(dq1,dp)/norm(dq1)/normdp)-1.0)< SMALL_FRACTION) \
+            and (abs(abs(np.dot(dq2,dp)/norm(dq2)/normdp)-1.0)< SMALL_FRACTION):
+            t = [0.0,1.0] # p1,p2
+            t.append(np.dot((q1-p1),dp)/normdp**2) # q1
+            t.append(np.dot((q2-p1),dp)/normdp**2) # q2
+            t = np.sort(t) #  middle two points [1,2] are intersection
+            if (t[1] < -SMALL_FRACTION) or (t[2]>1.0+SMALL_FRACTION):
+                return empty # line segments don't overlap
+            if abs(t[1]-t[2]) < SMALL_FRACTION:
+                return (p1+dp*t[1],) # line segments are contiguous
+            return (p1+dp*t[1],p1+dp*t[2]) # return middle two points 
+        
         # solve A*x = y
         # A = [p2-p1,q2-q1] (stack as two rows)
         # y = q1-p1
         # x = (t,s)
         # use least squares since A is overspecified
-        (p1,p2) = self.endpoints[0]
-        (q1,q2) = other.endpoints[1]
-        A = np.column_stack([p2-p1,q1-q2])
+        A = np.column_stack([dp,-dq])
         y = q1-p1
-        (t,s) = np.linalg.solve(A,y,rcond=None)[0] # 1st output is solution
-        empty = tuple()
+        (t,s) = np.linalg.lstsq(A,y,rcond=None)[0] # 1st output is solution
         if (t<-SMALL_FRACTION) or (t>1.0+SMALL_FRACTION):
             return empty # intersection is not between p1,p2
         if (s<-SMALL_FRACTION) or (s>1.0+SMALL_FRACTION):
             return empty # intersection is not between q1,q2
-        if not points_equal(p1+(p2-p1)*t,q1+(q1-q2)*s):
+        if not points_equal(p1+dp*t,q1+dq*s):
             return empty # points do not intersect
-        return (p1+(p2-p1)*t,) # return tuple of single intersecting point        
+        return (p1+dp*t,) # return tuple of single intersecting point        
     def intersect(self,other,try_other=True):
         """*INHERIT*"""
         # try intersect with types self knows about
         # then hand off to parent class
+        if self == other:
+            return self.endpoints # these will generally be trimmed
         if isinstance(other,StraightEdge):
             return self._intersect_with_straight(other)
         else:
@@ -475,6 +523,9 @@ class StraightEdge(Edge):
         always false for straight edges
         """
         return False
+    def cut(self,p1,p2):
+        """*INHERIT*"""
+        return StraightEdge(p1,p2)
     def plot(self,ax,*args,**kwargs):
         """*INHERIT*"""
         # make the colors match
@@ -493,7 +544,7 @@ class CurvedEdge(Edge,LocalCoordsMixin):
         """*INHERIT*
         area between curve and its chord
         """
-        raise NotImplementedError # Abstract method
+        raise NotImplementedError('Method area must be overloaded in derived classes')
 
 class EllipseArc(CurvedEdge):
     """EllipseArc Edge, subclass of CurvedEdge, for elliptical arcs"""
@@ -540,37 +591,37 @@ class EllipseArc(CurvedEdge):
         """
         # https://math.stackexchange.com/questions/433094/how-to-determine-the-arc-length-of-ellipse
         # https://docs.scipy.org/doc/scipy/reference/generated/scipy.special.ellipeinc.html#scipy.special.ellipeinc
-        raise NotImplementedError # TODO
+        raise NotImplementedError('TODO') # TODO
     @property
     def area(self):
         """*INHERIT*"""
-        raise NotImplementedError # TODO
+        raise NotImplementedError('TODO') # TODO
     @property
     def xlim(self):
         """*INHERIT"""
-        return NotImplementedError # TODO
+        raise NotImplementedError('TODO') # TODO
     def ylim(self,x):
         """*INHERIT"""
-        return NotImplementedError # TODO    
-    def xy2p(self,x,y):
-        """*INHERIT*"""
-        return NotImplementedError # TODO
+        raise NotImplementedError('TODO') # TODO
     def intersect(self,other,try_other=True):
         """*INHERIT*"""
         # try intersect with types self knows about
         # then hand off to parent class
         if isinstance(other,EllipseArc):
-            raise NotImplementedError # TODO
+            raise NotImplementedError('TODO') # TODO
         elif isinstance(other,StraightEdge):
-            raise NotImplementedError # TODO
+            raise NotImplementedError('TODO') # TODO
         else:
             super().intersect(other,try_other) # pass up the chain
     def rotate(self,rot,project=True):
         """*INHERIT*"""
-        return NotImplementedError # TODO
+        raise NotImplementedError('TODO') # TODO
     def inside(self,point):
         """*INHERIT*"""
-        raise NotImplementedError # TODO
+        raise NotImplementedError('TODO') # TODO
+    def cut(self,p1,p2):
+        """*INHERIT*"""
+        raise NotImplementedError('TODO') # TODO
 
 class FullEllipse(EllipseArc):
     """FullEllipse Edge, subclass of EllipseArc, full ellipse"""
@@ -585,36 +636,36 @@ class FullEllipse(EllipseArc):
     @classmethod
     def from_identity(cls,identity):
         """*INHERIT*"""
-        raise NotImplementedError # TODO
+        raise NotImplementedError('TODO') # TODO
     @property
     def area(self):
         """*INHERIT*
         area inside closed edge
         """
-        raise NotImplementedError # TODO
+        raise NotImplementedError('TODO') # TODO
     @property
     def xlim(self):
         """*INHERIT*"""
-        return NotImplementedError # TODO
+        raise NotImplementedError('TODO') # TODO
     def ylim(self,x):
         """*INHERIT"""
-        return NotImplementedError # TODO    
+        raise NotImplementedError('TODO') # TODO
     def intersect(self,other,try_other=True):
         """*INHERIT*"""
         # try intersect with types self knows about
         # then hand off to parent class
         if isinstance(other,EllipseArc):
-            raise NotImplementedError # TODO
+            raise NotImplementedError('TODO') # TODO
         elif isinstance(other,StraightEdge):
-            raise NotImplementedError # TODO
+            raise NotImplementedError('TODO') # TODO
         else:
             super().intersect(other,try_other) # pass up the chain
     def rotate(self,rot,project=True):
         """*INHERIT*"""
-        return NotImplementedError # TODO
+        raise NotImplementedError('TODO') # TODO
     def inside(self,point):
         """*INHERIT*"""
-        raise NotImplementedError # TODO
+        raise NotImplementedError('TODO') # TODO
 
 class CircleArc(EllipseArc):
     """CircleArc Edge, subclass of EllipseArc, for circular arcs"""
@@ -625,11 +676,14 @@ class CircleArc(EllipseArc):
         p2 - 3-d location of second point on arc
         arc spans from p1 to p2 anticlockwise (around p1 x p2)
         """
-        raise NotImplementedError # TODO
+        raise NotImplementedError('TODO') # TODO
     @classmethod
     def from_identity(cls,identity):
         """*INHERIT*"""
-        raise NotImplementedError # TODO
+        raise NotImplementedError('TODO') # TODO
+    def cut(self,p1,p2):
+        """*INHERIT*"""
+        return CircleArc(self.center,p1,p2)
 
 class FullCircle(FullEllipse):
     """FullCircle Edge, subclass of Ellipse, full circle"""
@@ -639,11 +693,11 @@ class FullCircle(FullEllipse):
         r - radius of circle (scalar)
         nhat - 3-vector normal to plane of circle
         """
-        raise NotImplementedError # TODO
+        raise NotImplementedError('TODO') # TODO
     @classmethod
     def from_identity(cls,identity):
         """*INHERIT*"""
-        raise NotImplementedError # TODO
+        raise NotImplementedError('TODO') # TODO
 
 inherit_docstrings(Edge)
 # end of Edges
@@ -657,14 +711,16 @@ class Patch(object):
         corners - tuple of points that make up the Patch (edge endpoints)
           edges and corners are ordered anticlockwise
         area - area of patch
+        origin - vector position of reference point in plane of patch
         nhat - unit vector normal to Pacth's plane
         components - constituent component Patches
-        chord_poly - a polygon made up of the endpoints for all edges
+        chord_poly - a polygon made up of the endpoints for all edges (may be None)
+        centroid - average location of corners
         Properties are read only. Managed by private _ variables and getters
     methods:
         bool = inside(point) returns True if a point is inside the Patch
             also available as "in" operator
-        patch = project(nhat,offset) returns the patch projected along nhat, with offset
+        patch = project(nhat,offset=0) returns the patch projected along nhat, with offset
         h = plot(ax,...) - plot on axes
         patch = overlap(other) returns patch representing overlap of self and other
         from_edges(edges) - class method to create new object given edges
@@ -685,6 +741,7 @@ class Patch(object):
         self._edges = tuple(edges)
         
         corners = [*edges[0].endpoints]
+
         for edge in self._edges[1:]:
             if not points_equal(edge.endpoints[0],corners[-1]):
                 raise ValueError('Supplied edges do not connect')
@@ -698,6 +755,7 @@ class Patch(object):
         self._chord_poly = None
         self._components = None
         self._area = None
+        self._centroid = None
     @classmethod
     def from_edges(cls,edges):
         """
@@ -717,10 +775,20 @@ class Patch(object):
         return self._corners
     @property
     def chord_poly(self):
-        """a Polygon made from the Patch's corners"""
-        if self._chord_poly is None:
+        """a Polygon made from the Patch's corners. May be None"""
+        if (self._chord_poly is None) and (len(self._corners)>2):
             self._chord_poly = Polygon(self._corners)
         return self._chord_poly
+    @property
+    def centroid(self):
+        """average of corners"""
+        if self._centroid is None:
+            center = np.zeros(3)
+            for p in self.corners:
+                center += p
+            self._centroid = center/len(self.corners)
+        return self._centroid
+                
     @property
     def area(self):
         """area of Patch"""
@@ -732,6 +800,13 @@ class Patch(object):
         else:
             A = self._area
         return A
+    @property
+    def origin(self):
+        """reference point in Patch's plane"""
+        if isinstance(self,LocalCoordsMixin):
+            return super().origin
+        else:
+            return self.components[0].origin
     @property
     def nhat(self):
         """unit vector normal to Patch's plane"""
@@ -787,10 +862,68 @@ class Patch(object):
         for hi in h[1:]:
             hi.set_color(h[0].get_color())
         return h
-    def overlap(self,other,try_other=True):
+    def overlap(self,other):
         """patch = overlap(other) returns patch representing overlap of self and other"""
-        # we got here because self did not implement intersect with otheer        
-        return NotImplementedError # TODO
+        # will need to overload this in CurvedEdge and in Triangle
+        intersections = [] # entries are [point,[edge,...]]
+        # add all intersections
+
+        for e1 in self.edges:
+            for e2 in other.edges:
+                intersect = e1.intersect(e2)
+                for i in intersect:
+                    intersections.append([i,[e1,e2]])
+        # add eny endpoints that are inside other
+        for (slf,oth) in [(self,other),(other,self)]:
+            for i,e in enumerate(slf.edges):
+                p = e.endpoints[1] # only need to check 2nd endpoint for each edge
+                if p in oth:
+                    e2 = slf.edges[(i+1)%len(slf.edges)] # next edge starts with p
+                    intersections.append([p,[e,e2]])
+
+        # get unique,sorted points
+        points,isort,ireverse = sort_points([x[0] for x in intersections],nhat=self.nhat,return_index=True)
+
+        if len(points)<=1:
+            if self.centroid in other:
+                return self # self entirely in other
+            elif other.centroid in self:
+                return other # other entirely in self
+            else:
+                return None # no overlap
+
+        # assemble unique intersections
+        uix = [] # unique intersections
+        for i,j in enumerate(isort):
+            p = intersections[j][0]
+            edges = [] # accumulate unique edges associated with p
+            for k in np.where(ireverse==i)[0]:
+                for edge in intersections[k][1]:
+                    if edge not in edges:
+                        edges.append(edge) # combine edges tied to duplicate points
+            uix.append([p,edges])
+        
+        N = len(uix)
+        # find edges that span unique intersections
+        edges = []
+        for i in range(N):
+            j = (i+1)%N
+            p1 = uix[i][0]
+            p2 = uix[j][0]
+            # find edge both points have in common
+            edges1 = uix[i][1]
+            edges2 = uix[j][1]
+            common_edge = None
+            for edge in edges1:
+                if edge in edges2:
+                    common_edge = edge;
+                    break
+            if common_edge is None:
+                raise RFLError('Adjacent points have no common edge in overlap')
+            # cut the edge to only span the intersection points
+            edges.append(common_edge.cut(p1,p2))
+        
+        return Patch(edges)
 
 class Polygon(Patch):
     """Patch composed entirely of StraightEdges"""
@@ -888,7 +1021,6 @@ class Triangle(Polygon,LocalCoordsMixin):
             c = point-origin
             if not between_rays(a,b,c,n=self.nhat): return False
         return True
-
 """    
 t = Triangle([[0,0,0],[1,0,0],[0,1,0]])
 print('area',t.area) # 0.5 w/in SMALL_FRACTION**2
@@ -919,23 +1051,12 @@ class Rectangle(Polygon):
     @classmethod
     def from_edges(cls,edges):
         """*INHERIT*"""
-        points = [*edges[0].endpoints,edges[-1].endpoints[0]]
-        return cls(points)
-
-r = Rectangle(([0,0,0],[1,0,0],[0,1,0]))
-print('area',r.area) # 0.5 w/in SMALL_FRACTION**2
-print('inside',r.inside([0.2,0.1,0])) # True
-print('inside',r.inside([1.75,0.75,0])) # False
-print('inside',r.inside([0.1,0.1,0])) # True
-r2 = Rectangle(([0,0,2],[1,0,2],[0,1,2]))
-import matplotlib.pyplot as plt
-from mpl_toolkits import mplot3d # enables 3d projection
-plt.close('all')
-ax = plt.axes(projection='3d')
-for r_ in [r,r2]:
-    r_.plot(ax)
-    for c in r_.components: # now draw components
-        c.plot(ax,linestyle='--')
+        try:
+            points = [*edges[0].endpoints,edges[-1].endpoints[0]]
+            return cls(points)
+        except ValueError:
+            # a projected rectangle may not still be a Rectangle, but is still a polygon
+            return Polygon.from_edges(edges)
 
 class Segment(Patch):
     """Patch composed of a single segment of an ellipse segment"""
@@ -988,12 +1109,12 @@ class CirclePatch(Segment):
 inherit_docstrings(Patch)
 # end of patches
 
-#"""
+"""
 # Test code for EllipsePatch from_edges
 p = EllipsePatch([0,0,0],[1,0,0],[0,1,0])
 q = p.from_edges(p.edges)
 print(p.edges[0] == q.edges[0]) # True
-#"""
+"""
 
 class AR_Tele_Generic(AngleResponse):
     """
@@ -1003,8 +1124,99 @@ class AR_Tele_Generic(AngleResponse):
     shape whose edges are a combination of lines and elliptical arcs
     Initialize with an array of Patch objects that define coincidence geometry
     """
+    @classmethod
+    def is_mine(cls,*args,**kwargs):
+        """*INHERIT*"""
+        return ('patches' in kwargs)
+            
+    def __init__(self,patches=None,**kwargs):
+        """
+        ar = AR_Tele_Generic(patches=None,**kwargs)
+        patches - a tuple of Patch objects that must be in coincidence to be considered
+        part of the angular response
+        Can initialize with a list of patches or using
+        conventional keywords and args from the standard
+        """
+        super().__init__(**kwargs) # handles BIDIRECTIONAL
+        if patches is None:
+            raise NotImplementedError('keyword standard for initializatoin not defined/implemented yet')
+        self.patches = tuple(patches)
+        for patch in patches:
+            if not isinstance(patch,Patch):
+                raise ValueError("Every entry in patches must be a Patch object")
+        self.G = None
+    def A(self,theta,phi):
+        """
+        A = .A(theta,phi)
+        return angular response (effective area) at specified theta,phi cm^2
+        should add forward and backward response together
+        theta and phi must broadcast together
+        A is mutual broadcast shape of theta,phi
+        see module glossary for input meanings
+        """
+        sz = sz0 = np.broadcast(theta,phi).shape
+        if len(sz) == 0:
+            sz = (1,1)
+        elif len(sz)==1:
+            sz = (sz[0],1)
+        theta = np.broadcast_to(theta,sz)
+        phi = np.broadcast_to(phi,sz)
+        A = np.zeros(sz)
+        for it,ip in np.ndindex(sz):
+            th = theta[it,ip]
+            ph = phi[it,ip]
+            nhat = np.array([cosd(ph)*sind(th),sind(ph)*sind(th),cosd(th)])
+            print('th',th,'ph',ph,'nhat',nhat)
+            projected = []
+            for p in self.patches:
+                projected.append(p.project(nhat))
+            p = projected[0]
+            for q in projected[1:]:
+                p = p.overlap(q)
+            A[it,ip] = p.area
+        
+        A.shape = sz0
+        return A
+    @property
+    def hA0(self):
+        """*INHERIT*"""
+        if self.G is None:
+            thetagrid = default_thetagrid()
+            phigrid = default_phigrid()
+            thetagrid,phigrid = broadcast_grids(thetagrid,phigrid)
+            self.G = self.hAthetaphi(thetagrid,phigrid).sum()
+            # TODO double integral of first and last detector
+            # using xlim, ylim
+            # with coincidence check for any other detectors
+            # using inside
+            
+        hA0 = self.G
+        if self.bidirectional:
+            hA0 += self.backward.hA0
+        return hA0
+
 
 inherit_docstrings(AngleResponse) # re-inherit tree
+
+if __name__ == '__main__':
+    r = Rectangle(([0,0,0],[1,0,0],[0,1,0]))
+    print('area',r.area) # 0.5 w/in SMALL_FRACTION**2
+    print('inside',r.inside([0.2,0.1,0])) # True
+    print('inside',r.inside([1.75,0.75,0])) # False
+    print('inside',r.inside([0.1,0.1,0])) # True
+    r2 = Rectangle(([0,0,2],[1,0,2],[0,1,2]))
+    import matplotlib.pyplot as plt
+    from mpl_toolkits import mplot3d # enables 3d projection
+    plt.close('all')
+    ax = plt.axes(projection='3d')
+    for r_ in [r,r2]:
+        r_.plot(ax)
+        for c in r_.components: # now draw components
+            c.plot(ax,linestyle='--')
+
+    ar = AR_Tele_Generic(patches=[r,r2])
+    print('A',ar.A(1.0,180.0))
+    print('Geometric factor',ar.hA0)
 
 """
 Projecting an ellipse and recovering its axes.

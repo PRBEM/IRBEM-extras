@@ -325,7 +325,7 @@ def vectors_to_euler_angles(B,C,S0,S1):
 
 class RFLError(Exception):
     """
-    Unknown RFL error
+    Generic RFL error
     accepts optional message argument
     """
     def __init__(self,message = 'Unknown RFL Error'):
