@@ -204,40 +204,51 @@ def sort_points(points,nhat=None,return_index=False):
     points,isort,ireverse = sort_points(points,return_index=True,...)
     nhat - ignored if sorted, otherwise used to determine how to sort points
         defines normal vector to polygon. Points will be anticlockwise about nhat
+    points will be sorted in order of increasing angle around centroid (0,2pi)
     Note: identical points will be consolidated
     """
-    center = np.zeros(3) # average point
+    # algorithm:
+    # - replace near-duplicate points with reference to prior
+    # - find centroid (center) of all unique points
+    # - if nhat not provided, get it from vectors to centroid for first two unique points
+    # - get angle made around nhat by each vector from centroid to all points
+    # - sort/unique points by that angle
+    
     points = list(points) # make mutable
-    # do address near-duplicates, we replace them with the first instance. 
+    # to address near-duplicates, we replace them with the first instance. 
     # We do this to preserve book keeping for the call to np.unique
     uniques = [] # unique points previously seen
+    # also compute centroid
+    center = np.zeros(3) # average point / centroid
     for i,p in enumerate(points):
         if np.size(p) != 3:
             raise ValueError('points must be list of 3-d vectors')
         p = np.array(p).ravel()
-        found = False
-        if uniques:
-            for q in uniques:
-                if points_equal(p,q):
-                    # point is nearly identical to a prior point                    
-                    found = True
-                    p = q # replace it with a reference to the prior point
-                    break
-        if not found: uniques.append(p)
+        # use for-else syntax. else clause only executed if loop completes
+        for q in uniques:
+            if points_equal(p,q):
+                # point is nearly identical to a prior point                    
+                p = q # replace it with a reference to the prior point
+                break
+        else: # only get here if no break in loop
+            uniques.append(p) # point is unique
+            center += p
         points[i] = p # overwrite w/ cleaned up point
-        center += p
-    center = center/len(points) # average
+    center = center/len(uniques) # average
+    # find nhat if needed
     zhat = nhat
     if zhat is None:
         zhat = 0
-        for i,p in enumerate(points):
-            zhat = np.cross(p-center,points[(i+1) % len(points)]-center)
+        for i,p in enumerate(uniques):
+            zhat = np.cross(p-center,uniques[(i+1) % len(uniques)]-center)
             if norm(zhat)>SMALL_FRACTION*REFERENCE_LENGTH: break
-    if norm(zhat) <= REFERENCE_LENGTH*SMALL_FRACTION:
-        raise ValueError('all points provided are degenerate (co-linear)')
+        else:  # loop completed, no zhat found
+            raise ValueError('all points provided are degenerate (co-linear)')
+    # generate x,y,nhat system
     (zhat,xhat,yhat) = make_axes((zhat,points[0]-center,None))
+    # compute angles about nhat relative to centroid
     angles = []
-    for i,p in enumerate(points):
+    for i,p in enumerate(points): # get angles for all points
         dp = p-center
         x = np.dot(dp,xhat)
         y = np.dot(dp,yhat)
@@ -245,9 +256,11 @@ def sort_points(points,nhat=None,return_index=False):
         if abs(z) > SMALL_FRACTION*norm(dp):
             raise ValueError('points not coplanar')
         points[i] = p = center + x*xhat+y*yhat # ensure coplanar
-        angle = np.arctan2(y,x)
+        angle = np.arctan2(y,x) % (2*np.pi) # put on 0,2*pi
         angles.append(angle)
+    # now do sort an unique on angles
     angles,isort,ireverse= np.unique(angles,return_index=True,return_inverse=True) # remove duplicates
+    # get corresponding unique points in angle order
     points = [points[i] for i in isort]
     if return_index:
         return points,isort,ireverse
