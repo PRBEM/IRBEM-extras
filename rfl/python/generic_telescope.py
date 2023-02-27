@@ -1175,6 +1175,12 @@ class AR_Tele_Generic(AngleResponse):
         A is mutual broadcast shape of theta,phi
         see module glossary for input meanings
         """
+        # algorithm:
+        # - broadcaast to working shape of at least (1,1)
+        # - define nhat from theta,phi (this is particle's momentum axis)
+        # - project all patches onto nhat plane
+        # - overlap all projected patches
+        # - compute area of overlap
         sz = sz0 = np.broadcast(theta,phi).shape
         if len(sz) == 0:
             sz = (1,1)
@@ -1189,8 +1195,8 @@ class AR_Tele_Generic(AngleResponse):
             phi = np.expand_dims(phi,1)
         phi = np.broadcast_to(phi,sz)
         A = np.zeros(sz)
-        it = np.nditer(theta,flags=['multi_index'])
-        for th in it:
+        it = np.nditer(theta,flags=['multi_index']) # fancy any-shape iterator
+        for th in it: # it.multi_index gives corresponding index into same-shape arrays
             if (not self.bidirectional) and (th>90):
                 continue
             ph = phi[it.multi_index]
@@ -1198,18 +1204,23 @@ class AR_Tele_Generic(AngleResponse):
             projected = []
             # for-else clause executes else clause only if no break
             for p in self.patches:
+                # check for grazing incidence
                 if abs(np.dot(p.nhat,nhat)/norm(p.nhat)) < SMALL_FRACTION:
                     break # don't do grazing incidence
+                # project patch into nhat plane
                 projected.append(p.project(nhat))
             else: # only get here if no break
-                p = projected[0]
+                # progressively shrink overlap by applying overlap of
+                # all previous patches with next one
+                p = projected[0] # start with full first patch
                 for q in projected[1:]:
-                    p = p.overlap(q)
+                    p = p.overlap(q) # overlap what's left with next patch
                     if p is None: break # no overlap
                 else: # only get here if no break
-                    A[it.multi_index] = p.area # only get here if all for loops complete with no break
+                    # compute area of projected overlap
+                    A[it.multi_index] = p.area 
         
-        A.shape = sz0
+        A.shape = sz0 # re-assert original shape
         return A
     @property
     def hA0(self):
