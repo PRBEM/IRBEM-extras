@@ -1097,6 +1097,8 @@ class AR_Table_sym(AngleResponse):
         self.TH_GRID = squeeze(kwargs['TH_GRID'])
         if not validate_grid(self.TH_GRID):
             raise ValueError('TH_GRID is not a valid grid: 1-d, unique')
+        if (self.TH_GRID[0] !=0):
+            raise ValueError('TH_GRID should start at 0')
         self._A = squeeze(kwargs['A']) # TODO: convert to cm^2
         self._Ainterpolator = None
         if self.TH_GRID.shape != self.A.shape:
@@ -1291,6 +1293,8 @@ class AR_Table_asym(AngleResponse):
         self._Ainterpolator = None
         if self.A_GRID.shape != (len(self.TH_GRID),len(self.PH_GRID)):
             raise ArgSizeError('A does not have shape (TH_GRID,PH_GRID)')
+        if (self.TH_GRID[0] !=0):
+            raise ValueError('TH_GRID should start at 0')
         if (self.PH_GRID[0] !=0) or (self.PH_GRID[-1] != 360):
             raise ValueError('PH_GRID should span [0,360]')
     def A(self,theta,phi):
