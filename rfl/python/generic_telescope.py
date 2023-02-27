@@ -208,15 +208,24 @@ def sort_points(points,nhat=None,return_index=False):
     """
     center = np.zeros(3) # average point
     points = list(points) # make mutable
+    # do address near-duplicates, we replace them with the first instance. 
+    # We do this to preserve book keeping for the call to np.unique
+    uniques = [] # unique points previously seen
     for i,p in enumerate(points):
         if np.size(p) != 3:
             raise ValueError('points must be list of 3-d vectors')
-        points[i] = p = np.array(p).ravel()
+        p = np.array(p).ravel()
+        found = False
+        if uniques:
+            for q in uniques:
+                if points_equal(p,q):
+                    # point is nearly identical to a prior point                    
+                    found = True
+                    p = q # replace it with a reference to the prior point
+                    break
+        if not found: uniques.append(p)
+        points[i] = p # overwrite w/ cleaned up point
         center += p
-    for i,p in enumerate(points):
-        p2 = points[(i+1)%len(points)]
-        if points_equal(p,p2): points[i] = p2 # make true duplicates
-        
     center = center/len(points) # average
     zhat = nhat
     if zhat is None:
@@ -225,15 +234,10 @@ def sort_points(points,nhat=None,return_index=False):
             zhat = np.cross(p-center,points[(i+1) % len(points)]-center)
             if norm(zhat)>SMALL_FRACTION*REFERENCE_LENGTH: break
     if norm(zhat) <= REFERENCE_LENGTH*SMALL_FRACTION:
-        import matplotlib.pyplot as plt
-        plt.figure()
-        ax = plt.axes(projection='3d')
-        ax.plot(*np.array(points).transpose(),'k.-')
-        if nhat: ax.plot([0,nhat[0]],[0,nhat[1]],[0,nhat[2]],'r.-')
         raise ValueError('all points provided are degenerate (co-linear)')
     (zhat,xhat,yhat) = make_axes((zhat,points[0]-center,None))
     angles = []
-    for (i,p) in enumerate(points):
+    for i,p in enumerate(points):
         dp = p-center
         x = np.dot(dp,xhat)
         y = np.dot(dp,yhat)
@@ -241,10 +245,9 @@ def sort_points(points,nhat=None,return_index=False):
         if abs(z) > SMALL_FRACTION*norm(dp):
             raise ValueError('points not coplanar')
         points[i] = p = center + x*xhat+y*yhat # ensure coplanar
-        angles.append(np.arctan2(y,x))
+        angle = np.arctan2(y,x)
+        angles.append(angle)
     angles,isort,ireverse= np.unique(angles,return_index=True,return_inverse=True) # remove duplicates
-    if len(angles) < 3:
-        raise ValueError('All points in polygon are coplanar')
     points = [points[i] for i in isort]
     if return_index:
         return points,isort,ireverse
@@ -253,13 +256,6 @@ def sort_points(points,nhat=None,return_index=False):
 
 # classes
     
-class IdentityMixin(object):
-    """
-    IdentityMixin - mixin to provide identity, from_identity, and __eq__
-    functions
-    
-    """
-
 class LocalCoordsMixin(object):
     """
     LocalCoordsMixin - mixin to provide local coordinate system info
@@ -756,6 +752,7 @@ class Patch(object):
         self._components = None
         self._area = None
         self._centroid = None
+        self._nhat = None
     @classmethod
     def from_edges(cls,edges):
         """
@@ -863,7 +860,10 @@ class Patch(object):
             hi.set_color(h[0].get_color())
         return h
     def overlap(self,other):
-        """patch = overlap(other) returns patch representing overlap of self and other"""
+        """
+        patch = overlap(other) returns patch representing overlap of 
+            self and other, or None if no overlap
+        """
         # will need to overload this in CurvedEdge and in Triangle
         intersections = [] # entries are [point,[edge,...]]
         # add all intersections
@@ -881,8 +881,11 @@ class Patch(object):
                     e2 = slf.edges[(i+1)%len(slf.edges)] # next edge starts with p
                     intersections.append([p,[e,e2]])
 
-        # get unique,sorted points
-        points,isort,ireverse = sort_points([x[0] for x in intersections],nhat=self.nhat,return_index=True)
+        if len(intersections)>0:
+            # get unique,sorted points
+            points,isort,ireverse = sort_points([x[0] for x in intersections],nhat=self.nhat,return_index=True)
+        else:
+            isort = ireverse = points = []
 
         if len(points)<=1:
             if self.centroid in other:
@@ -890,7 +893,7 @@ class Patch(object):
             elif other.centroid in self:
                 return other # other entirely in self
             else:
-                return None # no overlap
+                return None # overlap is a line or a point
 
         # assemble unique intersections
         uix = [] # unique intersections
@@ -922,7 +925,10 @@ class Patch(object):
                 raise RFLError('Adjacent points have no common edge in overlap')
             # cut the edge to only span the intersection points
             edges.append(common_edge.cut(p1,p2))
-        
+        if (len(edges)<=2) and np.sum([e.area for e in edges]):
+            # for a valid patch with less than two eges, at least one must 
+            # have area (e.g., not be a straight edge)
+            return None # overlap has no area
         return Patch(edges)
 
 class Polygon(Patch):
@@ -940,9 +946,8 @@ class Polygon(Patch):
 
         edges = []
         for i,p in enumerate(points):
-            p1 = points[i]
             p2 = points[(i+1)%len(points)]
-            edges.append(StraightEdge(p1,p2))
+            edges.append(StraightEdge(p,p2))
             
         super().__init__(edges)
         self._chord_poly = self # a polygon is its own chord_poly, prevents infinite recursion        
@@ -993,10 +998,11 @@ class Triangle(Polygon,LocalCoordsMixin):
     @property
     def nhat(self):
         """*INHERIT*"""
+        # this is a "component" so it must compute nhat
         if self._nhat is None:
             # unit vector defined by 1st cross 2nd edge
             a = self.corners[1]-self.corners[0] # 1st edge vector
-            b = self.corners[2]-self.corners[1] # 2nd edge vector
+            b = self.corners[2]-self.corners[1] # 2nd edge vector            
             n = np.cross(a,b)
             self._nhat = n/norm(n)
         return self._nhat
@@ -1123,6 +1129,8 @@ class AR_Tele_Generic(AngleResponse):
     offsets and tilted. However, it can handle any convex
     shape whose edges are a combination of lines and elliptical arcs
     Initialize with an array of Patch objects that define coincidence geometry
+    Does NOT implement "backward" for bidirectional. 
+      Instead: checks theta in .A method against bidirectional
     """
     @classmethod
     def is_mine(cls,*args,**kwargs):
@@ -1159,21 +1167,34 @@ class AR_Tele_Generic(AngleResponse):
             sz = (1,1)
         elif len(sz)==1:
             sz = (sz[0],1)
+        theta = np.atleast_1d(theta)
+        if theta.ndim == 1:
+            theta = np.expand_dims(theta,1)
         theta = np.broadcast_to(theta,sz)
+        phi = np.atleast_1d(phi)
+        if phi.ndim == 1:
+            phi = np.expand_dims(phi,1)
         phi = np.broadcast_to(phi,sz)
         A = np.zeros(sz)
-        for it,ip in np.ndindex(sz):
-            th = theta[it,ip]
-            ph = phi[it,ip]
+        it = np.nditer(theta,flags=['multi_index'])
+        for th in it:
+            if (not self.bidirectional) and (th>90):
+                continue
+            ph = phi[it.multi_index]
             nhat = np.array([cosd(ph)*sind(th),sind(ph)*sind(th),cosd(th)])
-            print('th',th,'ph',ph,'nhat',nhat)
             projected = []
+            # for-else clause executes else clause only if no break
             for p in self.patches:
+                if abs(np.dot(p.nhat,nhat)/norm(p.nhat)) < SMALL_FRACTION:
+                    break # don't do grazing incidence
                 projected.append(p.project(nhat))
-            p = projected[0]
-            for q in projected[1:]:
-                p = p.overlap(q)
-            A[it,ip] = p.area
+            else: # only get here if no break
+                p = projected[0]
+                for q in projected[1:]:
+                    p = p.overlap(q)
+                    if p is None: break # no overlap
+                else: # only get here if no break
+                    A[it.multi_index] = p.area # only get here if all for loops complete with no break
         
         A.shape = sz0
         return A
@@ -1182,6 +1203,8 @@ class AR_Tele_Generic(AngleResponse):
         """*INHERIT*"""
         if self.G is None:
             thetagrid = default_thetagrid()
+            if not self.bidirectional:
+                thetagrid = thetagrid[thetagrid<=90.0] # acute only
             phigrid = default_phigrid()
             thetagrid,phigrid = broadcast_grids(thetagrid,phigrid)
             self.G = self.hAthetaphi(thetagrid,phigrid).sum()
@@ -1191,8 +1214,6 @@ class AR_Tele_Generic(AngleResponse):
             # using inside
             
         hA0 = self.G
-        if self.bidirectional:
-            hA0 += self.backward.hA0
         return hA0
 
 
@@ -1214,9 +1235,16 @@ if __name__ == '__main__':
         for c in r_.components: # now draw components
             c.plot(ax,linestyle='--')
 
-    ar = AR_Tele_Generic(patches=[r,r2])
-    print('A',ar.A(1.0,180.0))
-    print('Geometric factor',ar.hA0)
+    for bidir in ['FALSE','TRUE']:
+        print('BIDIRECTIONAL',bidir)
+        ar = AR_Tele_Generic(patches=[r,r2],BIDIRECTIONAL=bidir)
+        print('A',ar.A(90.0,0.0))
+        print('A',ar.A(np.array([0,1,89,90,91,179,180]),3.0))
+        print('A',ar.A(30.0,30.0))
+        print('A',ar.A(1.0,90.0))
+        print('A',ar.A(1.0,270.0))
+        print('Computing G')
+        print('Geometric factor',ar.hA0)
 
 """
 Projecting an ellipse and recovering its axes.
