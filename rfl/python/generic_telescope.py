@@ -86,7 +86,11 @@ SMALL_FRACTION - 1e-6 - de minimis distance offset. Points closer than this
 
 """
 
+# TODO: if bidirectional is guaranteed to be symmetric, then that will simplify a lot of things
+
 import numpy as np
+from scipy.integrate import dblquad
+
 from rfl import AngleResponse,inherit_docstrings, \
     default_thetagrid,default_phigrid, broadcast_grids, \
     RFLError, sind, cosd
@@ -187,14 +191,16 @@ def project(p,nhat,offset=0):
     accepts p as shape (3,) or (N,3)
     if offset is given as a 3-vector, then offset is taken to be a point in 
         the plane perpendicular to nhat:
-        offset -> offset.nhat
+        offset -> (p-offset)*offset.nhat
     """
-    if not np.isscalar(offset):
-        offset = np.dot(offset,nhat)
     if p.ndim > 1:
         nhat = np.reshape(nhat,(1,3))
+        if not np.isscalar(offset):
+            offset = ((p-np.reshape(offset,1,3))*nhat).sum(1,keepdims=1) # (N,1) sum of product along 2nd axis
         return p-(p*nhat).sum(1,keepdims=1)*nhat + offset*nhat
     else:
+        if not np.isscalar(offset):
+            offset = np.dot(p-offset,nhat)
         return p-np.dot(p,nhat)*nhat + offset*nhat
 
 def sort_points(points,nhat=None,return_index=False):
@@ -276,11 +282,15 @@ class LocalCoordsMixin(object):
         origin - 3-d origin of system
         xhat,yhat,zhat - 3-d unit vectors that define system
         (x1,x2) = xlim - lower and upper limit of x in object's coordinate system
+        x1 - lower limit of x in object's coordinate system
+        x2 - upper limit of x in object's coordinate system
     Properties are read only. Managed by private _ variables that are 
         initilized to None in the Edge base class constructor. 
         Only getters are provided.
     methods:
-        (y1,y2) = ylim(x) - y limits in object's coordinate sytem
+        (y1,y2) = ylim(x) - y limits in object's coordinate sytem at x
+        y = y1(x) - lower limit of y in object's coordinate sytem at x
+        y = y2(x) - upper limit of y in object's coordinate sytem at x
         p = xy2p(x,y) convert x,y from object's coordinates to point in 3-d frame
         (x,y) = p2xy(p) convert point from 3-d frame to object's local coordinate system
         xy2p and p2xy will accept scalar or 1-d input, adding the extra dimension to
@@ -311,9 +321,21 @@ class LocalCoordsMixin(object):
     @property
     def xlim(self):
         return self._xlim
+    @property
+    def x1(self):
+        return self._xlim[0]
+    @property
+    def x2(self):
+        return self._xlim[1]
     def ylim(self,x):
-        """(y1,y2) = ylim(x) - y limits in object's coordinate sytem"""
+        """(y1,y2) = ylim(x) - y limits in object's coordinate sytem at x"""
         raise NotImplementedError('Method ylim must be overloaded in derived classes')
+    def y1(self,x):
+        """y = y1(x) - lower limit of y in object's coordinate sytem at x"""
+        return self.ylim(x)[0]
+    def y2(self,x):
+        """y = y2(x) - upper limit of y in object's coordinate sytem at x"""
+        return self.ylim(x)[1]
     def xy2p(self,x,y):
         """p = xy2p(x,y) convert x,y from object's coordinates to point in 3-d frame
         if x or y is (N,) then output will be (N,3), otherwise output is (3,)
@@ -1024,9 +1046,9 @@ class Triangle(Polygon,LocalCoordsMixin):
         if (x <= 0.0) or (x>=self._base.length):
             ymax = 0.0
         elif x <= self._apex2[0]:
-            ymax = self._apex2[1]*x/self.apex2[0]
+            ymax = self._apex2[1]*x/self._apex2[0]
         elif x < self._base.length:
-            ymax = self._apex2[1]*(self._base.length-x)/self._base.length
+            ymax = self._apex2[1]*(self._base.length-x)/(self._base.length-self._apex2[0])
         if ymax < 0.0: # shouldn't happen but could
             return (-ymax,0.0)
         else:
@@ -1142,8 +1164,6 @@ class AR_Tele_Generic(AngleResponse):
     offsets and tilted. However, it can handle any convex
     shape whose edges are a combination of lines and elliptical arcs
     Initialize with an array of Patch objects that define coincidence geometry
-    Does NOT implement "backward" for bidirectional. 
-      Instead: checks theta in .A method against bidirectional
     """
     @classmethod
     def is_mine(cls,*args,**kwargs):
@@ -1167,14 +1187,7 @@ class AR_Tele_Generic(AngleResponse):
                 raise ValueError("Every entry in patches must be a Patch object")
         self.G = None
     def A(self,theta,phi):
-        """
-        A = .A(theta,phi)
-        return angular response (effective area) at specified theta,phi cm^2
-        should add forward and backward response together
-        theta and phi must broadcast together
-        A is mutual broadcast shape of theta,phi
-        see module glossary for input meanings
-        """
+        """*INHERIT*"""
         # algorithm:
         # - broadcaast to working shape of at least (1,1)
         # - define nhat from theta,phi (this is particle's momentum axis)
@@ -1222,26 +1235,95 @@ class AR_Tele_Generic(AngleResponse):
         
         A.shape = sz0 # re-assert original shape
         return A
+    def compute_G(self,**kwargs):
+        """
+        G = compute_G(**kwargs)
+        (re)compute G with options passed to scipy dblquad
+        kwargs will be passed to dblquad        
+        sets self.G, which is used by self.hA0
+        """
+        # double integral of first and last detector
+        # integrate patch-by-patch
+        def firstfunc(firsty,firstx,first):
+            firstp = first.xy2p(firstx,firsty)
+            def lastfunc(lasty,lastx,last):
+                lastp = last.xy2p(lastx,lasty)
+                # nhat is line connecting (firstx,firsty) and (lastx,lasty)
+                r = firstp-lastp
+                normr = norm(r)
+                rhat = r/normr
+                # now check middle patches
+                for p in self.patches[1:-2]:
+                    # project point onto patch
+                    q = project(p,rhat,p.origin)
+                    if q not in p: # check inside
+                        return 0.0 # not inside, no coincidence
+                # compute cos factors for planes relative to line 
+                firstcos = abs(np.dot(rhat,first.nhat))
+                lastcos = abs(np.dot(rhat,first.nhat))
+                return firstcos*lastcos/normr**2
+             # sum over components of last detector
+            innertmp = 0.0
+            for lastc in self.patches[-1].components:
+                innertmp += dblquad(lastfunc,lastc.x1,lastc.x2,lastc.y1,lastc.y2,args=(lastc,))[0]
+            return innertmp
+        # sum over components of first detector
+        tmp = 0.0
+        for firstc in self.patches[0].components:
+            tmp += dblquad(firstfunc,firstc.x1,firstc.x2,firstc.y1,firstc.y2,args=(firstc,))[0]
+        if self.bidirectional:
+            tmp *= 2
+        self.G = tmp
+        return self.G
     @property
     def hA0(self):
-        """*INHERIT*"""
+        """*INHERIT*
+        hA0 (self.G) is computed via a double integral over the areas of the first
+        and last patch, applying cosine factors and coincidence conditions on
+        any intermediate patches (i.e., a 3-element telescope).
+        result is cached in self.G, since it's a slow calculation
+        to control the double integral, call compute_G
+        """
         if self.G is None:
-            thetagrid = default_thetagrid()
-            if not self.bidirectional:
-                thetagrid = thetagrid[thetagrid<=90.0] # acute only
-            phigrid = default_phigrid()
-            thetagrid,phigrid = broadcast_grids(thetagrid,phigrid)
-            self.G = self.hAthetaphi(thetagrid,phigrid).sum()
-            # TODO double integral of first and last detector
-            # using xlim, ylim
-            # with coincidence check for any other detectors
-            # using inside
-            
-        hA0 = self.G
-        return hA0
+            self.G = self.compute_G()
+        return self.G
 
 
 inherit_docstrings(AngleResponse) # re-inherit tree
+
+def test_G_thetaphi(ar):
+    """
+    test calculation of geometric factor using theta,phi double integral and weights
+    compare it to ar.hA0 (computed by area method)
+    G = test_G_thetaphi(ar)
+    """
+    from tictoc import tic,toc
+
+    print('Computing G')
+    tic()
+    areaG = ar.hA0
+    toc()
+    print('areaG',areaG)
+
+    tic()
+    # set up theta,phi grids
+    thetagrid = default_thetagrid()
+    if ar.bidirectional:
+        bifactor = 2
+    else:
+        bifactor = 1
+        thetagrid = thetagrid[thetagrid<=90.0] # acute only
+    phigrid = default_phigrid()
+    thetagrid,phigrid = broadcast_grids(thetagrid,phigrid)
+
+    # cmopute h for theta,phi grids. Sum over h. apply bidirectional factor
+    thetaG = bifactor*ar.hAthetaphi(thetagrid,phigrid).sum()
+    toc()
+    print('thetaG',thetaG)
+    
+    print('error',thetaG/areaG-1)
+    
+    return thetaG
 
 if __name__ == '__main__':
     r = Rectangle(([0,0,0],[1,0,0],[0,1,0]))
@@ -1267,8 +1349,7 @@ if __name__ == '__main__':
         print('A',ar.A(30.0,30.0))
         print('A',ar.A(1.0,90.0))
         print('A',ar.A(1.0,270.0))
-        print('Computing G')
-        print('Geometric factor',ar.hA0)
+        test_G_thetaphi(ar)
 
 """
 Projecting an ellipse and recovering its axes.
