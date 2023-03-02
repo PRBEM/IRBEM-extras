@@ -804,12 +804,10 @@ class AngleResponse(FactoryConstructorMixin):
     AngleResponse
     class representing angular responses
     all responses are forward-only and
-    add backward response via self.backward when bidirectional
     initialization accepts BIDIRECTIONAL (False if missing)
     
     properties:
         bidirectional - bool, is the angular response bidirectional?
-        backward - backward angular response (null class when not bidirectional)
         hA0 - goemetric factor for forward and (if bidirectional) backward hemispheres
     """
     @classmethod
@@ -826,7 +824,6 @@ class AngleResponse(FactoryConstructorMixin):
         """
         A = .A(theta,phi)
         return angular response (effective area) at specified theta,phi cm^2
-        should add forward and backward response together
         theta and phi must broadcast together
         A is mutual broadcast shape of theta,phi
         see module glossary for input meanings
@@ -903,7 +900,7 @@ class AngleResponse(FactoryConstructorMixin):
         """
         hA0 = self.G
         if self.bidirectional:
-            hA0 += self.backward.hA0
+            hA0 *= 2
         return hA0
 
 class AR_csym(AngleResponse):
@@ -951,26 +948,17 @@ class AR_Omni(AR_csym):
             # derived class may provide G as none
             keyword_check_numeric('G',**kwargs)
             # setup for half omni: full G over 2pi
-            G = squeeze(kwargs['G']) # TODO: convert to cm^2 sr       
+            G = squeeze(kwargs['G']) # TODO: convert to cm^2 sr
             self.G = G
             self.area = self.G/2/np.pi # equivalent sphere's cross-section 
-        if self.bidirectional:
-            # backwards is also omni
-            backw = kwargs.copy()
-            backw['BIDIRECTIONAL'] = 'FALSE'
-            # divide forward part in half:
-            if G is not None:
-                self.G /= 2
-                self.aera /= 2
-                backw['G'] = self.G # already divided by 2
-                backw['L_UNIT'] = 'cm'
-            self.backward = self.__class__(**backw)
+            if self.bidirectional:
+                self.area = self.area/2
     def A(self,theta,phi):
         """*INHERIT*"""
-        A = self.area*(theta<=90)
         if self.bidirectiona:
-            A += self.backward.area*(theta>90)
-        return  A
+            return self.area
+        else:
+            return self.area*(theta<=90)
 
 class AR_SingleElement(AR_Omni):
     """
@@ -1054,17 +1042,13 @@ class AR_Tele_Cyl(AR_csym):
         tmp = self.R1**2+self.R2**2+self.D**2
         self.G = np.pi**2/2*(tmp-np.sqrt(tmp**2-4*self.R1**2*self.R2**2)) # eqn 8
         if self.bidirectional:
-            backw = kwargs.copy()
-            backw['BIDIRECTIONAL'] = 'FALSE'
-            # backward telescope reverses R2 and R1
-            backw['R1'] = self.R1
-            backw['R2'] = self.R2
-            backw['L_UNIT'] = 'cm'                
-            self.backward = self.__class__(**backw)
+            self.G *= 2
     def A(self,theta,phi):
         """*INHERIT*"""
         # uses Sullivan's updated paper, equation 10
         A = np.zeros(theta.shape)
+        if self.bidirectional:
+            theta = np.minimum(theta,180.0-theta) # treat backward as forward
         thetarads = np.radians(theta)
         f = theta <= self.thetac
         if any(f):
@@ -1075,8 +1059,6 @@ class AR_Tele_Cyl(AR_csym):
             Psi1 = np.arccos((self.R1**2+self.D**2*tantheta**2-self.R2**2)/(2*self.D*self.R1*tantheta)) # rads
             Psi2 = np.arccos((self.R2**2+self.D**2*tantheta**2-self.R1**2)/(2*self.D*self.R2*tantheta)) # rads
             A[f] = np.cos(thetarads[f])/2*(self.R1**2*(2*Psi1-np.sin(2*Psi1))+self.R2**2*(2*Psi2-np.sin(2*Psi2)))
-        if self.bidirectional:
-            A += self.backward.A(180.0-theta,phi)
         return np.broadcast_to(A,np.broadcast(theta,phi).shape)
 
 class AR_Table_sym(AngleResponse):
@@ -1127,37 +1109,32 @@ class AR_Pinhole(AngleResponse):
         keyword_check_numeric('G',**kwargs)
         self.G = squeeze(kwargs['G']) # TODO: convert to cm^2 sr  
         self.area = 0
-        if self.bidirectional:
-            self.G /= 2 # divide G between forward and backward
-            backw = kwargs.copy()
-            backw['BIDIRECTIONAL'] = 'FALSE'                
-            backw['G'] = self.G # already divided in half
-            backw['L_UNIT'] = 'cm'
-            self.backward = self.__class__(**backw)
     def A(self,theta,phi):
         """*INHERIT*"""
-        A = self.G*(theta==0)
         if self.bidirectional:
-            A += self.G*(theta==180)
+            A = self.G*((theta==0) | (theta==180))/2
+        else:
+            A = self.G*(theta==0)
+            
         return np.broadcast_to(A,np.broadcast(theta,phi).shape)
     def hAthetaphi(self,thetagrid,phigrid,**kwargs):
         """*INHERIT*"""
         # compute interpolation weight in -cos(theta)
         # so that integral over dcos(theta) gives unity
         w = interp_weights_1d(-cosd(thetagrid),-1.0) # -cos(0)=-1
+        if self.bidirectional:
+            w += interp_weights_1d(-cosd(thetagrid),1.0) # -cos(180)=1            
         w = np.broadcast_to(w,np.broadcast(thetagrid,phigrid).shape)
         tmp = w/w.sum()*self.G # ensure tmp sums to G
-        if self.bidirectional: # special case of actually calling hAtheta
-            tmp += self.backward.hAtheta(thetagrid,phigrid,**kwargs)
         return tmp
     def hAtheta(self,thetagrid,phigrid=None,**kwargs):
         """*INHERIT*"""
         # compute interpolation weight in -cos(theta)
         # so that integral over dcos(theta) gives unity
         w = interp_weights_1d(-cosd(thetagrid),-1.0) # -cos(0)=-1
+        if self.bidirectional:
+            w += interp_weights_1d(-cosd(thetagrid),1.0) # -cos(180)=1
         tmp = w/w.sum()*self.G # ensure tmp sums to G
-        if self.bidirectional: # special case of actually calling hAtheta
-            tmp += self.backward.hAtheta(180-thetagrid,phigrid,**kwargs)
         return tmp
     def hAalphabeta(self,alpha0,beta0,phib,alphagrid,betagrid,tgrid=None,**kwargs):
         """*INHERIT*"""
@@ -1168,14 +1145,16 @@ class AR_Pinhole(AngleResponse):
         # so that integral over dcos(alpha) gives unity
         dha = interp_weights_1d(-cosd(alphagrid),-cosd(alpha0)) # len(tgrid) x len(alphagrid)
         dhb = interp_weights_1d(betagrid,beta0) # len(tgrid) x len(betagrid)
+        if self.bidirectional:
+            dha = (dha+interp_weights_1d(-cosd(alphagrid),-cosd(180-alpha0)))/2
+            dhb = (dhb+interp_weights_1d(betagrid,(beta0+180.0) % 360.0))/2
+            
         # reshape to allow broadcast
         dha.shape = (len(dt),len(alphagrid),1)
         dhb.shape = (len(dt),1,len(betagrid))
         dt.reshape = (len(dt),1,1)
         h = (dt*dha*dhb).sum(axis=0) # integrate over time
         h = h*self.G*sum(dt)/sum(h) # force to integrate to Gdt
-        if self.bidirectional:
-            h += self.backward.hAalpha(alpha0,beta0,phib,alphagrid,betagrid,tgrid,**kwargs)
         return h
     def hAalpha(self,alpha0,beta0,phib,alphagrid,betagrid=None,tgrid=None,**kwargs):
         """*INHERIT*"""
@@ -1184,10 +1163,10 @@ class AR_Pinhole(AngleResponse):
         # compute interpolation weight in -cos(alpha)
         # so that integral over dcos(alpha) gives unity
         dh = interp_weights_1d(-cosd(alphagrid),-cosd(alpha0)) # len(tgrid) x len(alphagrid)
+        if self.bidirectional:
+            dh = (dh + interp_weights_1d(-cosd(alphagrid),-cosd(180-alpha0)))/2
         h = np.dot(dt,dh) # sum over time
         h = h*self.G*sum(dt)/sum(h) # force to integrate to Gdt
-        if self.bidirectional:
-            h += self.backward.hAalpha(alpha0,beta0,phib,alphagrid,betagrid,tgrid,**kwargs)
         return h
 
 class AR_Tele_Rect(AngleResponse):
@@ -1236,23 +1215,13 @@ class AR_Tele_Rect(AngleResponse):
                 +2*delta*np.sqrt(self.D**2+gamma**2) \
                 *np.arctan(delta/np.sqrt(self.D**2+gamma**2))
 
-        if self.bidirectional:
-            backw = kwargs.copy()
-            backw['BIDIRECTIONAL'] = 'FALSE'                
-            backw['W1'] = self.W2
-            backw['H1'] = self.H2
-            backw['W2'] = self.W1
-            backw['H2'] = self.H1
-            backw['D'] = self.D
-            backw['L_UNIT'] = 'cm'
-            self.backward = self.__class__(**backw)
     def _X(self,zeta,a1,a2):
         """
         Sullivan's X(zeta,a1,a2)
         """
         return min(zeta+a1/a2,a2/2) - max(zeta-a1/a2,-a2/2)
-    def A(self,theta,phi):
-        """*INHERIT*"""
+    def _A(self,theta,phi):
+        """forward-only A"""
         A = np.zeros(np.broadcast(theta,phi).shape)
         thetarads = np.radians(theta)
         phirads = np.radians(phi)
@@ -1266,8 +1235,11 @@ class AR_Tele_Rect(AngleResponse):
         if any(f):
             A[f] = costheta[f]*X[f]*Y[f] # eqn 13 w/o Heaviside functions            
         
+    def A(self,theta,phi):
+        """*INHERIT*"""
+        A = self._A(theta,phi)
         if self.bidirectional:
-            A += self.backward.A(180-theta,phi)
+            A += self._A(90-theta,(phi+180.0) % 360.0)
         return A
 
 class AR_Table_asym(AngleResponse):
