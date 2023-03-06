@@ -86,7 +86,8 @@ SMALL_FRACTION - 1e-6 - de minimis distance offset. Points closer than this
 
 """
 
-# TODO: if bidirectional is guaranteed to be symmetric, then that will simplify a lot of things
+# TODO: check spec to see what it says about orientation of phi relative
+# to W,H in rectangular telescope case
 
 import numpy as np
 from scipy.integrate import dblquad
@@ -114,9 +115,11 @@ def between_rays(a,b,p,n=None):
     # check colinearity
     norma = norm(a)
     normp = norm(p)
-    if abs(np.dot(a,p)/norma/normp-1) < SMALL_FRACTION: return True # p along a
+    if norma < SMALL_FRACTION*REFERENCE_LENGTH: return False # not a ray
+    if abs(np.dot(a,p)-norma*normp) <= SMALL_FRACTION*norma*normp: return True # p along a
     normb = norm(b)
-    if abs(np.dot(b,p)/normb/normp-1) < SMALL_FRACTION: return True # p along b
+    if normb < SMALL_FRACTION*REFERENCE_LENGTH: return False # not a ray
+    if abs(np.dot(b,p)-normb*normp) <= SMALL_FRACTION*normb*normp: return True # p along b
     
     # both a x p and p x b must go in same direction as n = a x b
     pn = normp*norm(n)
@@ -240,18 +243,37 @@ def sort_points(points,nhat=None,return_index=False):
             uniques.append(p) # point is unique
             center += p
         points[i] = p # overwrite w/ cleaned up point
+    if len(uniques) == 1:
+        if return_index:
+            return uniques,np.array(0,dtype=int),np.zeros(len(points),dtype=int)
+        else:
+            return uniques
     center = center/len(uniques) # average
     # find nhat if needed
     zhat = nhat
+    xhat = None
     if zhat is None:
         zhat = 0
         for i,p in enumerate(uniques):
-            zhat = np.cross(p-center,uniques[(i+1) % len(uniques)]-center)
-            if norm(zhat)>SMALL_FRACTION*REFERENCE_LENGTH: break
+            zhat = np.cross(p-center,uniques[(i+1) % len(uniques)]-center) # p x next
+            if norm(zhat)>SMALL_FRACTION*REFERENCE_LENGTH: 
+                break # good zhat found
         else:  # loop completed, no zhat found
-            raise ValueError('all points provided are degenerate (co-linear)')
-    # generate x,y,nhat system
-    (zhat,xhat,yhat) = make_axes((zhat,points[0]-center,None))
+            # points are colinear
+            # find an arbitrary direction to use as zhat
+            for p in uniques:
+                if points_equal(p,center): continue # p==center
+                dp = p-center
+                (xhat,yhat,zhat) = make_axes((dp,np.roll(dp,1),None))
+                print('dp',dp,'zhat',zhat)
+                if norm(zhat)>SMALL_FRACTION*REFERENCE_LENGTH: 
+                    break # suitable zhat found
+            else:
+                raise ValueError('Unable to create normal vector (zhat)')
+
+    if xhat is None:
+        # generate x,y,nhat system
+        (zhat,xhat,yhat) = make_axes((zhat,uniques[0]-center,None))
     # compute angles about nhat relative to centroid
     angles = []
     for i,p in enumerate(points): # get angles for all points
@@ -259,7 +281,7 @@ def sort_points(points,nhat=None,return_index=False):
         x = np.dot(dp,xhat)
         y = np.dot(dp,yhat)
         z = np.dot(dp,zhat)
-        if abs(z) > SMALL_FRACTION*norm(dp):
+        if abs(z) > SMALL_FRACTION*max(REFERENCE_LENGTH,norm(dp)):
             raise ValueError('points not coplanar')
         points[i] = p = center + x*xhat+y*yhat # ensure coplanar
         angle = np.arctan2(y,x) % (2*np.pi) # put on 0,2*pi
@@ -512,11 +534,15 @@ class StraightEdge(Edge):
         # check colinear case: intersection is endpoints of overlap
         dq1 = q1-p1
         dq2 = q2-p1
-        if (abs(abs(np.dot(dq1,dp)/norm(dq1)/normdp)-1.0)< SMALL_FRACTION) \
-            and (abs(abs(np.dot(dq2,dp)/norm(dq2)/normdp)-1.0)< SMALL_FRACTION):
+        normdq1 = norm(q1)
+        normdq2 = norm(dq2)
+        dq1dp = np.dot(dq1,dp)
+        dq2dp = np.dot(dq2,dp)
+        if (abs(abs(dq1dp)-normdq1*normdp) <= SMALL_FRACTION*normdq1*normdp) \
+            and (abs(abs(dq2dp)-normdq2*normdp) <= SMALL_FRACTION*normdq2*normdp):
             t = [0.0,1.0] # p1,p2
-            t.append(np.dot((q1-p1),dp)/normdp**2) # q1
-            t.append(np.dot((q2-p1),dp)/normdp**2) # q2
+            t.append(dq1dp/normdp**2) # q1
+            t.append(dq2dp/normdp**2) # q2
             t = np.sort(t) #  middle two points [1,2] are intersection
             if (t[1] < -SMALL_FRACTION) or (t[2]>1.0+SMALL_FRACTION):
                 return empty # line segments don't overlap
@@ -1162,8 +1188,10 @@ class AR_Tele_Generic(AngleResponse):
     Generic telescope is meant for combinations of
     circular and rectangular elements, allowed to be at
     offsets and tilted. However, it can handle any convex
-    shape whose edges are a combination of lines and elliptical arcs
+    shape whose edges are a combination of lines and elliptical arcs (Patches)
     Initialize with an array of Patch objects that define coincidence geometry
+    Call method compute_G to override default integration options for computing
+        G==hA0
     """
     @classmethod
     def is_mine(cls,*args,**kwargs):
@@ -1225,6 +1253,7 @@ class AR_Tele_Generic(AngleResponse):
             else: # only get here if no break
                 # progressively shrink overlap by applying overlap of
                 # all previous patches with next one
+
                 p = projected[0] # start with full first patch
                 for q in projected[1:]:
                     p = p.overlap(q) # overlap what's left with next patch
@@ -1232,7 +1261,7 @@ class AR_Tele_Generic(AngleResponse):
                 else: # only get here if no break
                     # compute area of projected overlap
                     A[it.multi_index] = p.area 
-        
+
         A.shape = sz0 # re-assert original shape
         return A
     def compute_G(self,**kwargs):
@@ -1241,7 +1270,16 @@ class AR_Tele_Generic(AngleResponse):
         (re)compute G with options passed to scipy dblquad
         kwargs will be passed to dblquad        
         sets self.G, which is used by self.hA0
+        by default dblquad is called with:
+            ebsabs = SMALL_FRACTION*REFERENCE_LENGTH**2
+            epsrel = SMALL_FRACTION
         """
+        
+        if 'epsabs' not in kwargs:
+            kwargs['epsabs'] = SMALL_FRACTION*REFERENCE_LENGTH**2
+        if 'epsrel' not in kwargs:
+            kwargs['epsrel'] = SMALL_FRACTION
+        
         # double integral of first and last detector
         # integrate patch-by-patch
         def firstfunc(firsty,firstx,first):
@@ -1258,6 +1296,9 @@ class AR_Tele_Generic(AngleResponse):
                     q = project(p,rhat,p.origin)
                     if q not in p: # check inside
                         return 0.0 # not inside, no coincidence
+                    # no need to adjust for distance to q
+                    # because this filter effectively reduces
+                    # the area of the last patch at its real distance
                 # compute cos factors for planes relative to line 
                 firstcos = abs(np.dot(rhat,first.nhat))
                 lastcos = abs(np.dot(rhat,first.nhat))
@@ -1265,12 +1306,14 @@ class AR_Tele_Generic(AngleResponse):
              # sum over components of last detector
             innertmp = 0.0
             for lastc in self.patches[-1].components:
-                innertmp += dblquad(lastfunc,lastc.x1,lastc.x2,lastc.y1,lastc.y2,args=(lastc,))[0]
+                innertmp += dblquad(lastfunc,lastc.x1,lastc.x2,lastc.y1,lastc.y2,
+                                    args=(lastc,),**kwargs)[0]
             return innertmp
         # sum over components of first detector
         tmp = 0.0
         for firstc in self.patches[0].components:
-            tmp += dblquad(firstfunc,firstc.x1,firstc.x2,firstc.y1,firstc.y2,args=(firstc,))[0]
+            tmp += dblquad(firstfunc,firstc.x1,firstc.x2,firstc.y1,firstc.y2,
+                           args=(firstc,),**kwargs)[0]
         if self.bidirectional:
             tmp *= 2
         self.G = tmp
@@ -1291,38 +1334,49 @@ class AR_Tele_Generic(AngleResponse):
 
 inherit_docstrings(AngleResponse) # re-inherit tree
 
-def test_G_thetaphi(ar):
-    """
+def test_G_thetaphi(ar,G):
+    """    
     test calculation of geometric factor using theta,phi double integral and weights
-    compare it to ar.hA0 (computed by area method)
-    G = test_G_thetaphi(ar)
+    compare it to ar.hA0 and (if supplied G)
+    G = test_G_thetaphi(ar,G=None)
     """
     from tictoc import tic,toc
+    
+    # typical performance: 
+    # ~2-3 minutes for area method regardless of bidirectional
+    # 5-10 minutes for angle method, depending on bidirectional
+    # area method is faster and more accurate
+    # Note that area integral runtime grows with detector area
+    # because it has an absolute error requirement
 
     print('Computing G')
+
     tic()
     areaG = ar.hA0
     toc()
     print('areaG',areaG)
+    
+    if G is None:
+        G = areaG
+    else:
+        print('Refernce G',G)
+        print('error',areaG/G-1)        
 
     tic()
     # set up theta,phi grids
     thetagrid = default_thetagrid()
-    if ar.bidirectional:
-        bifactor = 2
-    else:
-        bifactor = 1
+    if not ar.bidirectional:
         thetagrid = thetagrid[thetagrid<=90.0] # acute only
     phigrid = default_phigrid()
     thetagrid,phigrid = broadcast_grids(thetagrid,phigrid)
 
     # cmopute h for theta,phi grids. Sum over h. apply bidirectional factor
-    thetaG = bifactor*ar.hAthetaphi(thetagrid,phigrid).sum()
+    thetaG = ar.hAthetaphi(thetagrid,phigrid).sum()
     toc()
     print('thetaG',thetaG)
     
-    print('error',thetaG/areaG-1)
-    
+    print('error',thetaG/G-1)
+
     return thetaG
 
 if __name__ == '__main__':
@@ -1332,24 +1386,32 @@ if __name__ == '__main__':
     print('inside',r.inside([1.75,0.75,0])) # False
     print('inside',r.inside([0.1,0.1,0])) # True
     r2 = Rectangle(([0,0,2],[1,0,2],[0,1,2]))
+    
+    # reference rectangle
+    tele = AngleResponse(TP_TYPE='RECT_TELE',W1=1,H1=2,W2=3,H2=4,D=5)
+    print('Analytical G',tele.hA0)
+
+    first = Rectangle(([0,0,0],[tele.W1,0,0],[0,tele.H1,0]))
+    last = Rectangle(([0,0,tele.D],[tele.W2,0,tele.D],[0,tele.H2,tele.D]))
+    first,last = r,r2 # lesser test
     import matplotlib.pyplot as plt
     from mpl_toolkits import mplot3d # enables 3d projection
     plt.close('all')
     ax = plt.axes(projection='3d')
-    for r_ in [r,r2]:
-        r_.plot(ax)
-        for c in r_.components: # now draw components
+    for rect in [first,last]:
+        rect.plot(ax)
+        for c in rect.components: # now draw components
             c.plot(ax,linestyle='--')
-
     for bidir in ['FALSE','TRUE']:
         print('BIDIRECTIONAL',bidir)
-        ar = AR_Tele_Generic(patches=[r,r2],BIDIRECTIONAL=bidir)
+        ar = AR_Tele_Generic(patches=[first,last],BIDIRECTIONAL=bidir)
+        print('A',ar.A(30.0,300.0))
         print('A',ar.A(90.0,0.0))
         print('A',ar.A(np.array([0,1,89,90,91,179,180]),3.0))
         print('A',ar.A(30.0,30.0))
         print('A',ar.A(1.0,90.0))
         print('A',ar.A(1.0,270.0))
-        test_G_thetaphi(ar)
+        test_G_thetaphi(ar,tele.hA0*(1+ar.bidirectional))
 
 """
 Projecting an ellipse and recovering its axes.
