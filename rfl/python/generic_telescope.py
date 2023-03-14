@@ -662,8 +662,11 @@ class EllipseArc(CurvedEdge):
     """EllipseArc Edge, subclass of CurvedEdge, for elliptical arcs
     in addition to Edge, adds the following:
     properties:
+        a - semimajor axis 3-d vector
+        b - semiminor axis 3-d vector
         angles = tuple of start and end angle, always angles[1]>angles[0]
         extent = angular extend in degrees = angles[1]-angles[0]
+        center - 3-d location of circle's center
     methods:
         theta2p(theta) = return 3-d point given angle in degrees
     """
@@ -680,18 +683,26 @@ class EllipseArc(CurvedEdge):
         arc spans from p1 to p2 anticlockwise (around r1 x r2)
         """
         # stub for testing. Does not compute semiaxes
-        super().__init__()
+        for p in [center,r1,r2]:
+            if np.size(p) != 3:
+                raise ValueError('Inputs center,r1,r2 to Ellipse must be 3-vectors')
+
         center = np.array(center).ravel()
         r1 = np.array(r1).ravel()
         r2 = np.array(r2).ravel()
         if np.isscalar(p1): # theta in degrees
             p1 = center+r1*cosd(p1) + r2*sind(p1)
         else:
+            if np.size(p1) != 3:
+                raise ValueError('Input p1 to Ellipse must be 3-vector')
             p1 = np.array(p1)
         if np.isscalar(p2): # theta in degrees
             p2 = center+r1*cosd(p2) + r2*sind(p2)
         else:
+            if np.size(p2) != 3:
+                raise ValueError('Input p2 to Ellipse must be 3-vector')
             p2 = np.array(p2)
+        super().__init__()
         self.center = center
         self._endpoints = (p1,p2)
 
@@ -714,7 +725,7 @@ class EllipseArc(CurvedEdge):
     @classmethod
     def from_identity(cls,identity):
         """*INHERIT*"""
-        return EllipseArc(*identity)
+        return cls(*identity)
     @property
     def length(self):
         """
@@ -783,7 +794,7 @@ class EllipseArc(CurvedEdge):
         # y = +/- b*sqrt(1-(x/a)^2)
         norma = norm(self.a)
         if (x <= -norma) or (x >= norma):
-            return 0.0
+            return (0.0,0.0)
         normb = norm(self.b)
         y = normb*np.sqrt(1-(x/norma)**2)
         ylim = [0.0,0.0]
@@ -827,7 +838,9 @@ class EllipseArc(CurvedEdge):
         raise NotImplementedError('TODO') # TODO
     def cut(self,p1,p2):
         """*INHERIT*"""
-        raise NotImplementedError('TODO') # TODO
+        if (p1 not in self) or (p2 not in self):
+            raise ValueError('Cannot cut to points outside %s' % self.__class__.__name__)
+        return EllipseArc(self.center,self.a,self.b,p1,p2) # explicit class b/c inherited by FullEllipse
 
 class FullEllipse(EllipseArc):
     """FullEllipse Edge, subclass of EllipseArc, full ellipse"""
@@ -839,10 +852,11 @@ class FullEllipse(EllipseArc):
         (if r1 perpendicular to r2, then they are the semimajor and semiminnor axes)
         """
         super().__init__(center,r1,r2,0.0,360.0)
+        self._identity = (self.center,self.a,self.b)
     @classmethod
     def from_identity(cls,identity):
         """*INHERIT*"""
-        raise NotImplementedError('TODO') # TODO
+        return cls(*identity) # identity is endpoints        
     @property
     def area(self):
         """*INHERIT*
@@ -850,29 +864,21 @@ class FullEllipse(EllipseArc):
         """
         raise NotImplementedError('TODO') # TODO
     @property
-    def reversed(self):
-        """*INHERIT*"""
-        raise NotImplementedError('TODO: write reversed property')
-    @property
     def xlim(self):
-        """*INHERIT*"""
-        raise NotImplementedError('TODO') # TODO
+        norma = norm(self.a)
+        return (-norma,norma)
     def ylim(self,x):
         """*INHERIT"""
-        raise NotImplementedError('TODO') # TODO
-    def intersect(self,other,try_other=True):
-        """*INHERIT*"""
-        # try intersect with types self knows about
-        # then hand off to parent class
-        if isinstance(other,EllipseArc):
-            raise NotImplementedError('TODO') # TODO
-        elif isinstance(other,StraightEdge):
-            raise NotImplementedError('TODO') # TODO
-        else:
-            super().intersect(other,try_other) # pass up the chain
+        norma = norm(self.a)
+        if (x <= -norma) or (x >= norma):
+            return (0.0,0.0)
+        y = norm(self.b)*np.sqrt(1-(x/norma)**2)
+        return (-y,y)
     def inside(self,point):
         """*INHERIT*"""
-        raise NotImplementedError('TODO') # TODO
+        x = self.dot(point-self.center,self.a)
+        y = self.dot(point-self.center,self.b)
+        return (x/norm(self.a))**2 + (y/norm(self.b))**2 <= 1
 
 class CircleArc(EllipseArc):
     """CircleArc Edge, subclass of EllipseArc, for circular arcs"""
@@ -883,36 +889,82 @@ class CircleArc(EllipseArc):
         p2 - 3-d location of second point on arc
         arc spans from p1 to p2 anticlockwise (around p1 x p2)
         """
-        raise NotImplementedError('TODO') # TODO
+        for p in [center,p1,p2]:
+            if np.size(p) != 3:
+                raise ValueError('Inputs center,p1,p2 to CircleArc must be 3-d vectors')
+        center = np.array(center).ravel()
+        p1 = np.array(p1).ravel()
+        p2 = np.array(p2).ravel()
+        r1 = p1-center
+        r = norm(r1)
+        r2 = p2-center
+        if np.abs(r-norm(r2)) > REFERENCE_LENGTH*SMALL_FRACTION:
+            raise ValueError('points p1 and p2 are not equidistant from center')
+        nhat = np.cross(r1,r2)
+        r2 = np.cross(nhat,r1)
+        r2 = r2/norm(r2)*r
+        super().__init__(center,center+r1,center+r2,p1,p2)
     @classmethod
     def from_identity(cls,identity):
         """*INHERIT*"""
-        raise NotImplementedError('TODO') # TODO
+        center,a,b,p1,p2 = identity
+        return cls(center,p1,p2)
     def cut(self,p1,p2):
         """*INHERIT*"""
-        return CircleArc(self.center,p1,p2)
+        if (p1 not in self) or (p2 not in self):
+            raise ValueError('Cannot cut to points outside %s' % self.__class__.__name__)
+        return self.__class__(self.center,p1,p2)
     @property
     def reversed(self):
         """*INHERIT*"""
-        raise NotImplementedError('TODO: write reversed property')
+        return self.__class__(self.center,p2,p1)
 
 class FullCircle(FullEllipse):
-    """FullCircle Edge, subclass of Ellipse, full circle"""
+    """FullCircle Edge, subclass of Ellipse, full circle
+    In addition to FullEllipse, has the following:
+    properties:
+        center - 3-d location of circle's center
+        r - radius of circle (scalar)
+        nhat - 3-vector normal to plane of circle
+    """
     def __init__(self,center,r,nhat):
         """circle = FullCircle(center,r)
         center - 3-d location of circle's center
         r - radius of circle (scalar)
         nhat - 3-vector normal to plane of circle
         """
-        raise NotImplementedError('TODO') # TODO
+        for p in [center,nhat]:
+            if np.size(p) != 3:
+                raise ValueError('Inputs center, nhat to FullCircle must be 3-vectors')
+        if not np.isscalar(r):
+            raise ValueError('Input r to FullCircle must be scalar')
+        center = np.array(center).ravel()
+        nhat = np.array(nhat).ravel()
+        nhat = nhat/norm(nhat) # just to be sure
+        self.nhat = nhat
+        self.r = r
+        p1 = np.cross(nhat,np.roll(nhat))
+        p1 = p1/norm(p1)
+        p2 = np.cross(nhat,p1)
+        super.__init__(center,center+r*p1,center+r*p2)
     @classmethod
     def from_identity(cls,identity):
         """*INHERIT*"""
-        raise NotImplementedError('TODO') # TODO
+        center,a,b = identity
+        nhat = np.cross(a,b)
+        nhat = nhat/norm(nhat)
+        r = norm(a)        
+        return cls(center,r,nhat)
     @property
     def reversed(self):
         """*INHERIT*"""
-        raise NotImplementedError('TODO: write reversed property')
+        return self.__class__(self.center,self.r,-self.nhat) # same circle opposite sense
+    def cut(self,p1,p2):
+        """*INHERIT*"""
+        if (p1 not in self) or (p2 not in self):
+            raise ValueError('Cannot cut to points outside %s' % self.__class__.__name__)
+        return CircleArc(self.center,p1,p2)
+
 
 inherit_docstrings(Edge)
 # end of Edges
