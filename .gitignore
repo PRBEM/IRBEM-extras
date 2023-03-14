@@ -4,3 +4,7 @@
 *.o
 __pycache__
 .spyproject
+*~
+*.mpix
+Thumbs.db
+*.h5
