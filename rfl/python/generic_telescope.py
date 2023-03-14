@@ -72,8 +72,9 @@ Segments, Circles, and Ellipses get their xy2p from the edge
 
 .overlap reruns a new patch that is the overlap of self with another patch.
 
-Will need a way to merge patches with a common edge. We will use 
-REFERENCE_LENGTH and SMALL_FRACTION to identify points that are the same.
+Need to break curved edges into pieces <180 degrees around
+This will occur when a patch is built from edges
+
 
 module settings:
 REFERENCE_LENGTH - 1.0. A "typical" length in the units being used
@@ -415,6 +416,7 @@ class Edge(object):
         len = length - length of edge
         area - area of edge for curved edes, zero for straight
         nhat - unit vector normal to Edge's plane
+        pieces - tuple of Edges that comprise this edge (used to break up curved edges into <180 degree chunks)
         reversed - edge with endpoints reversed
         Properties are read only. Managed by private _ variables that are 
             initilized to None in the Edge base class constructor. 
@@ -443,6 +445,8 @@ class Edge(object):
         self._length = None
         self._area = None
         self._nhat = None
+        self._pieces = None
+        self._reversed = None
     @property
     def identity(self):
         """points = identity returns tuple of points that uniquely identify Edge"""
@@ -476,7 +480,14 @@ class Edge(object):
     @property
     def reversed(self):
         """return edge flipped so that endpoints are reversed (but still represents the same set of points)"""
-        raise NotImplementedError('TODO: write reversed property')
+        raise NotImplementedError('Method reversed must be overloaded in derived classes')
+    @property
+    def pieces(self):
+        """return list of edges that make up this one. Used to break curved edges into <180 degree chunks"""
+        # for most things, just retuns [self] so that's OK
+        if self._pieces is None:
+            self._pieces = (self,)
+        return self._pieces
     def intersect(self,other,try_other=True):
         """points = intersect(other,try_other=True) 
         returns a typle of points of intersection between self and Edge other
@@ -540,7 +551,9 @@ class StraightEdge(Edge):
     @property
     def reversed(self):
         """*INHERIT*"""
-        raise NotImplementedError('TODO: write reversed property')
+        if self._reversed is None:
+            self._reversed = self.__class__(self._endpoints[1],self._endpoints[0])
+        return self._reversed
     @classmethod
     def from_identity(cls,identity):
         """*INHERIT*"""
@@ -646,7 +659,14 @@ class CurvedEdge(Edge,LocalCoordsMixin):
         raise NotImplementedError('Method reversed must be overloaded in derived classes')
 
 class EllipseArc(CurvedEdge):
-    """EllipseArc Edge, subclass of CurvedEdge, for elliptical arcs"""
+    """EllipseArc Edge, subclass of CurvedEdge, for elliptical arcs
+    in addition to Edge, adds the following:
+    properties:
+        angles = tuple of start and end angle, always angles[1]>angles[0]
+        extent = angular extend in degrees = angles[1]-angles[0]
+    methods:
+        theta2p(theta) = return 3-d point given angle in degrees
+    """
     def __init__(self,center,r1,r2,p1,p2,*args,**kwargs):
         """ellpiseArc = Ellipse(center,r1,r2,p1,p2)
         center- 3-d location of ellipse's center
@@ -674,9 +694,22 @@ class EllipseArc(CurvedEdge):
             p2 = np.array(p2)
         self.center = center
         self._endpoints = (p1,p2)
-        self.a = r1 # TODO compute axes
-        self.b = r2 # TODO compute axes
-        print('Warning: ellipse did not compute axes, not implemented yet')
+
+        # build semiaxes from r1, r2
+        # https://en.wikipedia.org/wiki/Rytz%27s_construction#Computer_aided_solution
+        
+        t0 = np.arctan2(2*np.dot(r1,r2),(norm(r1)**2-norm(r2**2)))
+        ax1 = center + r1*np.cos(t0) + r2*np.cos(t0)
+        ax2 = center + r1*np.cos(t0+np.pi/2) + r2*np.cos(t0+np.pi/2)
+        if norm(ax2) > norm(ax1): # first axis is semiminor
+            ax1 = ax2
+            ax2 = center + r1*np.cos(t0+np.pi) + r2*np.cos(t0+np.pi)
+        self.a = ax1-center
+        self.b = ax2-center
+        angles = [np.degrees(np.arctan2(np.dot(p-center,self.b),np.dot(p-center,self.a))) for p in self._endpoints]
+        if angles[1] <= angles[0]:
+            angles[1] += 360 # ensure angles[1] > angles[0]
+        self._angles = tuple(angles)
         self._identity = (self.center,self.a,self.b,*self._endpoints)
     @classmethod
     def from_identity(cls,identity):
@@ -692,20 +725,93 @@ class EllipseArc(CurvedEdge):
         # https://docs.scipy.org/doc/scipy/reference/generated/scipy.special.ellipeinc.html#scipy.special.ellipeinc
         raise NotImplementedError('TODO') # TODO
     @property
+    def angles(self):
+        """*INHERIT*"""
+        return self._angles
+    @property
+    def extent(self):
+        """*INHERIT*"""
+        return self.angles[1]-self.angles[0]
+    @property
     def area(self):
         """*INHERIT*"""
         raise NotImplementedError('TODO') # TODO
+        # area of elipse arc is area between arc and chord
+        # so, area of pie slice, minus area of inscribed trangle
+    @property
+    def pieces(self):
+        """*INHERIT*"""
+        if self._pieces is None:
+            N = np.floor(self.extent/180)+1 # number of pieces
+            if N == 1:
+                self._pieces = (self,)
+            else: # break up
+                theta = np.linspace(self.angles[0],self.angles[1],N+1)
+                points = self.theta2p(theta)
+                pieces = []
+                for i in range(N):
+                    p1 = points[i]
+                    p2 = points[i+1]
+                    pieces.append(self.__class__(self.center,self.center+self.a,self.center+self.b,p1,p2))
+                self._pieces = tuple(pieces)
+                
+        return self._pieces
     @property
     def reversed(self):
         """*INHERIT*"""
-        raise NotImplementedError('TODO: write reversed property')
+        # reverse n=axb by swapping -b
+        # reverse endpoints by swapping endpoints
+        # yields same segment, but on flipped elipse
+        return self.__class__(self.center,self.center+self.a,self.center-self.b,self.endpoints[1],self.endpoints[0])
     @property
     def xlim(self):
         """*INHERIT"""
-        raise NotImplementedError('TODO') # TODO
+        # xhat points along a
+        if self._xlim is None:
+            xlim = sorted([np.dot(self.endpoints[0]-self.center,self.a),np.dot(self.endpoints[1]-self.center,self.a)])
+            if (self.angles[0] <= 0 <= self.angles[1]) or (self.angles[0] <= 360 <= self.angles[1]):
+                xlim.append(norm(self.a)) # semimajor axis is in elipse
+            if (self.angles[0] <= 180 <= self.angles[1]) or (self.angles[0] <= 180+360 <= self.angles[1]):
+                xlim.append(-norm(self.a)) # anti-semimajor axis is in elipse
+            xlim = sorted(xlim)
+            self._xlim = (xlim[0],xlim[-1])
+        return self._xlim            
     def ylim(self,x):
         """*INHERIT"""
-        raise NotImplementedError('TODO') # TODO
+        # yhat points along b
+        # (x/a)^2 + (y/b)^2 = 1
+        # y = +/- b*sqrt(1-(x/a)^2)
+        norma = norm(self.a)
+        if (x <= -norma) or (x >= norma):
+            return 0.0
+        normb = norm(self.b)
+        y = normb*np.sqrt(1-(x/norma)**2)
+        ylim = [0.0,0.0]
+        # check -b side
+        theta = np.degrees(np.arctan2(-y,x))
+        if (self.angles[0] <= theta <= self.angles[1]) or (self.angles[0] <= theta+360 <= self.angles[1]):
+            ylim[0] = -y
+        # check +b side
+        theta = np.degrees(np.arctan2(y,x))
+        if (self.angles[0] <= theta <= self.angles[1]) or (self.angles[0] <= theta+360 <= self.angles[1]):
+            ylim[1] = y
+        return tuple(ylim)
+    def theta2p(self,theta):
+        """p = theta2p(theta)
+           convert angle in degrees to 3-d point
+           theta - angle or list of angles in degrees
+           p - (3,) 3-d point or list of 3-d points if theta is list
+        """
+        scalar = np.isscalar(theta)
+        if scalar:
+            theta = [theta]
+        points = [None]*len(theta)
+        for i,th in enumerate(theta):
+            points[i] = self.center + self.a*cosd(th) + self.b*sind(th)
+        if scalar:
+            return points[0]
+        else:
+            return points
     def intersect(self,other,try_other=True):
         """*INHERIT*"""
         # try intersect with types self knows about
@@ -716,9 +822,6 @@ class EllipseArc(CurvedEdge):
             raise NotImplementedError('TODO') # TODO
         else:
             super().intersect(other,try_other) # pass up the chain
-    def rotate(self,rot,project=True):
-        """*INHERIT*"""
-        raise NotImplementedError('TODO') # TODO
     def inside(self,point):
         """*INHERIT*"""
         raise NotImplementedError('TODO') # TODO
@@ -767,9 +870,6 @@ class FullEllipse(EllipseArc):
             raise NotImplementedError('TODO') # TODO
         else:
             super().intersect(other,try_other) # pass up the chain
-    def rotate(self,rot,project=True):
-        """*INHERIT*"""
-        raise NotImplementedError('TODO') # TODO
     def inside(self,point):
         """*INHERIT*"""
         raise NotImplementedError('TODO') # TODO
@@ -822,7 +922,8 @@ class Patch(object):
     Convex Patch object consisting of straight and curved edges
     convex patches only
     properties:
-        edges = tuple of Edges that make up the Patch
+        edges = tuple of Edges that make up the Patch. May not be same as 
+            those provided at initialization due to "pieces" breakup
         corners - tuple of points that make up the Patch (edge endpoints)
           edges and corners are ordered anticlockwise
         area - area of patch
@@ -852,8 +953,12 @@ class Patch(object):
             if not isinstance(edge,Edge):
                 raise ValueError('Patch should be initialized with list of Edge objects')
 
-        edges = tuple(edges)
-        self._edges = tuple(edges)
+        # break up >=180 degree edges if needed
+        pieces = []
+        for edge in edges:
+            pieces += edge.pieces
+
+        self._edges = edges = tuple(pieces)
         
         corners = [*edges[0].endpoints]
 
