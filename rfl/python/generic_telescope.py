@@ -662,11 +662,13 @@ class EllipseArc(CurvedEdge):
     """EllipseArc Edge, subclass of CurvedEdge, for elliptical arcs
     in addition to Edge, adds the following:
     properties:
+        center - 3-d location of circle's center
         a - semimajor axis 3-d vector
         b - semiminor axis 3-d vector
         angles = tuple of start and end angle, always angles[1]>angles[0]
         extent = angular extend in degrees = angles[1]-angles[0]
-        center - 3-d location of circle's center
+        ra - length of semimajor axis
+        rb - length of semiminor axis
     methods:
         theta2p(theta) = return 3-d point given angle in degrees
     """
@@ -703,7 +705,7 @@ class EllipseArc(CurvedEdge):
                 raise ValueError('Input p2 to Ellipse must be 3-vector')
             p2 = np.array(p2)
         super().__init__()
-        self.center = center
+        self._center = center
         self._endpoints = (p1,p2)
 
         # build semiaxes from r1, r2
@@ -715,17 +717,52 @@ class EllipseArc(CurvedEdge):
         if norm(ax2) > norm(ax1): # first axis is semiminor
             ax1 = ax2
             ax2 = center + r1*np.cos(t0+np.pi) + r2*np.cos(t0+np.pi)
-        self.a = ax1-center
-        self.b = ax2-center
+        self._a = ax1-center
+        self._b = ax2-center
+        self._ra = None
+        self._rb = None
         angles = [np.degrees(np.arctan2(np.dot(p-center,self.b),np.dot(p-center,self.a))) for p in self._endpoints]
         if angles[1] <= angles[0]:
             angles[1] += 360 # ensure angles[1] > angles[0]
         self._angles = tuple(angles)
         self._identity = (self.center,self.a,self.b,*self._endpoints)
+        
+        # set up local coords mixin
+        self._origin = self._center
+        self._xhat = self._a/self.ra
+        self._yhat = self._b/self.rb
+        self._zhat = np.cross(self._xhat,self._yhat)
     @classmethod
     def from_identity(cls,identity):
         """*INHERIT*"""
         return cls(*identity)
+    @property
+    def center(self):
+        return self._center
+    @property
+    def a(self):
+        return self._a
+    @property
+    def b(self):
+        return self._b
+    @property
+    def ra(self):
+        if self._ra is None:
+            self._ra = norm(self.a)
+        return self._ra
+    @property
+    def rb(self):
+        if self._rb is None:
+            self._rb = norm(self.b)
+        return self._rb
+    @property
+    def angles(self):
+        """*INHERIT*"""
+        return self._angles
+    @property
+    def extent(self):
+        """*INHERIT*"""
+        return self.angles[1]-self.angles[0]
     @property
     def length(self):
         """
@@ -735,14 +772,6 @@ class EllipseArc(CurvedEdge):
         # https://math.stackexchange.com/questions/433094/how-to-determine-the-arc-length-of-ellipse
         # https://docs.scipy.org/doc/scipy/reference/generated/scipy.special.ellipeinc.html#scipy.special.ellipeinc
         raise NotImplementedError('TODO') # TODO
-    @property
-    def angles(self):
-        """*INHERIT*"""
-        return self._angles
-    @property
-    def extent(self):
-        """*INHERIT*"""
-        return self.angles[1]-self.angles[0]
     @property
     def area(self):
         """*INHERIT*"""
@@ -781,9 +810,9 @@ class EllipseArc(CurvedEdge):
         if self._xlim is None:
             xlim = sorted([np.dot(self.endpoints[0]-self.center,self.a),np.dot(self.endpoints[1]-self.center,self.a)])
             if (self.angles[0] <= 0 <= self.angles[1]) or (self.angles[0] <= 360 <= self.angles[1]):
-                xlim.append(norm(self.a)) # semimajor axis is in elipse
+                xlim.append(self.ra) # semimajor axis is in elipse
             if (self.angles[0] <= 180 <= self.angles[1]) or (self.angles[0] <= 180+360 <= self.angles[1]):
-                xlim.append(-norm(self.a)) # anti-semimajor axis is in elipse
+                xlim.append(-self.ra) # anti-semimajor axis is in elipse
             xlim = sorted(xlim)
             self._xlim = (xlim[0],xlim[-1])
         return self._xlim            
@@ -792,11 +821,9 @@ class EllipseArc(CurvedEdge):
         # yhat points along b
         # (x/a)^2 + (y/b)^2 = 1
         # y = +/- b*sqrt(1-(x/a)^2)
-        norma = norm(self.a)
-        if (x <= -norma) or (x >= norma):
+        if (x <= -self.ra) or (x >= self.ra):
             return (0.0,0.0)
-        normb = norm(self.b)
-        y = normb*np.sqrt(1-(x/norma)**2)
+        y = self.rb*np.sqrt(1-(x/self.ra)**2)
         ylim = [0.0,0.0]
         # check -b side
         theta = np.degrees(np.arctan2(-y,x))
@@ -807,6 +834,8 @@ class EllipseArc(CurvedEdge):
         if (self.angles[0] <= theta <= self.angles[1]) or (self.angles[0] <= theta+360 <= self.angles[1]):
             ylim[1] = y
         return tuple(ylim)
+    
+    
     def theta2p(self,theta):
         """p = theta2p(theta)
            convert angle in degrees to 3-d point
@@ -862,23 +891,20 @@ class FullEllipse(EllipseArc):
         """*INHERIT*
         area inside closed edge
         """
-        raise NotImplementedError('TODO') # TODO
+        return np.pi*self.ra*self.rb
     @property
     def xlim(self):
-        norma = norm(self.a)
-        return (-norma,norma)
+        return (-self.ra,self.ra)
     def ylim(self,x):
         """*INHERIT"""
-        norma = norm(self.a)
-        if (x <= -norma) or (x >= norma):
+        if (x <= -self.ra) or (x >= self.ra):
             return (0.0,0.0)
-        y = norm(self.b)*np.sqrt(1-(x/norma)**2)
+        y = self.rb*np.sqrt(1-(x/self.ra)**2)
         return (-y,y)
     def inside(self,point):
         """*INHERIT*"""
-        x = self.dot(point-self.center,self.a)
-        y = self.dot(point-self.center,self.b)
-        return (x/norm(self.a))**2 + (y/norm(self.b))**2 <= 1
+        (x,y) = self.p2xy(point)
+        return (x/self.ra)**2 + (y/self.rb)**2 <= 1+SMALL_FRACTION
 
 class CircleArc(EllipseArc):
     """CircleArc Edge, subclass of EllipseArc, for circular arcs"""
