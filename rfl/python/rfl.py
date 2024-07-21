@@ -34,6 +34,13 @@ then the appropriate subclass is returned. see FactoryConstructorMixin
 for information on how to define the is_mine method in any subclasses
 defined from ChannelResponse, EnergyResponse, and AngleResponse
 
+Major not-implmented-yet issues:
+
+* Internal unit conversion - presently assumes cm and MeV
+* to_dict - ability to convert a channel response back to a dict (needed for writing)
+* No ability to write response function nested dicts
+* No ability to read from files (load_inst_info only takes dicts)
+
 """
 
 # NOTE: in this code where the docstring is *INHERIT* that means
@@ -221,8 +228,8 @@ def alphabeta2thetaphi(alpha,beta,alpha0,beta0,phib):
     # rows are coefficients of s1,s2,s0 terms of mag basis vectors
     # note: python inner lists are columns, in matlab row of code is row of matrix, so this code is transposed from matlab
     R = np.array([
-        [-sind(beta0)*sind(phib)-cosd(alpha0)*cosd(beta0)*cosd(phib), cosd(beta0)*sind(phib)- cosd(alpha0)*cosd(phib)*sind(beta0),cosd(phib)*sind(alpha0)]
-        [cosd(phib)*sind(beta0)-cosd(alpha0)*cosd(beta0)*sind(phib), -cosd(beta0)*cosd(phib)-cosd(alpha0)*sind(beta0)*sind(phib),sind(alpha0)*sind(phib)]
+        [-sind(beta0)*sind(phib)-cosd(alpha0)*cosd(beta0)*cosd(phib), cosd(beta0)*sind(phib)- cosd(alpha0)*cosd(phib)*sind(beta0),cosd(phib)*sind(alpha0)],
+        [cosd(phib)*sind(beta0)-cosd(alpha0)*cosd(beta0)*sind(phib), -cosd(beta0)*cosd(phib)-cosd(alpha0)*sind(beta0)*sind(phib),sind(alpha0)*sind(phib)],
         [cosd(beta0)*sind(alpha0), -cosd(beta0)*cosd(phib)-cosd(alpha0)*sind(beta0)*sind(phib), sind(alpha0)*sind(beta0),cosd(alpha0)]
         ])
 
@@ -399,7 +406,8 @@ def keyword_check_numeric_bool(*keywords,**kwargs):
         val = kwargs[key]
         while isinstance(val,(list,np.ndarray)):
             val = val[0]
-        if not np.issubdtype(type(val),np.number): return False
+        if not np.issubdtype(type(val),np.number): 
+            return False
     return True
 
 def squeeze(val):
@@ -612,11 +620,17 @@ class EnergyResponse(FactoryConstructorMixin):
     
     def __init__(self,**kwargs):
         for arg in ['CROSSCALIB','EPS']:
-            if keyword_check_numeric_bool(arg):
+            if keyword_check_numeric_bool(arg,**kwargs):
                 setattr(self,arg,squeeze(kwargs[arg]))
             else:
                 print('%s not found or not numeric in channel description, assuming unity' % arg)
                 setattr(self,arg,1.0) # default to unity
+        # set others to default values
+        for arg,val in {'E_UNIT':'MeV'}.items():
+            if arg in kwargs:
+                setattr(self,arg,kwargs[arg])
+            else:
+                setattr(self,arg,val) # default
         
     def RE(self,E):
         """
@@ -624,7 +638,7 @@ class EnergyResponse(FactoryConstructorMixin):
         Channel response at energy E (w/o CROSSCALIB)
         output is dimensionless
         """
-        raise NotImplementedError # abstract base class
+        raise NotImplementedError('Class %s did not overload of RE method, as required' % self.__class__.__name__)
     def hE(self,Egrid,**kwargs):
         """
         hE = .hE(Egrid,...)
@@ -632,7 +646,7 @@ class EnergyResponse(FactoryConstructorMixin):
         Egrid and hE are 1-d numpy arrays of the sampe size
         CROSSCALIB applied
         """
-        raise NotImplementedError  # abstract base class
+        raise NotImplementedError('Class %s did not overload of hE method, as required' % self.__class__.__name__)
     def hE0(self,Egrid=None,**kwargs):
         """
         hE = .hE(Egrid=None,...)
@@ -779,7 +793,11 @@ class ER_Table(EnergyResponse):
         if not validate_grid(self.E_GRID):
             raise ValueError('E_GRID is not a valid grid: 1-d, unique')
 
-        if self.EPS.shape != self.E_GRID.shape:
+        keyword_check_numeric('EPS',**kwargs)
+        self.EPS = squeeze(kwargs['EPS']) # TODO convert to MeV
+        if np.isscalar(self.EPS):
+            self.EPS = np.full(self.E_GRID.shape,self.EPS)
+        elif self.EPS.shape != self.E_GRID.shape:
             raise ArgSizeError('E_GRID and EPS are not the same shape')
             
         self._hE0 = np.sum(self.E_GRID*self.EPS*make_deltas(self.E_GRID))/self.CROSSCALIB  # for flat spectrum
@@ -789,7 +807,7 @@ class ER_Table(EnergyResponse):
         """*INHERIT*"""
         if self._RE is None:
             # extrapolate beyond grid with nearest edge (first/last) value
-            self._RE = interp1d(self.E_GRID,self.EPS,'linear',bounds_error=False,fill_value=[self.EPS[0],self.EPS[-1]],assum_sorted=True)
+            self._RE = interp1d(self.E_GRID,self.EPS,'linear',bounds_error=False,fill_value=(self.EPS[0],self.EPS[-1]),assume_sorted=True)
         return self._RE(E)
 
     def hE(self,Egrid,**kwargs):
@@ -820,6 +838,13 @@ class AngleResponse(FactoryConstructorMixin):
     def __init__(self,**kwargs):
         super().__init__(**kwargs)
         self.bidirectional = ('BIDIRECTIONAL' in kwargs) and (kwargs['BIDIRECTIONAL'] in [True,'TRUE'])
+        # set others to default values
+        for arg,val in {'L_UNIT':'cm'}.items():
+            if arg in kwargs:
+                setattr(self,arg,kwargs[arg])
+            else:
+                setattr(self,arg,val) # default
+
     def A(self,theta,phi):
         """
         A = .A(theta,phi)
@@ -828,7 +853,7 @@ class AngleResponse(FactoryConstructorMixin):
         A is mutual broadcast shape of theta,phi
         see module glossary for input meanings
         """
-        raise NotImplementedError # abstract base class
+        raise NotImplementedError('Class %s did not overload of A method, as required' % self.__class__.__name__)
     def hAthetaphi(self,thetagrid,phigrid,**kwargs):
         """
         hAthetaphi = .hAthetaphi(thetagrid,phigrid,...)
@@ -985,6 +1010,7 @@ class AR_SingleElement(AR_Omni):
         computed as pi*area
         """
         return self.area*np.pi
+
 class AR_Disk(AR_SingleElement):
     """
     AR_Disk
@@ -1083,8 +1109,9 @@ class AR_Table_sym(AngleResponse):
             raise ValueError('TH_GRID should start at 0')
         self._A = squeeze(kwargs['A']) # TODO: convert to cm^2
         self._Ainterpolator = None
-        if self.TH_GRID.shape != self.A.shape:
+        if self.TH_GRID.shape != self._A.shape:
             raise ArgSizeError('TH_GRID and A are not the same shape')
+        self.G = np.trapz(self._A,x=-cosd(self.TH_GRID))*2*np.pi
     def A(self,theta,phi):
         """*INHERIT*"""
         if self._Ainterpolator is None:
@@ -1263,18 +1290,19 @@ class AR_Table_asym(AngleResponse):
                 raise ValueError('%s is not a valid grid: 1-d, unique' % arg)
         self._A = squeeze(kwargs['A']) # TODO: convert to cm^2
         self._Ainterpolator = None
-        if self.A_GRID.shape != (len(self.TH_GRID),len(self.PH_GRID)):
+        if self._A.shape != (len(self.TH_GRID),len(self.PH_GRID)):
             raise ArgSizeError('A does not have shape (TH_GRID,PH_GRID)')
         if (self.TH_GRID[0] !=0):
             raise ValueError('TH_GRID should start at 0')
         if (self.PH_GRID[0] !=0) or (self.PH_GRID[-1] != 360):
             raise ValueError('PH_GRID should span [0,360]')
+        self.G = np.trapz(np.trapz(self._A,x=np.radians(self.PH_GRID),axis=1),x=-cosd(self.TH_GRID),axis=0)
     def A(self,theta,phi):
         """*INHERIT*"""
         if self._Ainterpolator is None:
             # extrapolate beyond grid with nearest edge with zero
             self._Ainterpolator = RegularGridInterpolator((self.TH_GRID,self.PH_GRID),self._A,'linear',bounds_error=False,fill_value=0.0)
-        return self._Ainterpolator(theta,phi)
+        return self._Ainterpolator((theta,phi))
             
 
 class ChannelResponse(FactoryConstructorMixin):
@@ -1304,6 +1332,13 @@ class ChannelResponse(FactoryConstructorMixin):
         """*INHERIT*"""
         keyword_check('RESP_TYPE',**kwargs)
         raise KeywordError('Supplied keywords to not define a recognized ChannelResponse')
+    def __init__(self,*args,**kwargs):
+        super().__init__(*args,**kwargs)
+        self._original_kwargs = {**kwargs} # copy original dict
+        # capture the rest of the data
+        for key,val in kwargs.items():
+            if not hasattr(self,key):
+                setattr(self,key,val)
     def copy(self):
         """
         channel.copy() return a copy of this object
@@ -1311,9 +1346,10 @@ class ChannelResponse(FactoryConstructorMixin):
         return ChannelResponse(**self.to_dict())
     def to_dict(self):
         """
-        channel.to_dict() return a nested dict of this object
+        channel.to_dict() return original dict of keywords used to
+        build this object
         """
-        raise NotImplementedError # TODO
+        return self._original_kwargs
     def R(self,E,theta,phi):
         """
         R = .R(E,theta,phi)
@@ -1323,7 +1359,7 @@ class ChannelResponse(FactoryConstructorMixin):
         R is mutual broadcast shape of E,theta,phi
         see module glossary for input meanings
         """
-        raise NotImplementedError # abstract base class
+        raise NotImplementedError('Class %s did not overload of R method, as required' % self.__class__.__name__)
     def hEthetaphi(self,Egrid,thetagrid,phigrid,**kwargs):
         """
         hEthetaphi = .hEthetaphi(Egrid,thetagrid,phigrid,...)
@@ -1501,10 +1537,14 @@ class CR_Esep(ChannelResponse):
         super().__init__(**kwargs)
         self.er = EnergyResponse(**kwargs)
         self.ar = AngleResponse(**kwargs)
+        # copy properties from constituents, if present
+        for sub in [self.er,self.ar]:
+            for key in sub.__dict__:
+                if key not in self.__dict__:
+                    setattr(self,key,getattr(sub,key))
     def R(self,E,theta,phi):
         """*INHERIT*"""
         return self.er.RE(E)*self.ar.A(theta,phi)
-        raise NotImplementedError # abstract base class
     def _merge_hEhA(hE,hA):
         """
         hEA = merge hE size (NE,) with hA size (N1,) or (N1,N2)
@@ -1536,13 +1576,8 @@ class CR_Esep(ChannelResponse):
         return self._merge_hEhA(hE,hA)
     def hE(self,Egrid,thetagrid=None,phigrid=None,**kwargs):
         """*INHERIT*"""
-        if thetagrid is None:
-            if hasattr(self,'TH_GRID'):
-                thetagrid = self.TH_GRID
-            else:
-                thetagrid = default_thetagrid(**kwargs)
         hE = self.er.hE(Egrid,**kwargs)
-        return hE*self.hA0
+        return hE*self.ar.hA0
     def hEalphabeta(self,alpha0,beta0,phib,Egrid,alphagrid,betagrid,tgrid=None,**kwargs):
         """*INHERIT*"""
         hE = self.er.hE(Egrid,**kwargs)
@@ -1597,7 +1632,7 @@ class CR_Esep_sym(CR_Esep):
     """
     @classmethod
     def is_mine(cls,*args,**kwargs):
-        return ('RESP_TYPE' in kwargs) and (kwargs['RESP_TYPE'] == '[E][TH]')
+        return ('RESP_TYPE' in kwargs) and (kwargs['RESP_TYPE'] == '[E],[TH]')
     # no further customization required
     
 class CR_Esep_asym(CR_Esep):
@@ -1607,7 +1642,7 @@ class CR_Esep_asym(CR_Esep):
     """
     @classmethod
     def is_mine(cls,*args,**kwargs):
-        return ('RESP_TYPE' in kwargs) and (kwargs['RESP_TYPE'] == '[E][TH,PH]')
+        return ('RESP_TYPE' in kwargs) and (kwargs['RESP_TYPE'] == '[E],[TH,PH]')
     # no further customization required
 
 class CR_Table_sym(ChannelResponse):
@@ -1621,7 +1656,7 @@ class CR_Table_sym(ChannelResponse):
     def is_mine(cls,*args,**kwargs):
         keyword_check('RESP_TYPE',**kwargs)
         return ('RESP_TYPE' in kwargs) and \
-                (kwargs['RESP_TYPE'] == '[E,TH]') \
+                (kwargs['RESP_TYPE'] == '[E,TH]') and \
                 ('ET_TYPE' in kwargs) and \
                 (kwargs['ET_TYPE'] == 'TBL')
     def __init__(self,**kwargs):
@@ -1641,7 +1676,7 @@ class CR_Table_sym(ChannelResponse):
         if self._Rinterpolator is None:
             # extrapolate beyond grid with nearest edge with zero
             self._Rinterpolator = RegularGridInterpolator((self.E_GRID,self.TH_GRID),self._R,'linear',bounds_error=False,fill_value=0.0)
-        return self._Rinterpolator(E,theta)
+        return self._Rinterpolator((E,theta))
     
 class CR_Table_asym(ChannelResponse):
     """
@@ -1653,7 +1688,7 @@ class CR_Table_asym(ChannelResponse):
     @classmethod
     def is_mine(cls,*args,**kwargs):
         return ('RESP_TYPE' in kwargs) and \
-                (kwargs['RESP_TYPE'] == '[E,TH,PH]') \
+                (kwargs['RESP_TYPE'] == '[E,TH,PH]') and \
                 ('ETP_TYPE' in kwargs) and \
                 (kwargs['ETP_TYPE'] == 'TBL')
     def __init__(self,**kwargs):
@@ -1673,13 +1708,229 @@ class CR_Table_asym(ChannelResponse):
     def R(self,E,theta,phi):
         """*INHERIT*"""
         if self._Rinterpolator is None:
-            # extrapolate beyond grid with nearest edge with zero
+            # extrapolate beyond grid with with zero
             self._Rinterpolator = RegularGridInterpolator((self.E_GRID,self.TH_GRID,self.PH_GRID),self._R,'linear',bounds_error=False,fill_value=0.0)
-        return self._Rinterpolator(E,theta,phi)
+        return self._Rinterpolator((E,theta,phi))
 
 # inherit dosctrings for everythin descended from FactoryConstructorMixin
 # includes ChannelResponse and its internal classes EnergyResponse and AngleResponse
 inherit_docstrings(FactoryConstructorMixin)
+
+def recursive_rename(var,renames):
+    """
+    out = recurse_rename(var,renames)
+    returns a new varaible built from var
+    where all dictionary keys and list entries are renamed
+    according to the renames dict
+    new_name = renames[old_name]
+    """
+    if isinstance(var,list):
+        out = []
+        for x in var:
+            if isinstance(x,str) and (x in renames):
+                out.append(renames[x])
+            else:
+                out.append(recursive_rename(x,renames))
+    elif isinstance(var,dict):
+        out = {}
+        for key,val in var.items():
+            if key in renames:
+                key = renames[key]
+            out[key] = recursive_rename(val,renames)
+    else:
+        out = var        
+    return out
+    
+def load_inst_info(inst_info):
+    """
+    inst_info = load_inst_info(inst_info)
+    inst_info on input is a dictionary compliant with the
+    response function file format standard data model
+    inst_info on output has individual channels replaced with
+    channel response objects based on input data
+    also propagates downward higher level data
+    
+    inst_info can also be a filename, which is assumed
+    to be .json or .h5/.hdf5 (NOT IMPLEMENTED YET)
+    """
+    
+    if isinstance(inst_info,str):
+        if inst_info.endswith('.json'):
+            inst_info = read_JSON(inst_info)
+        elif inst_info.endswith('.h5') or inst_info.endswitch('.hdf5'):
+            inst_info = read_h5(inst_info)
+        else:
+            raise RFLError('Unknown file type %s' % inst_info)
+    
+    if not isinstance(inst_info,dict):
+        raise RFLError('Only dictionary supported for inst_info argument')
+
+    renames = {'XCAL':'CROSSCALIB','XCAL_RMSE':'CROSSCALIB_RMSE'}
+    # XCAL to CROSSCALIB rename following upgrade from RFL v1.0.0 to v1.1.0
+    # in response to change from format specification v1.0.1 to v1.1.0
+
+    inst_info = recursive_rename(inst_info,renames)
+
+    # define fields that can propagate down to channel/species  responses
+    prop_flds = ['L_UNIT','E_UNIT','DEAD_TIME_PER_COUNT','DEAD_TYPE','COUNTS_MAX','CROSSCALIB','CROSSCALIB_RMSE',
+        'RESP_TYPE','ETP_TYPE','ET_TYPE','E_TYPE','TP_TYPE','TH_TYPE','E_GRID','TH_GRID','PH_GRID','EPS',
+        'R','A','G','E0','E1','DE','R1','R2','W1','W2','H1','H2','D','BIDIRECTIONAL']
+
+    for chan in inst_info['CHANNEL_NAMES']:
+        # copy inst_info to chan
+        if 'SPECIES' not in inst_info[chan]:
+            inst_info[chan]['SPECIES'] = inst_info['SPECIES']
+        for fld in prop_flds:
+            if (fld not in inst_info[chan]) and (fld in inst_info):
+                inst_info[chan][fld] = inst_info[fld]
+
+        # copy chan to species
+        for sp in inst_info[chan]['SPECIES']:
+            if isinstance(inst_info[chan][sp],ChannelResponse): continue # already initialized
+            for fld in prop_flds:
+                if (fld not in inst_info[chan][sp]) and (fld in inst_info[chan]):
+                    inst_info[chan][sp][fld] = inst_info[chan][fld]
+                # copy inst_info.(sp) to inst_info.(chan).(sp)
+                if (fld not in inst_info[chan][sp]) and (sp in inst_info) and (fld in inst_info[sp]):
+                    inst_info[chan][sp][fld] = inst_info[sp][fld]
+    
+    for chan in inst_info['CHANNEL_NAMES']:
+        for sp in inst_info[chan]['SPECIES']:
+            if isinstance(inst_info[chan][sp],ChannelResponse): continue # already initialized
+            inst_info[chan][sp] = ChannelResponse(**inst_info[chan][sp])
+
+    return inst_info        
+
+def CRs_to_dicts(inst_info):
+    """inst_dict = CRs_to_dicts(inst_info)
+    return a shallow copy of the inst_info dict structure
+    but with any ChannelResponse objects converted to dicts
+    for writing to files
+    """
+    inst_dict = {**inst_info}
+    sp0 = None
+    if 'SPECIES' in inst_info:
+        sp0 = inst_info['SPECIES']
+    for chan in inst_info['CHANNEL_NAMES']:
+        inst_dict[chan] = {**inst_info[chan]}
+        sp = sp0
+        if 'SPECIES' in inst_info[chan]:
+            sp = inst_info[chan]['SPECIES']
+        if sp:
+            for s in sp:
+                if isinstance(inst_info[chan][s],ChannelResponse):
+                    inst_dict[chan][s] = inst_info[chan][s].to_dict()
+    return inst_dict
+
+def write_JSON(inst_info,jsonfile):
+    """
+    write_JSON(inst_info,jsonfile) 
+    write instrument info dict/structure to JSON File
+    """
+    import json
+    def encoder(o):
+        if isinstance(o,np.ndarray):
+            return o.tolist()
+        # Let the base class default method raise the TypeError
+        return json.JSONEncoder.default(o)
+    inst_dict = CRs_to_dicts(inst_info)
+    with open(jsonfile,'wt') as f:
+        json.dump(inst_dict,f,default = encoder,indent=1)
+
+def read_JSON(jsonfile):
+    """
+    inst_dict = read_JSON(jsonfile) 
+    read instrument info dict/structure to JSON File
+    *Without* converting data to ChannelResponse objects
+    """
+    import json
+    with open(jsonfile,'r') as f:
+        inst_dict = json.load(f)
+    return inst_dict
+
+def write_h5(inst_info,filename):
+    """
+    write_h5(inst_info,filename) 
+    write instrument info dict/structure to HDF5 File
+    """
+    import os
+    import h5py
+    
+    def defaultAtts(var):
+        for key in ['isBoolean','isStruct','isArray','isString']:
+            var.attrs[key] = False
+    
+    def writeVar(fp,prefix,var):
+        # recursively write to HDF5 file
+
+        # call built in converters tolist, todict if present
+        for conv in ['tolist','to_list','todict','as_dict']:
+            if hasattr(var,conv):
+                conv_func = getattr(var,conv)
+                var = conv_func()
+
+        # now write standard types
+        if isinstance(var,dict):
+            if prefix != '/': fp.create_group(prefix)
+            defaultAtts(fp[prefix])
+            fp[prefix].attrs['isStruct'] = True
+
+            for key,val in var.items():
+                writeVar(fp,prefix + '/' + key, val)
+        elif isinstance(var,list):
+            if prefix != '/': fp.create_group(prefix)           
+            defaultAtts(fp[prefix])
+            fp[prefix].attrs['isArray'] = True
+            n = np.ceil(np.log10(len(var)))
+            fmt = '%s/%0' + ('%.0f' % n) + 'd'
+            for i,val in enumerate(var):
+                key = fmt % (prefix,i)
+                writeVar(fp,key,val)
+        else:
+            fp[prefix] = var
+            defaultAtts(fp[prefix])
+            fp[prefix].attrs['isString'] = isinstance(var,str)
+            fp[prefix].attrs['isBoolean'] = isinstance(var,bool)
+ 
+    inst_dict = CRs_to_dicts(inst_info)
+    
+    if os.path.exists(filename):
+        os.remove(filename)
+    if os.path.exists(filename):
+        raise Exception('Could not remove %s (required to write a new hdf5 file)' % filename)
+    with h5py.File(filename,'w') as fp:
+        writeVar(fp,'/',inst_dict)
+
+def read_h5(filename):
+    """
+    inst_dict = read_h5(filename) 
+    read instrument info dict/structure from HDF5 File
+    **without** converting channels to ChannelResponse objects
+    """
+    import h5py
+    
+    def read_recursive(fp,prefix):
+        if fp[prefix].attrs['isStruct']:
+            var = {} # make a dict, return that
+            for key in fp[prefix]:
+                var[key] = read_recursive(fp,prefix+'/'+key)
+        elif fp[prefix].attrs['isArray']:
+            keys = [k for k in fp[prefix]]
+            var = []
+            for key in sorted(keys):
+                var.append(read_recursive(fp,prefix+'/'+key))
+        else:
+            var = fp[prefix][()]
+            if fp[prefix].attrs['isBoolean']:
+                var = bool(var)
+            elif fp[prefix].attrs['isString']:
+                var = var.decode('utf-8')
+        return var
+
+    with h5py.File(filename,'r') as fp:
+        inst_dict = read_recursive(fp,'/')
+    return inst_dict
+    
 
 if __name__ == '__main__':
 
@@ -1731,5 +1982,5 @@ if __name__ == '__main__':
     
     # very simple test of RFL class instantiation
     print('Omni int',ChannelResponse(RESP_TYPE='[E]',E_TYPE='INT',E0=2))
-    print('Tele_sym wide',ChannelResponse(RESP_TYPE='[E][TH]',E_TYPE='WIDE',E0=2,E1=3,TH_TYPE='CYL_TELE',R1=1,R2=2,D=3.0))
-    print('Tele_asym diff',ChannelResponse(RESP_TYPE='[E][TH,PH]',E_TYPE='DIFF',E0=2,DE=1,TP_TYPE='RECT_TELE',W1=1.0,H1=2.0,W2=0.5,H2=1.0,D=3.0))
+    print('Tele_sym wide',ChannelResponse(RESP_TYPE='[E],[TH]',E_TYPE='WIDE',E0=2,E1=3,TH_TYPE='CYL_TELE',R1=1,R2=2,D=3.0))
+    print('Tele_asym diff',ChannelResponse(RESP_TYPE='[E],[TH,PH]',E_TYPE='DIFF',E0=2,DE=1,TP_TYPE='RECT_TELE',W1=1.0,H1=2.0,W2=0.5,H2=1.0,D=3.0))
