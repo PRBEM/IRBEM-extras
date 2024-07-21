@@ -156,7 +156,7 @@ def var2hdf5(var,filename,converter=None):
         # call built in converters tolist, todict if present
         for conv in ['tolist','to_list','todict','as_dict']:
             if hasattr(var,conv):
-                conv_func = getattr(var)
+                conv_func = getattr(var,conv)
                 var = conv_func()
         
         if var is None:
