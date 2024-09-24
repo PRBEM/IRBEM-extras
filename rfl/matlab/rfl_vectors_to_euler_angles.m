@@ -56,7 +56,7 @@ if any(i0(:)),
     phib(i0) = 180/pi*atan2(dot(S1hat(i0,:),dhat(i0,:),2),-dot(S2hat(i0,:),dhat(i0,:),2));
 end
 beta0 = zeros(NB,1); % beta0=0 when alpha0=0
-beta0(~isfinite(alpha0)) = nan; % beta0=NaN when alhpa0=NaN
+beta0(~isfinite(alpha0)) = nan; % beta0=NaN when alpha0=NaN
 
 i0 = alpha0>0;
 if any(i0(:)),

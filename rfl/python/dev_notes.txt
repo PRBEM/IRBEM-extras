@@ -1,0 +1,85 @@
+These are the matlab files:
+
+classes
+rfl_bc_init.m - initialize an RFL boundary condition
+rfl_init_Eseparable_csym.m - initialize [E] and [E],[TH] types
+    including TBL,CYL_TELE,SLAB,DISK,omni,telescope_csym,single_element (pinhole in its own file)
+rfl_init_Eseparable.m - initialize [E][TH,PH] types
+    including TBL, INT, WIDE, DIFF, telescope_rect
+rfl_init_inseparable_csym.m - initialize [E,TH] type
+rfl_init_inseparable.m - initialize [E,TH,PH] type
+rfl_init_pinhole.m - initialize pinhole angular response
+
+Class heirarchy:
+ChannelResponse
+    inner class EnergyResponse: TBL INT WIDE DIFF
+    inner class AngleResponse: TBL CYL_TELE SLAB DISK PINHOLE, RECT_TELE(TH,PH)
+    omni [E]
+        Esep_sym [E][TH]
+            Esep_asym [E][TH,PHI]
+                TBL(TH,PHI)
+        insep_sym [E,TH]
+            TBL(E,TH)
+            insep_asym [E,TH,PHI]
+                TBL(E,TH,PHI)
+Need a giant factory function to initialize the right classes
+could use @classmethod functions to dispatch for subclassing
+
+class methods:
+(E,alpha,beta,time)
+.rfl_make_hEiso.m - make weights for numerical integral over E
+.rfl_make_hEalpha.m - make weights for double numerical integral over E,alpha
+.rfl_make_hEalphabeta.m - make weights for triple numerical integral over E,alpha,beta
+.rfl_make_halpha.m - make weights for numerical integral over alpha
+.rfl_make_halphabeta.m - make weights for double numerical integral over alpha,beta
+(E,theta,phi)
+.rfl_make_hE.m - make weights for numerical integral over E, (integrated over theta,phi).
+.rfl_make_hEtheta.m - make weights for double numerical integral over E,theta
+.rfl_make_hEthetaphi.m - make weights for triple numerical integral over E,theta,phi
+.rfl_make_htheta.m - make weights for numerical integral over theta
+.rfl_make_hthetaphi.m - make weights for double numerical integral over theta,phi
+
+internal utilities: (did not go this way)
+.rfl_interp_weights_1d.m - make weights to interpolate in 1 D with boundary condition
+.rfl_interp_weights_2d.m - make weights to interpolate in 2 D with boundary conditions
+.rfl_interp_weights_3d.m - make weights to interpolate in 3 D with boundary conditions
+.rfl_lbf_eval.m - evaluate linear basis function with boyndary condition
+
+external utilities:
+.rfl_alphabeta2thetaphi.m - convert alpha,beta to theta,phi
+.rfl_get_list_neighbors.m - find point's bounding neighbors in list
+rfl_latlon_to_euler_angles.m - convert context vectors in lat/lon to euler angles
+rfl_load_inst_info.m - load a inst_info object from file or dict
+.rfl_make_deltas.m - make integration weights for a 1 D grid
+.rfl_make_grid.m - make evenly spaced grid from rule
+rfl_vectors_to_euler_angles.m - conver tcontext vectors to euler angles
+.rfl_result_code_to_string.m - convert result code to string
+rfl_struct2cdf.m - save inst_info as CDF
+rfl_struct2h5.m - save inst_info as HDF5
+rfl_struct2mat.m - save inst_info as .mat
+.rfl_thetaphi2alphabeta.m - convert theta,phi to alpha,beta
+
+applications:
+rfl_bowtie.m - perform bowtie analysis
+rfl_iso_csv.m - export isotropic response function as CSV file
+
+demos and tests:
+rfl_bowtie_demo.m - demo bowtie analysis
+rfl_interp_test.m - test interpolation via LBFs
+rfl_invlib_example.m - demo use of rfl with invlib
+rfl_make_all_types.m - make one instance of each type of response function
+rfl_make_ico.m - make ICO inst_info object
+rfl_make_sampex_pet.m - make SAMPEX PET inst_info object
+rfl_resp_to_3D_model_example.m - project model onto SAMPEX PET sensor
+
+
+general purpose 2-element telescope:
+each element has its own internal cartesian coordinate system:
+primary axis (x), secondary axis (y), z = cross(x,y)
+limits on x integration xlim
+limits on y integratoin as a function of x: ylim(x)
+d = (x2-x1,y2-y1)
+G = int_xlim1 dx1 int_ylim1(x1) dt1 int_xlim2 dx2 int_ylim2(x2) dy2 |z1.d|/sqrt(|z1||d|) |z2.d|/sqrt(|z2||d|)
+How to express as 
+G = int_xlim1 dx1 int_ylim1(x1) dy1 int_theta dcostheta int_phi dphi A(x1,y1,theta,phi)
+

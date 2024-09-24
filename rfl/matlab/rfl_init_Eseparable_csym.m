@@ -125,6 +125,7 @@ function A = telescope_csym_A(inst_info,theta,phi)
 % effective area for 2-element cylindrical telescope
 % ignores phi
 % right out of Sullivan's updated paper, equation (10)
+warning('Bidirectional case seems to have an error. Shoulding R1,R2 need to be swapped?')
 A = zeros(size(theta));
 
 if inst_info.internal.bidirectional,
