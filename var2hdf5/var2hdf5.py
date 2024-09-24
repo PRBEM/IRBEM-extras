@@ -461,6 +461,5 @@ def test():
         idl_count += 1
     print('Total IDL files read: %d' % idl_count)
 
-
 if __name__ == '__main__':
     test()    
