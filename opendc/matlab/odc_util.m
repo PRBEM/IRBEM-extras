@@ -161,7 +161,7 @@ function util = odc_util
 % mks.electron.m0 = 9.10938215e-31; % rest mass, kg
 % mks.proton.m0 = 1.672621637e-27; % rest mass, kg
 % mks.proton.q = +mks.e; % charge, Coulombs
-% mks.R_E =  6371.2e3 % Earth Radius, m (IAU 1966 mean?, used by IRBEM lib GDZ)
+% mks.R_E =  6371.2e3 % Earth Radius, m (surface-area-averaged reference value)
 % (mks.RE deprecated because it was in km which is not an mks unit)
 
 %
