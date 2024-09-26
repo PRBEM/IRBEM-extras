@@ -451,6 +451,14 @@ def test():
             fails += 1
 
     print('TOTAL FAILS: %d' % fails)        
+    # now do IDL tests    
+    idl_count = 0
+    for file in os.listdir():
+        if not file.endswith('_idl.h5'): continue
+        print('Reading IDL file %s' % file)
+        var = hdf52var(file)
+        idl_count += 1
+    print('Total IDL files read: %d' % idl_count)
 
     # now do IDL tests    
     idl_count = 0
