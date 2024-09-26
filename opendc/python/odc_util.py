@@ -137,9 +137,8 @@ def dipole_mirror_latitude(alpha0,units = 'deg'):
     angles in radians
     """
     
-    if np.isscalar(alpha0):
-        alpha0 = np.array([alpha0])
-        return dipole_mirror_latitude(alpha0,units=units)[0]
+    if not np.isscalar(alpha0):
+        return np.vectorize(dipole_mirror_latitude)(alpha0,units=units)
     
     if units.lower().startswith('d'):
         torad = np.pi/180
@@ -155,14 +154,12 @@ def dipole_mirror_latitude(alpha0,units = 'deg'):
 
     # note, below fixes error in Shprits thesis, eqn  F13
     # which has sina0**2. Instead use sina0**4 from Shprits 2006 eqn 10.
-    mirror_lat = np.zeros(len(sina0))*np.nan
-    for i in range(len(sina0)):
-        Px = [1, 0, 0, 0, 0, 3*sina0[i]**4, -4*sina0[i]**4]
-        xroots = np.roots(Px)
-        #xroot = xroots((imag(xroots)==0) & (real(xroots)>0))
-        xroot = xroots[(np.abs(xroots.imag)<1e-30) & (xroots.real>0)]        
-        mirror_lat[i] = np.degrees(np.arccos(np.sqrt(xroot))) # mirror latitude
-    return mirror_lat
+    Px = [1, 0, 0, 0, 0, 3*sina0**4, -4*sina0**4]
+    xroots = np.roots(Px)
+    #xroot = xroots((imag(xroots)==0) & (real(xroots)>0))
+    xroot = xroots[(np.abs(xroots.imag)<1e-30) & (xroots.real>0)]        
+    mirror_lat = np.degrees(np.arccos(np.sqrt(xroot.real))) # mirror latitude
+    return mirror_lat[0] # array to scalar
 
 global _maglat_table
 _maglat_table = None
@@ -274,9 +271,9 @@ def GyroPeriod(Species,Energy,MagLat,L):
     Tg = 1./f
     return Tg
 
-def dipoleB(L,MagLat,phi_deg,nargout=1):
+def dipoleB(L,MagLat=0,phi_deg=0,nargout=1):
     """
-    B = dipoleB(L,MagLat,phi_deg,nargout=1)
+    B = dipoleB(L,MagLat=0,phi_deg=0,nargout=1)
     (B,Bx,By,Bz,X,Y,Z) = dipoleB(L,MagLat,phi_deg,nargout=7)
     computes magnitude of dipole field, nT
     returns components and positions (in RE) if requested
