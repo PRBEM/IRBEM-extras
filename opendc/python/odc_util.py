@@ -18,7 +18,7 @@ mks['MeV'] = mks['eV']*1e6 # Joules
 mks['GeV'] = mks['eV']*1e9 # Joules
 mks['epsilon0'] = 8.854187817e-12 # % F/m = C^2 s^2  / kg / m^3 - permitivity of free space
 mks['mu0'] = 4*np.pi*1e-7 # % H/m = N/A^2 = kg m/C^2 - permeability of free space
-mks['R_E'] = 6371.2e3 # m, IAU 1966? IBEM GDZ value
+mks['R_E'] = 6371.2e3 # m, surface-area-averaged reference value of Earth Radius
 mks['electron'] = {}
 mks['electron']['q'] = -mks['e'] # charge
 mks['electron']['m0'] = 9.10938215e-31 # rest mass, kg
@@ -136,6 +136,10 @@ def dipole_mirror_latitude(alpha0,units = 'deg'):
     mirror_lat = dipole_mirror_latitude(alpha0,'rad')
     angles in radians
     """
+    
+    if np.isscalar(alpha0):
+        alpha0 = np.array([alpha0])
+        return dipole_mirror_latitude(alpha0,units=units)[0]
     
     if units.lower().startswith('d'):
         torad = np.pi/180
