@@ -62,26 +62,58 @@ atand = lambda x: np.degrees(np.arctan(x))
 atan2d = lambda x,y: np.degrees(np.arctan2(y,x))
 
 
-def inherit_docstrings(cls,parent = None):
+def inherit_docstrings(cls,parent = None,do_specials=False):
     """
-    inherit_docstrings(cls,parent = None)
-    propagate docstring down the class tree
+    cls = inherit_docstrings(cls)
+    inherit_docstrings(cls,parent = None,do_specials=False)
+    propagate docstrings down the class tree
     replacing string "*INHERIT*" with docstring
     from corresponding item in parent class
+    parent - if parent is None, then will go up to the top of the inheritance tree 
+      and then down through the whole tree. Otherwise provide parent classs
+    do_specials -- apply to attributes starting & ending with __ (e.g., __dict__)
+    use as class decorator or
+    call on base class after definition of new sublcasses
+    can call multiple times
     """
+    print('ihd called with',cls,parent,do_specials,cls.__bases__)
+    if (parent is None) and cls.__bases__ and (cls.__bases__ != (object,)):
+        print('Going up')
+        # go up to the top of the tree and start there
+        for base in cls.__bases__:
+            inherit_docstrings(base,do_specials=do_specials)
+        return cls
+
     if parent:
+        # do this level in tree (cls itself)
+        print('Doing',cls)
         for name in dir(cls):
-            if name.startswith('__'): continue # don't mess with special items
+            if name in ['__doc__','__module__']: continue 
+            if (not do_specials) and name.startswith('__') and name.endswith('__'): 
+                continue # don't mess with special items
+            if not hasattr(parent,name): continue
+            p = getattr(parent,name)
+            if p is None: continue
             m = getattr(cls,name)
-            if hasattr(parent,'__doc__') and hasattr(m,'__doc__') and (getattr(m,'__doc__') is not None):
+            if (p.__doc__ is not None) and hasattr(m,'__doc__') and (m.__doc__ is not None):
                 if type(m).__name__ == 'method':
                     # set the method's function's docstring
-                    m.__func__.__doc__ = m.__func__.__doc__.replace('*INHERIT*',parent.__doc__)
+                    if not hasattr(p,'__func__'): continue
+                    p = p.__func__ # from parent function's docstring
+                    if p is None: continue
+                    doc_owner = m.__func__
                 else:
                     # set the object's docstring
-                    m.__doc__ = m.__doc__.replace('*INHERIT*',parent.__doc__)
+                    doc_owner = m
+                print('Working on',name)
+                if '*INHERIT*' in doc_owner.__doc__: # check avoids some read-only issuess
+                    doc_owner.__doc__ = doc_owner.__doc__.replace('*INHERIT*',p.__doc__)
+
+    # do subclasses of cls, down the tree
     for c in cls.__subclasses__():
-        inherit_docstrings(c,parent=cls)
+        print('Going down',cls,c)
+        inherit_docstrings(c,parent=cls,do_specials=do_specials)
+    return cls
 
 def get_list_neighbors(lst,q):
     """
@@ -1712,7 +1744,7 @@ class CR_Table_asym(ChannelResponse):
             self._Rinterpolator = RegularGridInterpolator((self.E_GRID,self.TH_GRID,self.PH_GRID),self._R,'linear',bounds_error=False,fill_value=0.0)
         return self._Rinterpolator((E,theta,phi))
 
-# inherit dosctrings for everythin descended from FactoryConstructorMixin
+# inherit dosctrings for everything descended from FactoryConstructorMixin
 # includes ChannelResponse and its internal classes EnergyResponse and AngleResponse
 inherit_docstrings(FactoryConstructorMixin)
 
