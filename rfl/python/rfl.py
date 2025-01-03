@@ -76,9 +76,7 @@ def inherit_docstrings(cls,parent = None,do_specials=False):
     call on base class after definition of new sublcasses
     can call multiple times
     """
-    print('ihd called with',cls,parent,do_specials,cls.__bases__)
     if (parent is None) and cls.__bases__ and (cls.__bases__ != (object,)):
-        print('Going up')
         # go up to the top of the tree and start there
         for base in cls.__bases__:
             inherit_docstrings(base,do_specials=do_specials)
@@ -86,7 +84,6 @@ def inherit_docstrings(cls,parent = None,do_specials=False):
 
     if parent:
         # do this level in tree (cls itself)
-        print('Doing',cls)
         for name in dir(cls):
             if name in ['__doc__','__module__']: continue 
             if (not do_specials) and name.startswith('__') and name.endswith('__'): 
@@ -105,13 +102,11 @@ def inherit_docstrings(cls,parent = None,do_specials=False):
                 else:
                     # set the object's docstring
                     doc_owner = m
-                print('Working on',name)
                 if '*INHERIT*' in doc_owner.__doc__: # check avoids some read-only issuess
                     doc_owner.__doc__ = doc_owner.__doc__.replace('*INHERIT*',p.__doc__)
 
     # do subclasses of cls, down the tree
     for c in cls.__subclasses__():
-        print('Going down',cls,c)
         inherit_docstrings(c,parent=cls,do_specials=do_specials)
     return cls
 
