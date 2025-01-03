@@ -62,7 +62,7 @@ atand = lambda x: np.degrees(np.arctan(x))
 atan2d = lambda x,y: np.degrees(np.arctan2(y,x))
 
 
-def inherit_docstrings(cls,parent = None,do_specials=False):
+def inherit_docstrings(cls=None,*,parent=None,do_specials=False):
     """
     cls = inherit_docstrings(cls)
     inherit_docstrings(cls,parent = None,do_specials=False)
@@ -76,6 +76,8 @@ def inherit_docstrings(cls,parent = None,do_specials=False):
     call on base class after definition of new sublcasses
     can call multiple times
     """
+    if cls is None: # called w/ named arguments
+        return lambda cls: inherit_docstrings(cls,parent=parent,do_specials=do_specials)
     if (parent is None) and cls.__bases__ and (cls.__bases__ != (object,)):
         # go up to the top of the tree and start there
         for base in cls.__bases__:
