@@ -1088,7 +1088,7 @@ class AR_Tele_Cyl(AR_csym):
         super().__init__(**kwargs) # handles BIDIRECTIONAL
         keyword_check_numeric('R1','R2','D',**kwargs)
         self.R1 = squeeze(kwargs['R1']) # TODO: convert to cm
-        self.R2 = squeeze(kwargs['R1']) # TODO: convert to cm
+        self.R2 = squeeze(kwargs['R2']) # TODO: convert to cm
         self.D = squeeze(kwargs['D']) # TODO: convert to cm
         self.Rs = min(self.R1,self.R2)
         self.thetac = atand(np.abs(self.R1-self.R2)/self.D)
