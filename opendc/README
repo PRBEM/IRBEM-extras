@@ -1,4 +1,4 @@
-Open Diffusion Coefficients Library
+Open Diffusion Code Library
 
 *************************************************************************
 By default, all files in this folder and its sub folders are part of
@@ -23,15 +23,6 @@ NNX10AQ51G
 *************************************************************************
 
 The goal of OpenDC is to provide a central repository for validated
-codes that compute the diffusion coefficients widely used in radiation
-belt physics. Unlike the main IRBEM-LIB, many OpenDC routines may
-exist only in one high-level language.
-
-matlab/Daa_FA_local.m the local angle and momentum diffusion
-coefficients for gyroresonant interactions with parallel-propagating
-waves in a proton plasma, following Summers 2005.
-
-matlab/Sheeley2001.m - the plasmasphere/trough density model of
-Sheeley 2001.
-
-(This list is already out of date)
+codes that compute the diffusion coefficients and other operations 
+widely used in radiation belt physics. Unlike the main IRBEM-LIB,
+many OpenDC routines may exist only in one high-level language.
