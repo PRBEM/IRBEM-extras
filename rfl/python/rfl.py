@@ -143,50 +143,60 @@ def get_list_neighbors(lst, q):
     """
     @brief Find the bounding neighbors of query value(s) in a sorted list.
     
-    This function determines the indices of the two nearest values in a sorted list 'lst' 
-    that satisfy the condition: lst[index0] <= q < lst[index1]. For a scalar query 'q', 
-    it returns an array of shape (2,). For multiple query values, it returns an array of 
-    shape (len(q), 2). An index value of -1 indicates that the corresponding query is out of bounds.
+    This function determines the indices of the two nearest values in a sorted
+    list 'lst' that satisfy the condition: lst[index0] <= q < lst[index1]. For
+    a scalar query 'q', it returns an array of shape (2,). For multiple query
+    values, it returns an array of shape (len(q), 2). An index value of -1 
+    indicates that the corresponding query is out of bounds.
     
     @param lst A list or array-like sequence of numeric values sorted in ascending order.
     @param q A numeric scalar or an array-like sequence of query values.
     
     @return 
-      - For a scalar q: a NumPy array of shape (2,), where the first element is the index such that 
-        lst[index0] <= q < lst[index1].
+      - For a scalar q: a NumPy array of shape (2,), where the first element is the index such that lst[index0] <= q < lst[index1].
       - For an array of query values: a NumPy array of shape (len(q), 2) with the same semantics.
-      - An index of -1 indicates that the corresponding query value is not within the bounds of lst.
+      - An index of -1 indicates that the query value q is not within the bounds of lst.
     """
+    ## NOTE: should check if lst is sorted ##
     lst = np.array(lst).ravel()
     N = len(lst)
     is_scalar = np.isscalar(q)
     q = np.atleast_1d(q).ravel()
     i = np.full((len(q), 2), -1)
     iq = np.isfinite(q)
-    i[iq, 0] = interp1d(lst, np.arange(N, dtype=int), 'nearest', bounds_error=False)(q[iq])
+    i[iq, 0] = interp1d(lst, np.arange(N, dtype=int), 'nearest',
+                        bounds_error=False)(q[iq])
     f = (i[:, 0] >= 0)
     if any(f):
-        i[f, 0] = i[f, 0] - (q[f] < lst[i[f, 0]])  # force to greatest list <= q
-        i[f, 1] = i[f, 0] + 1  # next neighbor to right
+        # force to greatest list <= q
+        i[f, 0] = i[f, 0] - (q[f] < lst[i[f, 0]])
+
+        # next neighbor to right
+        i[f, 1] = i[f, 0] + 1  
     # limit checks
     i[i >= N] = -1
     i[i < 0] = -1
     if is_scalar:
         i = i[0, :]
+        
     return i
+
 
 def make_deltas(grid, int_method='trapz', **kwargs):
     """
     @brief Compute integration weights for a 1D grid.
 
-    Calculates default weights (deltas) for a given 1-dimensional grid based on the specified 
-    integration method. For grids with more than one element, the trapezoidal method is applied: 
-    the endpoints are weighted as half the distance to the adjacent point, while interior points 
-    are weighted as half the difference between the following and preceding grid values.
+    Calculates default weights (deltas) for a given 1-dimensional grid based on
+    the specified integration method. For grids with more than one element, the
+    trapezoidal method is applied: 
+      - the endpoints are weighted as half the distance to the adjacent point
+      - the interior points are weighted as half the difference between the 
+        following and preceding grid values.
     
     Special cases:
       - If grid is None or empty, returns 1.
-      - If grid has a single element, returns that element (assuming it represents a delta value).
+      - If grid has a single element, returns that element (assuming it 
+        represents a delta value).
     Note that additional keyword arguments are ignored.
 
     @param grid
@@ -197,8 +207,9 @@ def make_deltas(grid, int_method='trapz', **kwargs):
         Additional keyword arguments (ignored).
 
     @return
-        A NumPy array of weights with the same shape as grid for multi-element grids, a scalar value 
-        when grid has one element, or 1 for a None/empty grid.
+        A NumPy array of weights with the same shape as grid for multi-element
+        grids, a scalar value when grid has one element, or 1 for a None/empty
+        grid.
 
     @exception ValueError
         Thrown when an unknown integration method is specified.
@@ -221,15 +232,17 @@ def make_deltas(grid, int_method='trapz', **kwargs):
 
     return d
 
+
 def broadcast_grids(*args, mesh=False):
     """
     @brief Prepare multiple grids for broadcasting.
     
-    This function reshapes two or more input grids so that they are mutually broadcastable. Two modes 
-    are provided:
+    This function reshapes two or more input grids so that they are mutually
+    broadcastable. Two modes are provided:
     
-      - When mesh is False, the input grids are reshaped by inserting singleton dimensions before 
-        and after the data dimension. For example, in a 2-D case:
+      - When mesh is False, the input grids are reshaped by inserting singleton
+        dimensions before and after the data dimension. For example, in a 2-D 
+        case:
           - The first grid becomes shape (N1, 1)
           - The second grid becomes shape (1, N2)
         In a 3-D case:
@@ -237,15 +250,18 @@ def broadcast_grids(*args, mesh=False):
           - The second grid becomes shape (1, N2, 1)
           - The third grid becomes shape (1, 1, N3)
           
-      - When mesh is True, the function returns meshgrid arrays corresponding to the provided inputs,
-        with each output array having the shape (len(x1), len(x2), ..., len(xN)).
+      - When mesh is True, the function returns meshgrid arrays corresponding
+        to the provided inputs, with each output array having the shape 
+        (len(x1), len(x2), ..., len(xN)).
     
     @param args
         Two or more array-like grids that are to be broadcast.
     @param mesh
         Boolean flag specifying the output format:
-          - If True, output arrays are created using numpy.meshgrid with indexing set to "ij".
-          - If False, each grid is reshaped so that the grids are mutually broadcastable.
+          - If True, output arrays are created using numpy.meshgrid with 
+            indexing set to "ij".
+          - If False, each grid is reshaped so that the grids are mutually 
+            broadcastable.
     
     @return A tuple of arrays with the appropriate reshaped or meshed grids.
     """
@@ -260,15 +276,18 @@ def broadcast_grids(*args, mesh=False):
             X[i] = np.reshape(x, s)
         return tuple(X)
 
+    
 def validate_grid(grid):
     """
     @brief Validate a 1-D grid.
     
-    Checks if the provided grid is a one-dimensional NumPy array and that the values are strictly increasing.
+    Checks if the provided grid is a one-dimensional NumPy array and that the
+    values are strictly increasing.
     
     @param grid A NumPy array representing the grid.
     
-    @return True if grid is a flat (1-D) array and strictly increasing; False otherwise.
+    @return True if grid is a flat (1-D) array and strictly increasing; False
+    otherwise.
     """
     if grid.shape != (grid.size,):
         return False
@@ -276,12 +295,14 @@ def validate_grid(grid):
         return False
     return True
 
+
 def default_thetagrid(**kwargs):
     """
     @brief Generate a default theta grid.
     
-    Returns a default theta grid as a 1-D NumPy array linearly spaced between 0.0 and 180.0 degrees 
-    with one degree spacing (closed endpoints). Keyword arguments are accepted for future modifications.
+    Returns a default theta grid as a 1-D NumPy array linearly spaced between 
+    0.0 and 180.0 degrees with one degree spacing (closed endpoints). Keyword
+    arguments are accepted for future modifications.
     
     @param kwargs Additional keyword arguments (currently ignored).
     
@@ -290,12 +311,14 @@ def default_thetagrid(**kwargs):
     # TODO: implement some keyword controls
     return np.linspace(0.0, 180.0, 181)  # 1 degree spacing, closed endpoints
 
+
 def default_phigrid(**kwargs):
     """
     @brief Generate a default phi grid.
     
-    Returns a default phi grid as a 1-D NumPy array linearly spaced between 0.0 and 360.0 degrees 
-    with one degree spacing (closed endpoints). Keyword arguments are accepted for future modifications.
+    Returns a default phi grid as a 1-D NumPy array linearly spaced between 0.0
+    and 360.0 degrees with one degree spacing (closed endpoints). Keyword
+    arguments are accepted for future modifications.
     
     @param kwargs Additional keyword arguments (currently ignored).
     
@@ -308,8 +331,9 @@ def default_alphagrid(**kwargs):
     """
     @brief Generate a default alpha grid.
     
-    Returns a default alpha grid as a 1-D NumPy array linearly spaced between 0.0 and 180.0 degrees 
-    with one degree spacing (closed endpoints). Keyword arguments are accepted for future modifications.
+    Returns a default alpha grid as a 1-D NumPy array linearly spaced between
+    0.0 and 180.0 degrees with one degree spacing (closed endpoints). Keyword
+    arguments are accepted for future modifications.
     
     @param kwargs Additional keyword arguments (currently ignored).
     
@@ -322,8 +346,9 @@ def default_betagrid(**kwargs):
     """
     @brief Generate a default beta grid.
     
-    Returns a default beta grid as a 1-D NumPy array linearly spaced between 0.0 and 360.0 degrees 
-    with one degree spacing (closed endpoints). Keyword arguments are accepted for future modifications.
+    Returns a default beta grid as a 1-D NumPy array linearly spaced between
+    0.0 and 360.0 degrees with one degree spacing (closed endpoints). Keyword
+    arguments are accepted for future modifications.
     
     @param kwargs Additional keyword arguments (currently ignored).
     
@@ -336,13 +361,15 @@ def alphabeta2thetaphi(alpha, beta, alpha0, beta0, phib):
     """
     @brief Convert pitch angle and gyrophase to instrument angles.
 
-    Given the pitch angle (alpha) and gyrophase (beta) along with instrument orientation 
-    parameters (alpha0, beta0, phib), this function computes the corresponding instrument angles 
-    theta and phi (all in degrees). When theta equals 0 or 180 degrees, phi is set to 0.
+    Given the pitch angle (alpha) and gyrophase (beta) along with instrument 
+    orientation parameters (alpha0, beta0, phib), this function computes the 
+    corresponding instrument angles theta and phi (all in degrees). When theta
+    equals 0 or 180 degrees, phi is set to 0.
 
-    The input angles alpha and beta must be mutually broadcastable, and similarly, the parameters 
-    alpha0, beta0, and phib must be mutually broadcastable. The resulting output shape is determined 
-    by broadcasting alpha and beta with the broadcast shape of alpha0, beta0, and phib.
+    The input angles alpha and beta must be mutually broadcastable, and 
+    similarly, the parameters alpha0, beta0, and phib must be mutually 
+    broadcastable. The resulting output shape is determined by broadcasting 
+    alpha and beta with the broadcast shape of alpha0, beta0, and phib.
 
     @param alpha
       Pitch angle(s) in degrees.
@@ -358,10 +385,12 @@ def alphabeta2thetaphi(alpha, beta, alpha0, beta0, phib):
     @return A tuple (theta, phi) where:
       - theta: Instrument angle theta in degrees.
       - phi: Instrument angle phi in degrees.
-    The shapes of theta and phi correspond to the combined broadcasted shapes of the input parameters.
+    The shapes of theta and phi correspond to the combined broadcasted shapes 
+    of the input parameters.
 
     @exception ValueError
-      Thrown if alpha and beta are not mutually broadcastable or if alpha0, beta0, and phib are not mutually broadcastable.
+      Thrown if alpha and beta are not mutually broadcastable or if alpha0, 
+      beta0, and phib are not mutually broadcastable.
     """
     
     try:
@@ -376,8 +405,8 @@ def alphabeta2thetaphi(alpha, beta, alpha0, beta0, phib):
     # define rotation matrix
     # columns are coefficients of c,d,b terms of instrument basis vectors
     # rows are coefficients of s1,s2,s0 terms of magnetic basis vectors
-    # note: python inner lists are columns; in MATLAB a row of code is a row of the matrix,
-    # so this code is transposed compared to MATLAB.
+    # note: python inner lists are columns; in MATLAB a row of code is a row
+    #       of the matrix, so this code is transposed compared to MATLAB.
     R = np.array([
         [-sind(beta0)*sind(phib)-cosd(alpha0)*cosd(beta0)*cosd(phib), cosd(beta0)*sind(phib)- cosd(alpha0)*cosd(phib)*sind(beta0), cosd(phib)*sind(alpha0)],
         [cosd(phib)*sind(beta0)-cosd(alpha0)*cosd(beta0)*sind(phib), -cosd(beta0)*cosd(phib)-cosd(alpha0)*sind(beta0)*sind(phib), sind(alpha0)*sind(phib)],
@@ -386,10 +415,14 @@ def alphabeta2thetaphi(alpha, beta, alpha0, beta0, phib):
 
     x = np.array([sind(alpha)*cosd(beta), sind(alpha)*sind(beta), cosd(alpha)])
     # y = R*x (sum over the 2nd dimension of R and 1st dimension of x)
-    y = np.tensordot(x, R, axies=((0,), (1,)))  # order chosen to maintain alpha,beta shape before alpha0,beta0,phib shape
+    
+    # Order chosen to maintain alpha,beta shape before alpha0,beta0,phib shape
+    y = np.tensordot(x, R, axes=((0,), (1,)))
+    
     theta = acosd(y[3])
     phi = atan2d(y[2], y[1])
     phi[(theta == 0.0) | (theta == 180.0)] = 0
+    
     return theta, phi
 
 
@@ -397,13 +430,19 @@ def thetaphi2alphabeta(theta, phi, alpha0, beta0, phib):
     """
     @brief Convert instrument angles to pitch angle and gyrophase.
 
-    This function performs the inverse transformation of instrument angles (theta, phi) into 
-    pitch angle (alpha) and gyrophase (beta), all given in degrees. When alpha equals 0 or 180 
-    degrees, beta is set to 0.
+    This function performs the inverse transformation of instrument angles 
+    (theta, phi) into pitch angle (alpha) and gyrophase (beta), all given in 
+    degrees. When alpha equals 0 or 180 degrees, beta is set to 0.
 
-    The input angles theta and phi must be mutually broadcastable, and the parameters alpha0, beta0, 
-    and phib must be mutually broadcastable. The computation leverages the similarity of the forward 
-    and inverse transformations by swapping beta0 and phib.
+    The input angles theta and phi must be mutually broadcastable, and the 
+    parameters alpha0, beta0, and phib must be mutually broadcastable. The 
+    computation leverages the similarity of the forward and inverse 
+    transformations by swapping beta0 and phib.
+
+    The alpha, beta to theta, phi transform is identical when alpha corresponds
+    to theta, beta corresponds to phi, and beta0 corresponds to phib (makes
+    R correspond to R'). Thus, we can just call alphabeta2thetaphi with phib
+    and beta0 swapped.
 
     @param theta
       Instrument angle theta in degrees.
@@ -419,20 +458,23 @@ def thetaphi2alphabeta(theta, phi, alpha0, beta0, phib):
     @return A tuple (alpha, beta) where:
       - alpha: Pitch angle in degrees.
       - beta: Gyrophase in degrees.
-    The output shapes correspond to the broadcasted shapes of theta, phi and alpha0, beta0, phib.
+    The output shapes correspond to the broadcasted shapes of theta, phi and 
+    alpha0, beta0, phib.
 
-    @note The transformation exploits the equivalence between the forward and inverse mappings by 
-          swapping beta0 and phib.
+    @note The transformation exploits the equivalence between the forward and 
+    inverse mappings by swapping beta0 and phib.
     """
-    return alphabeta2thetaphi(theta, phi, alpha0, phib, beta0)  # phib <-> beta0
+    # phib <-> beta0
+    return alphabeta2thetaphi(theta, phi, alpha0, phib, beta0)  
 
 def vectors_to_euler_angles(B, C, S0, S1):
     """
     @brief Compute Euler angles from input vectors.
 
-    Given four 3-vectors in a common Cartesian coordinate system (e.g., Cartesian GEI), this 
-    function computes the Euler angles required to convert between instrument coordinates and 
-    magnetic coordinates. Specifically, it determines:
+    Given four 3-vectors in a common Cartesian coordinate system (e.g., 
+    Cartesian GEI), this function computes the Euler angles required to convert
+    between instrument coordinates and magnetic coordinates. Specifically, it
+    determines:
       - @b alpha0: the pitch angle of the boresight,
       - @b beta0: the gyrophase angle of the boresight,
       - @b phib: the longitude of the magnetic field vector B.
@@ -440,29 +482,32 @@ def vectors_to_euler_angles(B, C, S0, S1):
     The input vectors follow these conventions:
       - @b B is parallel to the magnetic field.
       - @b C defines the B-C plane in which beta = 0.
-      - @b S0 points into the instrument (aligned with normally incident particles).
+      - @b S0 points into the instrument (parallel to normally incident
+           particles).
       - @b S1 defines the S0-S1 plane in which phi = 0.
 
-    The vectors need not be normalized, and the planes (B-C and S0-S1) are not required to be 
-    orthogonal. Inputs may be provided either as a single 3-element vector ((3,)) or as an array of 
-    vectors with shape (N, 3). The output angles will be scalars for (3,) inputs or 1-D arrays of 
-    shape (N,) for (N,3) inputs. All angles are returned in degrees.
+    The vectors need not be normalized, and the planes (B-C and S0-S1) are not
+    required to be orthogonal. Inputs may be provided either as a single 
+    3-element vector ((3,)) or as an array of vectors with shape (N, 3). The
+    output angles will be scalars for (3,) inputs or 1-D arrays of shape (N,)
+    for (N,3) inputs. All angles are returned in degrees.
 
     @param B A 3-vector or an (N,3) array representing the magnetic field direction.
     @param C A 3-vector or an (N,3) array that, together with B, defines the plane in which beta = 0.
-    @param S0 A 3-vector or an (N,3) array representing the instrument pointing direction.
+    @param S0 A 3-vector or an (N,3) array representing the instrument pointing direction parallel to incident particles and opposite the boresight direction.
     @param S1 A 3-vector or an (N,3) array that defines the S0-S1 plane in which phi = 0.
 
     @return A tuple (alpha0, beta0, phib) where:
             - @b alpha0: Pitch angle of the boresight (in degrees).
             - @b beta0: Gyrophase angle of the boresight (in degrees).
             - @b phib: Longitude of B (in degrees).
-            The output is scalar if the inputs are 3-element vectors, or a 1-D array of shape (N,) 
-            if the inputs are (N,3) arrays.
+            The output is scalar if the inputs are 3-element vectors, or a 1-D
+            array of shape (N,) if the inputs are (N,3) arrays.
 
-    @exception ValueError Thrown if the input vectors do not have a shape of (3,) or (N,3) with a 
-                          consistent N.
+    @exception ValueError Thrown if the input vectors do not have a shape of 
+    (3,) or (N,3) with a consistent N.
     """
+    # Verify shape of input vectors.
     N = None
     isscalar = True
     for x in [B, C, S0, S1]:
@@ -473,7 +518,7 @@ def vectors_to_euler_angles(B, C, S0, S1):
         if len(s) == 2:
             N = s[0]
     if N is None:
-        raise ValueError('B,C,S0,S1 inputs must be (3,), or (N,3) with common N')
+        raise ValueError('B, C, S0, S1 inputs must be (3,), or (N, 3) with common N')
     B = np.atleast_2d(B)
     C = np.atleast_2d(C)
     S0 = np.atleast_2d(S0)
@@ -522,8 +567,8 @@ class RFLError(Exception):
     """
     @brief Generic RFL error.
 
-    This exception is raised for general errors in RFL. It accepts an optional message
-    argument that describes the error.
+    This exception is raised for general errors in RFL. It accepts an optional
+    message argument that describes the error.
 
     @param message Optional error message. Defaults to "Unknown RFL Error".
     """
@@ -540,16 +585,19 @@ class ArgSizeError(ValueError):
     """
     @brief Incorrect/Inconsistent Argument Size.
 
-    This exception is raised when the provided arguments have incorrect or inconsistent sizes.
-    It accepts an optional message argument describing the error.
+    This exception is raised when the provided arguments have incorrect or 
+    inconsistent sizes. It accepts an optional message argument describing the
+    error.
 
-    @param message Optional error message. Defaults to "Incorrect/Inconsistent Argument Size".
+    @param message Optional error message. Defaults to "Incorrect/Inconsistent
+    Argument Size".
     """
     def __init__(self, message='Incorrect/Inconsistent Argument Size'):
         """
         @brief Construct a new ArgSizeError instance.
 
-        @param message Optional error message. Defaults to "Incorrect/Inconsistent Argument Size".
+        @param message Optional error message. Defaults to 
+        "Incorrect/Inconsistent Argument Size".
         """
         super().__init__(message)
 
@@ -561,13 +609,15 @@ class KeywordError(RFLError):
     This exception is raised when a required keyword is missing or invalid.
     It accepts an optional message argument describing the error.
 
-    @param message Optional error message. Defaults to "Missing/Invalid Keyword".
+    @param message Optional error message. Defaults to 
+    "Missing/Invalid Keyword".
     """
     def __init__(self, message='Missing/Invalid Keyword'):
         """
         @brief Construct a new KeywordError instance.
 
-        @param message Optional error message. Defaults to "Missing/Invalid Keyword".
+        @param message Optional error message. Defaults to 
+        "Missing/Invalid Keyword".
         """
         super().__init__(message)
 
@@ -577,16 +627,17 @@ def keyword_check(*keywords, **kwargs):
     """
     @brief Check for required string keywords in a set of keyword arguments.
 
-    This function verifies that each specified keyword exists in the provided kwargs
-    dictionary and that its associated value is a string. If any keyword is missing or its
-    value is not a string, a KeywordError is raised.
+    This function verifies that each specified keyword exists in the provided
+    kwargs dictionary and that its associated value is a string. If any keyword
+    is missing or its value is not a string, a KeywordError is raised.
 
     @param keywords One or more keyword names to verify.
     @param kwargs A dictionary of keyword arguments.
     
     @return True if all specified keywords are present and are strings.
     
-    @exception KeywordError If any keyword is missing or its value is not a string.
+    @exception KeywordError If any keyword is missing or its value is not a 
+    string.
     """
     for key in keywords:
         if key not in kwargs:
@@ -600,14 +651,15 @@ def keyword_check_bool(*keywords, **kwargs):
     """
     @brief Check for required string keywords, returning a boolean result.
 
-    This function checks whether each specified keyword exists in the kwargs dictionary and 
-    that its associated value is a string. Instead of raising an exception when a condition 
-    fails, it returns False.
+    This function checks whether each specified keyword exists in the kwargs
+    dictionary and that its associated value is a string. Instead of raising
+    an exception when a condition fails, it returns False.
 
     @param keywords One or more keyword names to verify.
     @param kwargs A dictionary of keyword arguments.
     
-    @return True if all specified keywords are present and are strings; False otherwise.
+    @return True if all specified keywords are present and are strings; False
+    otherwise.
     """
     for key in keywords:
         if key not in kwargs:
@@ -621,16 +673,18 @@ def keyword_check_numeric(*keywords, **kwargs):
     """
     @brief Check for required numeric keywords in a set of keyword arguments.
 
-    This function verifies that each specified keyword exists in the kwargs dictionary and 
-    that its associated value, or the first element if the value is a list or array, is numeric.
-    If any keyword is missing or its value is non-numeric, a KeywordError is raised.
+    This function verifies that each specified keyword exists in the kwargs 
+    dictionary and that its associated value, or the first element if the value
+    is a list or array, is numeric. If any keyword is missing or its value is
+    non-numeric, a KeywordError is raised.
 
     @param keywords One or more keyword names to verify.
     @param kwargs A dictionary of keyword arguments.
     
     @return True if all specified keywords are present and numeric.
     
-    @exception KeywordError If any keyword is missing or its value is not numeric.
+    @exception KeywordError If any keyword is missing or its value is not 
+    numeric.
     """
     for key in keywords:
         if key not in kwargs:
@@ -647,14 +701,16 @@ def keyword_check_numeric_bool(*keywords, **kwargs):
     """
     @brief Check for required numeric keywords, returning a boolean result.
 
-    This function checks whether each specified keyword exists in the kwargs dictionary 
-    and verifies that its associated value (or the first element if the value is a list or array) 
-    is numeric. If a keyword is missing or its value is not numeric, the function returns False.
+    This function checks whether each specified keyword exists in the kwargs
+    dictionary and verifies that its associated value (or the first element if
+    the value is a list or array) is numeric. If a keyword is missing or its
+    value is not numeric, the function returns False.
 
     @param keywords One or more keyword names to verify.
     @param kwargs A dictionary of keyword arguments.
     
-    @return True if all specified keywords are present and numeric; False otherwise.
+    @return True if all specified keywords are present and numeric; False
+    otherwise.
     """
     for key in keywords:
         if key not in kwargs:
@@ -671,29 +727,34 @@ def squeeze(val):
     """
     @brief Remove trailing singleton dimensions from a value.
 
-    This function applies NumPy's squeeze to the input value to remove trailing singleton 
-    dimensions. If the resulting array contains a single element, it is converted to a scalar.
+    This function applies NumPy's squeeze to the input value to remove trailing
+    singleton dimensions. If the resulting array contains a single element, it
+    is converted to a scalar.
 
     @param val A NumPy array or value to be squeezed.
     
-    @return The squeezed value, or a scalar if the resulting array has only one element.
+    @return The squeezed value, or a scalar if the resulting array has only one
+    element.
     """
     val = np.squeeze(val)
     if val.size == 1:
         val = val.item()  # Reduce singleton to scalar (replaces np.asscalar)
+        
     return val
 
-def interp_weights_1d(xgrid, xhat, extrap_left=False, extrap_right=False, period=None):
+
+def interp_weights_1d(xgrid, xhat, extrap_left=False, extrap_right=False,
+                      period=None):
     """
     @brief Compute one-dimensional interpolation weights.
 
-    This function computes interpolation weights for mapping values from a one-dimensional grid
-    onto specified query points. Linear interpolation is used between grid points, and several
-    options are available to control the behavior for query points outside the grid range as well
-    as periodic boundary conditions.
+    This function computes interpolation weights for mapping values from a 
+    one-dimensional grid onto specified query points. Linear interpolation is
+    used between grid points, and several options are available to control the
+    behavior for query points outside the grid range as well as periodic 
+    boundary conditions.
 
-    @param xgrid A list or array of grid values with shape (Nx,). The grid values should be in
-                 ascending order.
+    @param xgrid A list or array of grid values with shape (Nx,). The grid values should be in ascending order.
     @param xhat A scalar or list/array of query values where interpolation is desired.
     @param extrap_left Controls extrapolation for xhat values left of xgrid[0]:
            - False or 0: Assign a zero weight for xhat < xgrid[0].
@@ -721,12 +782,16 @@ def interp_weights_1d(xgrid, xhat, extrap_left=False, extrap_right=False, period
     N = xhat.size
     v = np.zeros((N, Nx))
     I = get_list_neighbors(xgrid, xhat)  # (N,2)
+    # Prepare to broadcast.
+    
     # Calculate weights for grid intervals via linear interpolation.
     for (k, (ileft, iright)) in enumerate(I):
         if (ileft >= 0) & (ileft < Nx - 1):  # xgrid[i] <= x < xgrid[i+1]
-            v[k, ileft] = (xgrid[ileft + 1] - xhat[k]) / (xgrid[ileft + 1] - xgrid[ileft])
+            v[k, ileft] = (xgrid[ileft + 1] - xhat[k]) / \
+                (xgrid[ileft + 1] - xgrid[ileft])
         if (iright > 0) & (iright < Nx):  # xgrid[i-1] <= x < xgrid[i]
-            v[k, iright] = (xhat[k] - xgrid[iright - 1]) / (xgrid[iright] - xgrid[iright - 1])
+            v[k, iright] = (xhat[k] - xgrid[iright - 1]) / \
+                (xgrid[iright] - xgrid[iright - 1])
 
     if extrap_left == 'fixed':
         f = xhat < xgrid[0]
@@ -734,7 +799,8 @@ def interp_weights_1d(xgrid, xhat, extrap_left=False, extrap_right=False, period
     elif extrap_left:
         dx = (xgrid[1] - xgrid[0])
         f = (xhat < xgrid[0]) & (xhat > xgrid[0] - dx)
-        v[f, 0] = 1.0 - (xgrid[0] - xhat[f]) / dx  # Linear extrapolation to the left
+        # Linear extrapolation to the left
+        v[f, 0] = 1.0 - (xgrid[0] - xhat[f]) / dx
 
     if period:
         dx = xgrid[0] + period - xgrid[-1]
@@ -753,18 +819,22 @@ def interp_weights_1d(xgrid, xhat, extrap_left=False, extrap_right=False, period
         v[f, -1] = 1.0 - (xhat[f] - xgrid[-1]) / dx
     if isscalar:
         v = v[0, :]  # Convert from (1, Nx) to (Nx,)
+        
     return v
 
 
-def interp_weights_3d(xgrid, xhat, ygrid, yhat, zgrid=None, zhat=None, xopts={}, yopts={}, zopts={}):
+def interp_weights_3d(xgrid, xhat, ygrid, yhat, zgrid=None, zhat=None,
+                      xopts={}, yopts={}, zopts={}):
     """
     @brief Compute three-dimensional interpolation weights.
 
-    This function calculates interpolation weights for mapping values from a three-dimensional
-    grid (constructed from separate 1-D grids for x, y, and optionally z) onto query points.
-    The function internally calls interp_weights_1d for each dimension and then combines the
-    results via outer multiplication. If the z-dimension grid is omitted (i.e., both zgrid and
-    zhat are None), the function produces two-dimensional interpolation weights.
+    This function calculates interpolation weights for mapping values from a
+    three-dimensional grid (constructed from separate 1-D grids for x, y, and
+    optionally z) onto query points. The function internally calls 
+    interp_weights_1d for each dimension and then combines the results via 
+    outer multiplication. If the z-dimension grid is omitted (i.e., both zgrid
+    and zhat are None), the function produces two-dimensional interpolation
+    weights.
 
     @param xgrid A list or array of grid values along the x-axis with shape (Nx,).
     @param xhat A scalar or list/array of query values along the x-axis.
@@ -782,8 +852,8 @@ def interp_weights_3d(xgrid, xhat, ygrid, yhat, zgrid=None, zhat=None, xopts={},
             - If zgrid and zhat are None, the output has shape (N, Nx, Ny).
             - If the query points are given as scalars, appropriate dimensions are squeezed.
     
-    @exception ValueError Raised if one of zgrid or zhat is provided without the other, or if the
-                query points are not mutually broadcastable.
+    @exception ValueError Raised if one of zgrid or zhat is provided without
+    the other, or if the query points are not mutually broadcastable.
     """
     if (zgrid is None) != (zhat is None):
         raise ValueError('if either zgrid or zhat is None, both must be')
@@ -821,6 +891,7 @@ def interp_weights_3d(xgrid, xhat, ygrid, yhat, zgrid=None, zhat=None, xopts={},
     w = wx * wy * wz
     if isscalar:  # Squeeze the first dimension if query points are scalars
         w = np.squeeze(w, axis=0)
+        
     return w
 
 
@@ -828,9 +899,10 @@ def interp_weights_2d(xgrid, xhat, ygrid, yhat, xopts={}, yopts={}):
     """
     @brief Compute two-dimensional interpolation weights.
 
-    This function calculates interpolation weights for mapping values from a two-dimensional grid,
-    defined by separate 1-D grids for x and y, onto query points. It leverages interp_weights_3d
-    by setting the z-dimension inputs to None, thereby generating 2-D interpolation weights.
+    This function calculates interpolation weights for mapping values from a 
+    two-dimensional grid, defined by separate 1-D grids for x and y, onto query
+    points. It leverages interp_weights_3d by setting the z-dimension inputs to
+    None, thereby generating 2-D interpolation weights.
 
     @param xgrid A list or array of grid values along the x-axis with shape (Nx,).
     @param xhat A scalar or list/array of query values along the x-axis.
@@ -845,21 +917,33 @@ def interp_weights_2d(xgrid, xhat, ygrid, yhat, xopts={}, yopts={}):
     """
     return interp_weights_3d(xgrid, xhat, ygrid, yhat, xopts, yopts)
 
+
 class FactoryConstructorMixin(object):
     """
     @brief A mixin to support factory-style object construction.
 
-    Enables an object constructor to traverse its subclass tree in order to instantiate the
-    correct subclass based on the initialization arguments.
+    Enables an object constructor to traverse its subclass tree in order to 
+    instantiate the correct subclass based on the initialization arguments.
 
-    Classes that inherit from FactoryConstructorMixin should implement the classmethod
-    is_mine() in every subclass to “claim” the provided initialization data and thereby
-    instantiate that subclass rather than the parent.
+    Classes that inherit from FactoryConstructorMixin should implement the 
+    classmethod is_mine() in every subclass to “claim” the provided 
+    initialization data and thereby instantiate that subclass rather than the
+    parent.
 
-    Any class that inherits directly from FactoryConstructorMixin should implement is_mine()
-    so that it raises an exception instead of returning False. A subclass that does not override
-    is_mine will simply replace its parent in the factory hierarchy, whereas a subclass that defines
-    its own is_mine will extend its parent into a distinct new subclass in the hierarchy.
+    @classmethod 
+    def is_mine(cls,*args,**kwargs):
+        # search args, kwargs dict/tree to determine if this subclass should 
+        # handle the data, and if so, return True     
+
+    Any class that inherits directly from FactoryConstructorMixin should 
+    implement is_mine() so that it raises an exception instead of returning
+    False. 
+
+    A subclass that does not override is_mine will simply replace its
+    parent in the factory hierarchy. This approach will modify the behavior of
+    a subclass. A subclass that defines its own is_mine will extend its parent
+    into a distinct new subclass in the hierarchy. This approach is appropriate
+    when the parent and child are alternatives that should coexist.
     """
     @classmethod
     def is_mine(cls, *args, **kwargs):
@@ -873,8 +957,8 @@ class FactoryConstructorMixin(object):
         """
         @brief Factory method for creating an instance of the correct subclass.
 
-        Traverses the subclass tree and returns the first matching subclass instance based on
-        the provided arguments.
+        Traverses the subclass tree and returns the first matching subclass 
+        instance based on the provided arguments.
         """
         # Check children first
         if args or kwargs:
@@ -883,6 +967,7 @@ class FactoryConstructorMixin(object):
                 if res:
                     return res
         if cls.is_mine(*args, **kwargs):
+            # Python will pass kwargs to init.
             return super().__new__(cls)
         return None
 
@@ -892,7 +977,8 @@ class FactoryConstructorMixin(object):
 
         Calls the parent initializer without passing any additional arguments.
         """
-        super().__init__()  # avoid trying to pass arguments to object initializer
+        # Avoid trying to pass arguments to object initializer.
+        super().__init__()  
 
 
 class EnergyResponse(FactoryConstructorMixin):
@@ -911,7 +997,8 @@ class EnergyResponse(FactoryConstructorMixin):
         """
         @brief Initialize energy response properties.
 
-        Handles the keywords 'CROSSCALIB' and 'EPS', defaulting to 1 if not provided.
+        Handles the keywords 'CROSSCALIB' and 'EPS', defaulting to 1 if not 
+        provided.
         Also sets additional default values such as the energy unit.
         """
         for arg in ['CROSSCALIB', 'EPS']:
@@ -962,7 +1049,7 @@ class EnergyResponse(FactoryConstructorMixin):
             return self._E0
         else:
             hE = self.hE(Egrid, **kwargs)
-            return hE.sum()
+            return hE.sum() # integrate over energy
 
 
 class ER_Diff(EnergyResponse):
@@ -982,15 +1069,16 @@ class ER_Diff(EnergyResponse):
 
         Processes numeric keywords 'E0' and 'DE'.
         """
-        super().__init__(**kwargs)
+        super().__init__(**kwargs) # handles CROSSCALIB and EPS
         keyword_check_numeric('E0', 'DE', **kwargs)
-        self.E0 = squeeze(kwargs['E0'])  # TODO: convert to MeV if necessary
-        self.DE = squeeze(kwargs['DE'])  # TODO: convert to MeV if necessary
-        self._hE0 = self.DE * self.EPS / self.CROSSCALIB
+        self.E0 = squeeze(kwargs['E0'])  # TODO: convert to MeV
+        self.DE = squeeze(kwargs['DE'])  # TODO: convert to MeV
+        self._hE0 = self.DE * self.EPS / self.CROSSCALIB # hE for flat spectrum
 
     def RE(self, E):
         """*INHERIT*"""
-        return (E == self.E0) * self.EPS
+        # DE gets ignored, which is bad, but unavoidable
+        return (E == self.E0) * self.EPS 
 
     def hE(self, Egrid, **kwargs):
         """*INHERIT*"""
@@ -1015,10 +1103,10 @@ class ER_Int(EnergyResponse):
 
         Processes the numeric keyword 'E0'.
         """
-        super().__init__(**kwargs)
+        super().__init__(**kwargs) # handles CROSSCALIB and EPS
         keyword_check_numeric('E0', **kwargs)            
-        self.E0 = squeeze(kwargs['E0'])  # TODO: convert to MeV if necessary
-        self._hE0 = None
+        self.E0 = squeeze(kwargs['E0'])  # TODO: convert to MeV
+        self._hE0 = None # not defined for integral channel
 
     def RE(self, E):
         """*INHERIT*"""
@@ -1030,15 +1118,23 @@ class ER_Int(EnergyResponse):
         NE = len(Egrid)
         hE = np.zeros(Egrid.shape)
         I = get_list_neighbors(Egrid, self.E0)
+        # Egrid[I[0]] <= inst_info.E0 < Egrid[I[1]]
+        # or I[1] = -1 or both I=-1
+        
         dE = make_deltas(Egrid, **kwargs)
-        hE = dE
-        hE[0:(I[0] + 1)] = 0
+        hE = dE # default, eventually only kept for Egrid>Egrid[I[1]]
+        hE[0:(I[0] + 1)] = 0 # zero out below E0
+
+        # left side
         i = I[0]
-        if (i >= 0) and (i < NE - 1):
+        if (i >= 0) and (i < NE - 1): # E[i] <= E0 < E[i+1]
             hE[i] = (Egrid[i+1] - self.E0) ** 2 / 2 / (Egrid[i+1] - Egrid[i])
+
+        # right side
         i = I[1]
-        if (i >= 1) and (i < NE):
+        if (i >= 1) and (i < NE): # E[i-1] < E0 < E[i]
             hE[i] = (self.E0 - Egrid[i-1]) ** 2 / 2 / (Egrid[i] - Egrid[i-1])
+            
         return hE * self.EPS / self.CROSSCALIB
     
 
@@ -1061,16 +1157,18 @@ class ER_Wide(EnergyResponse):
         Processes numeric keywords 'E0' and 'E1' and ensures E1 > E0. Constructs two integral channels
         for computing the difference.
         """
-        super().__init__(**kwargs)
+        super().__init__(**kwargs) # handles CROSSCALIB and EPS
         keyword_check_numeric('E0', 'E1', **kwargs)            
-        self.E0 = squeeze(kwargs['E0'])  # TODO: convert to MeV if necessary
-        self.E1 = squeeze(kwargs['E1'])  # TODO: convert to MeV if necessary
+        self.E0 = squeeze(kwargs['E0'])  # TODO: convert to MeV
+        self.E1 = squeeze(kwargs['E1'])  # TODO: convert to MeV
         if self.E1 <= self.E0:
             raise ValueError('E1 must be greater than E0 for wide channel')
-        self._hE0 = (self.E1 - self.E0) * self.EPS / self.CROSSCALIB
-        tmp = {**kwargs, 'E_TYPE': 'INT'}
+        self._hE0 = (self.E1 - self.E0) * self.EPS / self.CROSSCALIB # for flat spectrum
+        
+        # build two integral channels to difference them
+        tmp = {**kwargs, 'E_TYPE': 'INT'} # integral channel with same E0
         self.low = ER_Int(**tmp)
-        tmp['E0'] = self.E1
+        tmp['E0'] = self.E1 # integral channel above this one
         self.high = ER_Int(**tmp)
 
     def RE(self, E):
@@ -1079,6 +1177,7 @@ class ER_Wide(EnergyResponse):
 
     def hE(self, Egrid, **kwargs):
         """*INHERIT*"""
+        # treat as difference between two integral channels
         return self.low.hE(Egrid) - self.high.hE(Egrid)
 
 
@@ -1092,6 +1191,7 @@ class ER_Table(EnergyResponse):
     @classmethod
     def is_mine(cls, *args, **kwargs):
         """*INHERIT*"""
+        return ('E_TYPE' in kwargs) and (kwargs['E_TYPE'] == 'TBL')
 
     def __init__(self, **kwargs):
         """
@@ -1127,9 +1227,16 @@ class ER_Table(EnergyResponse):
 
     def RE(self, E):
         """*INHERIT*"""
+        if self._RE is None:
+            # extrapolate beyond grid with nearest edge (first/last) value
+            self._RE = interp1d(self.E_GRID,self.EPS,'linear',bounds_error=False,fill_value=(self.EPS[0],self.EPS[-1]),assume_sorted=True)
+        return self._RE(E)
 
     def hE(self, Egrid, **kwargs):
         """*INHERIT*"""
+        dE = make_deltas(Egrid,**kwargs)
+        hE = self.RE(Egrid)*dE/self.CROSSCALIB
+        return hE
 
 
 class AngleResponse(FactoryConstructorMixin):
@@ -1140,11 +1247,15 @@ class AngleResponse(FactoryConstructorMixin):
     Initialization accepts the keyword BIDIRECTIONAL to indicate whether the response is bidirectional.
     Properties include:
       - bidirectional: a boolean that specifies if the angular response is bidirectional.
-      - hA0: the nominal geometric factor (in cm² sr), accounting for bidirectional effects.
+      - hA0: the nominal geometric factor (in cm^2 sr), accounting for bidirectional effects.
     """
     @classmethod
     def is_mine(cls, *args, **kwargs):
         """*INHERIT*"""     
+        if not kwargs:
+            return True # null response
+        else:
+            raise KeywordError('The data provided did not define a recognized AngleResponse')
 
     def __init__(self, **kwargs):
         """
@@ -1171,13 +1282,13 @@ class AngleResponse(FactoryConstructorMixin):
         """
         @brief Evaluate the angular response (effective area) at specified theta and phi.
 
-        Computes the effective area in cm² given polar (theta) and azimuthal (phi) angles.
+        Computes the effective area in cm^2 given polar (theta) and azimuthal (phi) angles.
         The input angles must be broadcast-compatible, and the returned value or array will have
         the same broadcast shape as theta and phi.
 
         @param theta A numeric value or array representing the polar angle in degrees.
         @param phi A numeric value or array representing the azimuthal angle in degrees.
-        @return The effective area (in cm²) as a scalar or numpy array.
+        @return The effective area (in cm^2) as a scalar or numpy array.
         @exception NotImplementedError If the method is not overridden in a subclass.
         """
         raise NotImplementedError('Class %s did not overload of A method, as required' % self.__class__.__name__)
@@ -1186,7 +1297,7 @@ class AngleResponse(FactoryConstructorMixin):
         """
         @brief Compute angular response weights on a theta-phi grid.
 
-        Returns the angular response weights (in cm² sr) on a grid defined by thetagrid and phigrid.
+        Returns the angular response weights (in cm^2 sr) on a grid defined by thetagrid and phigrid.
         Differential elements are computed using the deltas of -cos(theta) and phi (converted to radians),
         and the response A is evaluated on the broadcasted grid.
 
@@ -1206,8 +1317,7 @@ class AngleResponse(FactoryConstructorMixin):
         """
         @brief Compute angular response weights on a theta grid integrated over phi.
 
-        If phigrid is not provided, it defaults to a full 0–360 degree range. The response weights
-        (in cm² sr) are integrated over the phi dimension.
+        If phigrid is not provided, it defaults to a full 0–360 degree range. The response weights (in cm^2 sr) are integrated over the phi dimension.
 
         @param thetagrid A 1-D numpy array of theta values in degrees.
         @param phigrid Optional 1-D numpy array of phi values in degrees; defaults to full range if omitted.
@@ -1217,6 +1327,8 @@ class AngleResponse(FactoryConstructorMixin):
         if phigrid is None:
             phigrid = default_phigrid(**kwargs)
         h = self.hAthetaphi(thetagrid, phigrid, **kwargs)
+
+        ## VERIFY: previous comment said "integrate over beta"
         return h.sum(axis=1)  # integrate over phi
 
     def hAalphabeta(self, alpha0, beta0, phib, alphagrid, betagrid, tgrid=None, **kwargs):
@@ -1227,7 +1339,7 @@ class AngleResponse(FactoryConstructorMixin):
         It computes differential elements using the deltas of -cos(alpha) and beta (converted to radians),
         converts alpha and beta to theta and phi using alphabeta2thetaphi, and evaluates the response A.
         If a time grid (tgrid) is provided, the result is integrated over the time dimension.
-        The output units are cm²·sr or cm²·sr·s if time integration is performed.
+        The output units are cm^2·sr or cm^2·sr·s if time integration is performed.
 
         @param alpha0 Numeric value representing the parameter alpha0.
         @param beta0 Numeric value representing the parameter beta0.
@@ -1248,16 +1360,20 @@ class AngleResponse(FactoryConstructorMixin):
             h = A * dt
         else:
             h = np.tensordot(A, dt, axes=((2,), (0,)))  # dot product along the Nt dimension
+            
+        # now h is (Na,Nb)
         h = h * dcosa * db / self.CROSSCALIB
+        
         return h
 
-    def hAalpha(self, alpha0, beta0, phib, alphagrid, betagrid=None, tgrid=None, **kwargs):
+    def hAalpha(self, alpha0, beta0, phib, alphagrid, betagrid=None,
+                tgrid=None, **kwargs):
         """
         @brief Compute angular response weights on an alpha grid after integrating over beta.
 
         This function computes the angular response weights based on an alpha grid by first adjoining a beta grid.
         If betagrid is not provided, it is assumed to cover the full range of 0–360 degrees. If a time grid is supplied,
-        the result is integrated over time. The output units are cm²·sr or cm²·sr·s if time-integrated.
+        the result is integrated over time. The output units are cm^2·sr or cm^2·sr·s if time-integrated.
 
         @param alpha0 Numeric value representing the parameter alpha0.
         @param beta0 Numeric value representing the parameter beta0.
@@ -1278,10 +1394,10 @@ class AngleResponse(FactoryConstructorMixin):
         """
         @brief Return the nominal geometric factor.
 
-        The nominal geometric factor (in cm²·sr) is determined from the property G. If the
+        The nominal geometric factor (in cm^2·sr) is determined from the property G. If the
         response is bidirectional, the geometric factor is doubled to include both hemispheres.
 
-        @return The nominal geometric factor in cm²·sr.
+        @return The nominal geometric factor in cm^2·sr.
         """
         hA0 = self.G
         if self.bidirectional:
@@ -1321,8 +1437,8 @@ class AR_Omni(AR_csym):
     single-element detectors, use AR_Disk or AR_Slab.
 
     Properties:
-      - area: Detector area in cm².
-      - G: Geometric factor for forward hemisphere particles (theta <= 90) in cm² sr.
+      - area: Detector area in cm^2.
+      - G: Geometric factor for forward hemisphere particles (theta <= 90) in cm^2 sr.
     """
     @classmethod
     def is_mine(cls, *args, **kwargs):
@@ -1335,7 +1451,7 @@ class AR_Omni(AR_csym):
         @brief Initialize the omnidirectional angular response.
 
         Sets up the response using the provided geometric factor G. The detector area is computed as
-        G/(2π) for a half omni and is adjusted if the response is bidirectional.
+        G/(2pi) for a half omni and is adjusted if the response is bidirectional.
         
         @param kwargs Expected to include:
                - G: Geometric factor (optional).
@@ -1346,7 +1462,7 @@ class AR_Omni(AR_csym):
         if ('G' in kwargs) and kwargs['G'] is not None:
             # derived class may provide G as None
             keyword_check_numeric('G', **kwargs)
-            # Setup for half omni: full G over 2π
+            # Setup for half omni: full G over 2pi
             G = squeeze(kwargs['G'])  # TODO: convert to cm^2 sr
             self.G = G
             self.area = self.G / 2 / np.pi  # equivalent sphere's cross-section 
@@ -1393,9 +1509,9 @@ class AR_SingleElement(AR_Omni):
         """
         @brief Geometric factor for forward-going particles.
 
-        Computed as π multiplied by the detector area.
+        Computed as pi multiplied by the detector area.
         
-        @return Geometric factor in cm² sr.
+        @return Geometric factor in cm^2 sr.
         """
         return self.area * np.pi
 
@@ -1408,7 +1524,7 @@ class AR_Disk(AR_SingleElement):
       - R1: Disk radius (cm).
       - R2: (Unused in this calculation but provided for compatibility.)
       - D: (Unused in this calculation but provided for compatibility.)
-    The detector area is computed as π * R1².
+    The detector area is computed as pi * R1^2.
     """
     @classmethod
     def is_mine(cls, *args, **kwargs):
@@ -1442,6 +1558,7 @@ class AR_Slab(AR_SingleElement):
     @classmethod
     def is_mine(cls, *args, **kwargs):
         """*INHERIT*"""
+        ## VERIFY: there was no inherit statement in the old version 
         return keyword_check_bool('TH_TYPE', **kwargs) and \
                (kwargs['TH_TYPE'] == 'SLAB')
                
@@ -1542,7 +1659,7 @@ class AR_Table_sym(AngleResponse):
         @brief Initialize the AR_Table_sym instance.
 
         Processes the keywords 'TH_GRID' and 'A'. TH_GRID is validated to be a 1-D, unique grid
-        and must start at 0. The provided A is squeezed (and should be converted to cm² if needed).
+        and must start at 0. The provided A is squeezed (and should be converted to cm^2 if needed).
         The geometric factor G is computed via numerical integration over -cos(theta).
 
         @param kwargs Keyword arguments including:
@@ -1588,7 +1705,7 @@ class AR_Pinhole(AngleResponse):
         """
         @brief Initialize the AR_Pinhole instance.
 
-        Processes the keyword 'G' (converting it to a numeric value in cm²·sr as needed)
+        Processes the keyword 'G' (converting it to a numeric value in cm^2·sr as needed)
         and sets the detector area to zero.
         
         @param kwargs Keyword arguments including:
@@ -1693,26 +1810,35 @@ class AR_Tele_Rect(AngleResponse):
         self.H2 = squeeze(kwargs['H2'])  # TODO: convert to cm
         self.D = squeeze(kwargs['D'])    # TODO: convert to cm
         
-        # Initialize some Sullivan variables (in radians if needed).
+        # Initialize some Sullivan variables (in radians).
         alpha = (self.H1 + self.H2) / 2
         beta = (self.W1 + self.W2) / 2
         gamma = (self.H1 - self.H2) / 2
         delta = (self.W1 - self.W2) / 2
         
         # Sullivan's equation (11):
-        self.G = self.D**2 * np.log(
-            ((self.D**2 + alpha**2 + delta**2) / (self.D**2 + alpha**2 + beta**2)) *
-            (self.D**2 + gamma**2 + beta**2) / (self.D**2 + gamma**2 + delta**2)
-        ) \
-            + 2 * alpha * np.sqrt(self.D**2 + beta**2) * np.arctan(alpha / np.sqrt(self.D**2 + beta**2)) \
-            + 2 * beta * np.sqrt(self.D**2 + alpha**2) * np.arctan(beta / np.sqrt(self.D**2 + alpha**2)) \
-            - 2 * alpha * np.sqrt(self.D**2 + delta**2) * np.arctan(alpha / np.sqrt(self.D**2 + delta**2)) \
-            - 2 * beta * np.sqrt(self.D**2 + gamma**2) * np.arctan(beta / np.sqrt(self.D**2 + gamma**2)) \
-            - 2 * gamma * np.sqrt(self.D**2 + beta**2) * np.arctan(gamma / np.sqrt(self.D**2 + beta**2)) \
-            - 2 * delta * np.sqrt(self.D**2 + alpha**2) * np.arctan(delta / np.sqrt(self.D**2 + alpha**2)) \
-            + 2 * gamma * np.sqrt(self.D**2 + delta**2) * np.arctan(gamma / np.sqrt(self.D**2 + delta**2)) \
-            + 2 * delta * np.sqrt(self.D**2 + gamma**2) * np.arctan(delta / np.sqrt(self.D**2 + gamma**2))
+        self.G = self.D**2*np.log(
+                ((self.D**2+alpha**2+delta**2)/(self.D**2+alpha**2+beta**2))  
+                *(self.D**2+gamma**2+beta**2)/(self.D**2+gamma**2+delta**2)) \
+                +2*alpha*np.sqrt(self.D**2+beta**2) \
+                *np.arctan(alpha/np.sqrt(self.D**2+beta**2)) \
+                +2*beta*np.sqrt(self.D**2+alpha**2) \
+                *np.arctan(beta/np.sqrt(self.D**2+alpha**2)) \
+                -2*alpha*np.sqrt(self.D**2+delta**2) \
+                *np.arctan(alpha/np.sqrt(self.D**2+delta**2)) \
+                -2*beta*np.sqrt(self.D**2+gamma**2) \
+                *np.arctan(beta/np.sqrt(self.D**2+gamma**2)) \
+                -2*gamma*np.sqrt(self.D**2+beta**2) \
+                *np.arctan(gamma/np.sqrt(self.D**2+beta**2)) \
+                -2*delta*np.sqrt(self.D**2+alpha**2) \
+                *np.arctan(delta/np.sqrt(self.D**2+alpha**2)) \
+                +2*gamma*np.sqrt(self.D**2+delta**2) \
+                *np.arctan(gamma/np.sqrt(self.D**2+delta**2)) \
+                +2*delta*np.sqrt(self.D**2+gamma**2) \
+                *np.arctan(delta/np.sqrt(self.D**2+gamma**2))
 
+
+        
     def _X(self, zeta, a1, a2):
         """
         @brief Compute Sullivan's X(zeta,a1,a2).
@@ -1726,13 +1852,13 @@ class AR_Tele_Rect(AngleResponse):
 
     def _A(self, theta, phi):
         """
-        @brief Compute the forward-only angular response A.
+        @brief Compute the forward-only A.
 
-        This function computes the effective area A (forward response only) based on the input angles.
+        This function computes A (forward response only) based on the input angles.
 
         @param theta Polar angle (in degrees).
         @param phi Azimuthal angle (in degrees).
-        @return The effective area as an array with the broadcast shape of theta and phi.
+        @return A as an array with the broadcast shape of theta and phi.
         """
         A = np.zeros(np.broadcast(theta, phi).shape)
         thetarads = np.radians(theta)
@@ -1743,10 +1869,11 @@ class AR_Tele_Rect(AngleResponse):
         X = self._X(zeta, self.W1, self.W2)
         Y = self._X(eta, self.H1, self.H2)
         costheta = np.cos(thetarads)
-        f = (costheta > 0) & (X > 0) & (Y > 0)  # Implicit Heaviside functions.
+        f = (costheta > 0) & (X > 0) & (Y > 0)  # apply Heaviside implicitly and resolve tand(90)=inf
         if any(f):
             A[f] = costheta[f] * X[f] * Y[f]  # Equation (13) without the Heaviside functions.
-        return A
+        ## VERIFY: AI added this return statement
+        #return A
 
     def A(self, theta, phi):
         """*INHERIT*"""
@@ -1803,7 +1930,7 @@ class AR_Table_asym(AngleResponse):
     def A(self, theta, phi):
         """*INHERIT*"""
         if self._Ainterpolator is None:
-            # Extrapolate beyond grid with nearest edge and return zero.
+            # Extrapolate beyond grid at nearest edge with fill zero.
             self._Ainterpolator = RegularGridInterpolator((self.TH_GRID, self.PH_GRID), self._A, 'linear', bounds_error=False, fill_value=0.0)
         return self._Ainterpolator((theta, phi))
 
@@ -1823,7 +1950,7 @@ class ChannelResponse(FactoryConstructorMixin):
         * halphabeta - Weights for double numerical integration over alpha and beta (flat spectrum).
       
       - Working in (E, theta, phi) coordinates:
-        * R          - Response function (effective area, cm²).
+        * R          - Response function (effective area, cm^2).
         * hE         - Weights for numerical integration over E (isotropic).
         * hEtheta    - Weights for double numerical integration over E and theta (ignoring phi dependence).
         * hEthetaphi - Weights for triple numerical integration over E, theta, and phi.
@@ -1874,7 +2001,7 @@ class ChannelResponse(FactoryConstructorMixin):
         """
         @brief Evaluate the 3-D response function.
         
-        Returns the response (effective area multiplied by efficiency) in cm² at the specified energy,
+        Returns the response (effective area multiplied by efficiency) in cm^2 at the specified energy,
         polar angle, and azimuthal angle. The inputs E, theta, and phi must broadcast together.
         
         @param E Energy value(s) (MeV).
@@ -1889,7 +2016,7 @@ class ChannelResponse(FactoryConstructorMixin):
         """
         @brief Compute response weights on an E x theta x phi grid.
         
-        Calculates response weights (in cm² sr MeV) using differential grid elements.
+        Calculates response weights (in cm^2 sr MeV) using differential grid elements.
         If Egrid is None, the object will attempt to obtain its own (e.g., from E_GRID attribute).
         
         @param Egrid 1-D numpy array of energy grid values (MeV).
@@ -1914,7 +2041,7 @@ class ChannelResponse(FactoryConstructorMixin):
         """
         @brief Compute response weights on an E x theta grid.
         
-        Integrates the full E x theta x phi response over phi to yield weights (in cm² sr MeV)
+        Integrates the full E x theta x phi response over phi to yield weights (in cm^2 sr MeV)
         on an E x theta grid. If phigrid is not provided, it defaults to the object's PH_GRID
         or a default phi grid.
         
@@ -1936,7 +2063,7 @@ class ChannelResponse(FactoryConstructorMixin):
         """
         @brief Compute response weights on an E grid.
         
-        Obtains response weights (in cm² sr MeV) by integrating over theta (0–180) and phi (0–360).
+        Obtains response weights (in cm^2 sr MeV) by integrating over theta (0–180) and phi (0–360).
         If thetagrid is not provided, it defaults to the object's TH_GRID attribute or a default grid.
         
         @param Egrid 1-D numpy array of energy values (MeV).
@@ -1957,7 +2084,7 @@ class ChannelResponse(FactoryConstructorMixin):
         """
         @brief Compute response weights on an E x alpha x beta grid.
         
-        Returns weights (in cm²·sr·MeV or cm²·sr·MeV·s if tgrid is supplied) computed via a triple
+        Returns weights (in cm^2·sr·MeV or cm^2·sr·MeV·s if tgrid is supplied) computed via a triple
         numerical integration. If Egrid is None, the object will attempt to supply its own.
         
         @param alpha0 The alpha0 parameter.
@@ -1976,16 +2103,18 @@ class ChannelResponse(FactoryConstructorMixin):
         dt = make_deltas(tgrid, **kwargs)  # (Nt,) or scalar
         dE, dcosa, db = broadcast_grids(dE, dcosa, db)  # shape (NE, Na, Nb)
         theta, phi = alphabeta2thetaphi(alphagrid, betagrid, alpha0, beta0, phib)  # (Na, Nb, Nt) or (Na, Nb)
-        # Reshape Egrid to (NE, 1, 1, ...):
-        E = np.reshape(Egrid, (len(Egrid),) + (1,) * theta.ndim)
-        theta = np.expand_dims(theta, axis=0)  # (1, Na, Nb, ... )
-        phi = np.expand_dims(phi, axis=0)        # (1, Na, Nb, ... )
+        E = np.reshape(Egrid, (len(Egrid), *np.ones(theta.ndim)))  # (NE, 1, 1, *1)
+        theta = np.expand_dims(theta, axis=0)  # (1, Na, Nb, *Nt)
+        phi = np.expand_dims(phi, axis=0)  # (1, Na, Nb, *Nt)
         R_val = self.R(E, theta, phi)  # (NE, Na, Nb, *Nt)
         if np.isscalar(dt):
             h = R_val * dt
         else:
-            h = np.tensordot(R_val, dt, axes=((3,), (0,)))  # contract over the time dimension
+            ## VERIFY: AI replaced h in the function call below with R_val, since h is not declared in this function previously. Is this a bug?
+            h = np.tensordot(h, dt, axes=((3,), (0,)))  # dot product along Nt dimension
         h = h * dE * dcosa * db / self.CROSSCALIB
+        # now h is (NE,Na,Nb)
+        
         return h
     
     def hEalpha(self, alpha0, beta0, phib, Egrid, alphagrid, betagrid=None, tgrid=None, **kwargs):
@@ -2036,7 +2165,7 @@ class ChannelResponse(FactoryConstructorMixin):
         """
         @brief Compute angular response weights on a theta x phi grid for a flat spectrum.
         
-        This method returns weights (cm² sr MeV) by integrating over energy (for a flat spectrum).
+        This method returns weights (cm^2 sr MeV) by integrating over energy (for a flat spectrum).
         If Egrid is None, the object will supply its own.
         
         @param Egrid 1-D numpy array of energy values (MeV).
@@ -2052,7 +2181,7 @@ class ChannelResponse(FactoryConstructorMixin):
         """
         @brief Compute response weights on a theta grid for a flat spectrum.
         
-        Returns weights (cm² sr MeV) integrated over E and phi. If phigrid is None, it defaults to a full
+        Returns weights (cm^2 sr MeV) integrated over E and phi. If phigrid is None, it defaults to a full
         0–360 range.
         
         @param Egrid 1-D numpy array of energy values (MeV).
@@ -2068,8 +2197,8 @@ class ChannelResponse(FactoryConstructorMixin):
         """
         @brief Compute response weights on an alpha x beta grid for a flat spectrum.
         
-        The integration is performed over energy to yield weights with units cm²·sr·MeV 
-        (or cm²·sr·MeV·s if tgrid is provided).
+        The integration is performed over energy to yield weights with units cm^2·sr·MeV 
+        (or cm^2·sr·MeV·s if tgrid is provided).
         
         @param alpha0 The alpha0 parameter.
         @param beta0 The beta0 parameter.
@@ -2088,7 +2217,7 @@ class ChannelResponse(FactoryConstructorMixin):
         """
         @brief Compute response weights on an alpha grid for a flat spectrum.
         
-        This returns weights (cm²·sr·MeV or with time integration) by integrating over energy and beta.
+        This returns weights (cm^2·sr·MeV or with time integration) by integrating over energy and beta.
         
         @param alpha0 The alpha0 parameter.
         @param beta0 The beta0 parameter.
@@ -2289,8 +2418,8 @@ class CR_Table_sym(ChannelResponse):
             setattr(self, arg, squeeze(kwargs[arg]))
             if not validate_grid(getattr(self, arg)):
                 raise ValueError('%s is not a valid grid: 1-d, unique' % arg)
-        # TODO: Convert E_GRID to MeV if needed.
-        self._R = squeeze(kwargs['R'])  # TODO: Convert to cm^2 if needed.
+        # TODO: Convert E_GRID to MeV.
+        self._R = squeeze(kwargs['R'])  # TODO: Convert to cm^2.
         if self._R.shape != (self.E_GRID.size, self.TH_GRID.size):
             raise ArgSizeError('R is not shape (E_GRID x TH_GRID)')
         self._Rinterpolator = None
@@ -2298,7 +2427,7 @@ class CR_Table_sym(ChannelResponse):
     def R(self, E, theta, phi):
         """*INHERIT*"""
         if self._Rinterpolator is None:
-            # Extrapolate beyond grid with nearest edge and fill with zero.
+            # Extrapolate beyond grid with fill value of zero.
             self._Rinterpolator = RegularGridInterpolator((self.E_GRID, self.TH_GRID), self._R, 'linear', bounds_error=False, fill_value=0.0)
         return self._Rinterpolator((E, theta))
 
@@ -2343,8 +2472,8 @@ class CR_Table_asym(ChannelResponse):
             setattr(self, arg, squeeze(kwargs[arg]))
             if not validate_grid(getattr(self, arg)):
                 raise ValueError('%s is not a valid grid: 1-d, unique' % arg)
-        # TODO: convert E_GRID to MeV if necessary
-        self._R = squeeze(kwargs['R'])  # TODO: convert to cm^2 if necessary
+        # TODO: convert E_GRID to MeV
+        self._R = squeeze(kwargs['R'])  # TODO: convert to cm^2
         if self._R.shape != (self.E_GRID.size, self.TH_GRID.size, self.PH_GRID.size):
             raise ArgSizeError('R is not shape (E_GRID x TH_GRID x PH_GRID)')
         self._Rinterpolator = None
@@ -2425,9 +2554,12 @@ def load_inst_info(inst_info):
     inst_info = recursive_rename(inst_info, renames)
 
     # Define fields that can propagate down to channel/species responses.
-    prop_flds = ['L_UNIT', 'E_UNIT', 'DEAD_TIME_PER_COUNT', 'DEAD_TYPE', 'COUNTS_MAX', 'CROSSCALIB', 'CROSSCALIB_RMSE',
-                 'RESP_TYPE', 'ETP_TYPE', 'ET_TYPE', 'E_TYPE', 'TP_TYPE', 'TH_TYPE', 'E_GRID', 'TH_GRID', 'PH_GRID',
-                 'EPS', 'R', 'A', 'G', 'E0', 'E1', 'DE', 'R1', 'R2', 'W1', 'W2', 'H1', 'H2', 'D', 'BIDIRECTIONAL']
+    prop_flds = ['L_UNIT', 'E_UNIT', 'DEAD_TIME_PER_COUNT', 'DEAD_TYPE',
+                 'COUNTS_MAX', 'CROSSCALIB', 'CROSSCALIB_RMSE', 'RESP_TYPE',
+                 'ETP_TYPE', 'ET_TYPE', 'E_TYPE', 'TP_TYPE', 'TH_TYPE',
+                 'E_GRID', 'TH_GRID', 'PH_GRID', 'EPS', 'R', 'A', 'G', 'E0',
+                 'E1', 'DE', 'R1', 'R2', 'W1', 'W2', 'H1', 'H2', 'D',
+                 'BIDIRECTIONAL']
 
     for chan in inst_info['CHANNEL_NAMES']:
         # Copy inst_info to channel.
@@ -2442,9 +2574,12 @@ def load_inst_info(inst_info):
             if isinstance(inst_info[chan][sp], ChannelResponse):
                 continue  # already initialized
             for fld in prop_flds:
-                if (fld not in inst_info[chan][sp]) and (fld in inst_info[chan]):
+                if (fld not in inst_info[chan][sp]) and \
+                   (fld in inst_info[chan]):
                     inst_info[chan][sp][fld] = inst_info[chan][fld]
-                if (fld not in inst_info[chan][sp]) and (sp in inst_info) and (fld in inst_info[sp]):
+                # copy inst_info.(sp) to inst_info.(chan).(sp)
+                if (fld not in inst_info[chan][sp]) and (sp in inst_info) and \
+                   (fld in inst_info[sp]):
                     inst_info[chan][sp][fld] = inst_info[sp][fld]
     
     for chan in inst_info['CHANNEL_NAMES']:
@@ -2496,6 +2631,7 @@ def write_JSON(inst_info, jsonfile):
     def encoder(o):
         if isinstance(o, np.ndarray):
             return o.tolist()
+        # Let the base class default method raise the TypeError
         return json.JSONEncoder.default(o)
     inst_dict = CRs_to_dicts(inst_info)
     with open(jsonfile, 'wt') as f:
@@ -2656,7 +2792,7 @@ if __name__ == '__main__':
         @classmethod
         def is_mine(cls, *args, **kwargs):
             return ('type' in kwargs) and (kwargs['type'] == 'C')
-    class D(C):  # Extends C.
+    class D(C):  # Extends C. C and D coexist.
         @classmethod
         def is_mine(cls, *args, **kwargs):
             return ('type' in kwargs) and (kwargs['type'] == 'D')
