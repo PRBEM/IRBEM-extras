@@ -321,6 +321,7 @@ def SelectSpecies(Species):
 
 def MeVtogamma(MeV,species):
     """
+    (gamma,v,m) = MeVtogamma(MeV,species)
     compute gamma, v, m
     given energy in MeV and species 'e','p', etc
     v in m/s

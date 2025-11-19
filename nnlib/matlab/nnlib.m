@@ -50,11 +50,15 @@ function varargout = nnlib(what,varargin)
 
 if ~libisloaded('nnlib'),
     if isempty(getenv('IRBEM_NNLIB_DLL')),
-    if ispc,
-        libfile = which('nnlib.dll');
-    else
-        libfile = which('nnlib.so');
-    end
+        % determine DLL extension
+        if ispc
+            libext = 'dll';
+        elseif ismac
+            libext = 'dylib';
+        else
+            libext = 'so';
+        end
+        libfile = ['nnlib.',libext];        
     else
         libfile = getenv('IRBEM_NNLIB_DLL');
     end
@@ -62,7 +66,17 @@ if ~libisloaded('nnlib'),
         error('Unable to locate nnlib library %s',libfile);
     end
     hfile = which('nnlib.h');
-    loadlibrary(libfile,hfile,'alias','nnlib');
+
+    if isempty(getenv('IRBEM_THUNK_TMP_PATH'))
+            loadlibrary(libfile,hfile,'alias','nnlib'); % let matlab choose the thunkfile name and location
+    else % use user specifiedlocation
+        old_pwd = pwd; % current wd
+        cd(getenv('IRBEM_THUNK_TMP_PATH')); % cd into temp folder
+        tfile = ['nnlib_thunk_',lower(computer),'.',libext];
+        loadlibrary(libfile,hfile,'alias','nnlib','thunkfilename',tfile); % load with named thunkfile
+        cd(old_pwd); % cd back into original wd
+    end
+    
 end
 
 varargout = cell(1,nargout);
