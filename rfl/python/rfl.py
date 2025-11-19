@@ -27,14 +27,15 @@ A note on units:
     - phigrid   : phi grid, degrees, 1-d numpy array or scalar
     - tgrid     : time grid, seconds, 1-d numpy array or scalar
     - hE        : energy response, units of MeV (CROSSCALIB applied)
-    - hA*       : angular response, units of cm²(-s) (CROSSCALIB *not* applied)
-    - h*        : energy-angle response, units of MeV-cm²-sr(-s) (CROSSCALIB applied)
+    - hA*       : angular response, units of cm^2(-s) (CROSSCALIB *not* applied)
+    - h*        : energy-angle response, units of MeV-cm^2-sr(-s) (CROSSCALIB applied)
 
-The ChannelResponse and its internal classes, EnergyResponse and AngleResponse, have
-implicit factory constructors via the FactoryConstructorMixin. That means passing the constructor
-a data tree that actually defines a subclass will return the appropriate subclass. See FactoryConstructorMixin
-for information on how to define the is_mine method in any subclasses derived from ChannelResponse,
-EnergyResponse, and AngleResponse.
+The ChannelResponse and its internal classes, EnergyResponse and AngleResponse,
+ have implicit factory constructors via the FactoryConstructorMixin. That means
+ passing the constructor a data tree that actually defines a subclass will 
+return the appropriate subclass. See FactoryConstructorMixin for information on
+ how to define the is_mine method in any subclasses derived from 
+ChannelResponse, EnergyResponse, and AngleResponse.
 
 @par Major Not-Yet-Implemented Issues:
     - Internal unit conversion - presently assumes cm and MeV.
@@ -65,12 +66,14 @@ atan2d  = lambda x, y: np.degrees(np.arctan2(y, x))
 
 def inherit_docstrings(cls=None, *, parent=None, do_specials=False):
     """
-    @brief Propagates and enriches docstrings throughout the class inheritance hierarchy.
+    @brief Propagates docstrings throughout the class inheritance hierarchy.
 
-    This function walks through the class tree and replaces the placeholder "*INHERIT*" found
-    in the docstrings of class members with the corresponding docstring from the parent class.
-    If no parent is explicitly provided, the function automatically ascends to the top of the
-    inheritance tree and then propagates docstrings down through all subclasses.
+    This function walks through the class tree and replaces the placeholder 
+    "*INHERIT*" found in the docstrings of class members with the corresponding
+    docstring from the parent class.
+    If no parent is explicitly provided, the function automatically ascends to 
+    the top of the inheritance tree and then propagates docstrings down through
+    all subclasses.
 
     <b>Usage:</b>
       - As a class decorator:
@@ -79,20 +82,23 @@ def inherit_docstrings(cls=None, *, parent=None, do_specials=False):
       - Can be invoked multiple times on the same class hierarchy if needed.
 
     @param cls
-        The class whose docstrings are to be processed. When None, the function returns a decorator
-        that processes the class upon definition.
+        The class whose docstrings are to be processed. When None, the function
+        returns a decorator that processes the class upon definition.
     @param parent
-        The parent class from which to inherit docstrings. When set to None, the function traverses up
-        to the top of the inheritance tree and then processes the entire subclass tree.
+        The parent class from which to inherit docstrings. When set to None, 
+        the function traverses up to the top of the inheritance tree and then
+        processes the entire subclass tree.
     @param do_specials
-        A boolean flag indicating whether to process special attributes (those whose names both start
-        and end with double underscores, e.g., __dict__). Default value is False.
+        A boolean flag indicating whether to process special attributes (those
+        whose names both start and end with double underscores, e.g., 
+        __dict__). Default value is False.
 
     @return
         The original class with updated docstrings.
     """
     if cls is None: # called w/ named arguments
-        return lambda cls: inherit_docstrings(cls, parent=parent, do_specials=do_specials)
+        return lambda cls: inherit_docstrings(cls, parent=parent,
+                                              do_specials=do_specials)
     if (parent is None) and cls.__bases__ and (cls.__bases__ != (object,)):
         # go up to the top of the tree and start there
         for base in cls.__bases__:
@@ -103,13 +109,15 @@ def inherit_docstrings(cls=None, *, parent=None, do_specials=False):
         # do this level in tree (cls itself)
         for name in dir(cls):
             if name in ['__doc__','__module__']: continue 
-            if (not do_specials) and name.startswith('__') and name.endswith('__'): 
+            if (not do_specials) and name.startswith('__') and \
+               name.endswith('__'): 
                 continue # don't mess with special items
             if not hasattr(parent, name): continue
             p = getattr(parent, name)
             if p is None: continue
             m = getattr(cls, name)
-            if (p.__doc__ is not None) and hasattr(m, '__doc__') and (m.__doc__ is not None):
+            if (p.__doc__ is not None) and hasattr(m, '__doc__') and \
+               (m.__doc__ is not None):
                 if type(m).__name__ == 'method':
                     # set the method's function's docstring
                     if not hasattr(p, '__func__'): continue
@@ -119,12 +127,15 @@ def inherit_docstrings(cls=None, *, parent=None, do_specials=False):
                 else:
                     # set the object's docstring
                     doc_owner = m
-                if '*INHERIT*' in doc_owner.__doc__:  # check avoids some read-only issues
-                    doc_owner.__doc__ = doc_owner.__doc__.replace('*INHERIT*', p.__doc__)
+                if '*INHERIT*' in doc_owner.__doc__:
+                    # check avoids some read-only issues
+                    doc_owner.__doc__ = doc_owner.__doc__.replace('*INHERIT*',
+                                                                  p.__doc__)
 
     # do subclasses of cls, down the tree
     for c in cls.__subclasses__():
         inherit_docstrings(c, parent=cls, do_specials=do_specials)
+        
     return cls
 
 
