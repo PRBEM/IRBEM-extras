@@ -266,7 +266,8 @@ def broadcast_grids(*args, mesh=False):
     @return A tuple of arrays with the appropriate reshaped or meshed grids.
     """
     if mesh:
-        return np.meshgrid([x.ravel() for x in args], indexing='ij')
+        #return np.meshgrid([x.ravel() for x in args], indexing='ij')
+        return np.meshgrid(*[np.ravel(x) for x in args], indexing='ij')
     else:
         NX = len(args)
         X = [None] * NX
@@ -415,15 +416,27 @@ def alphabeta2thetaphi(alpha, beta, alpha0, beta0, phib):
     ])
 
     x = np.array([sind(alpha)*cosd(beta), sind(alpha)*sind(beta), cosd(alpha)])
+    xpad = x.ndim - 1 # number of dimensions in x after the first
+                      # dimension, which is 3
     # y = R*x (sum over the 2nd dimension of R and 1st dimension of x)
     
     # Order chosen to maintain alpha,beta shape before alpha0,beta0,phib shape
-    y = np.tensordot(x, R, axes=((0,), (1,)))
-    
-    theta = acosd(y[3])
-    phi = atan2d(y[2], y[1])
-    phi[(theta == 0.0) | (theta == 180.0)] = 0
-    
+    y = np.tensordot(x, R, axes=((0,), (1,))) # do it in this order to get
+                                              # alpha, beta shape before
+                                              # alpha0, beta0, phib shape
+    # y is in sensor Cartesian coordinates, but in the dimension after xpad
+
+    ## Old version:
+    #theta = acosd(y[3])
+    #phi = atan2d(y[2], y[1])
+    #phi[(theta == 0.0) | (theta == 180.0)] = 0
+
+    ## New version:
+    theta = acosd(np.take(y, 2, xpad)) # third Cartesian coordinate (z)
+    phi = atan2d(np.take(y, 1, xpad), np.take(y, 0, xpad)) # y, x as above
+    phi[(theta==0.0)|(theta==180.0)] = 0
+    phi = np.mod(phi, 360)
+
     return theta, phi
 
 
@@ -513,10 +526,12 @@ def vectors_to_euler_angles(B, C, S0, S1):
     isscalar = True
     for x in [B, C, S0, S1]:
         s = np.shape(x)
-        if s != (3,):
+        if s == (3,): # fixed bug - old version had != instead of ==
+            # Single vector with shape (3,).
             isscalar = False
             N = 1
         if len(s) == 2:
+            # Series of vectors with shape (N, 3).
             N = s[0]
     if N is None:
         raise ValueError('B, C, S0, S1 inputs must be (3,), or (N, 3)' + \
@@ -1345,9 +1360,16 @@ class AngleResponse(FactoryConstructorMixin):
         """
         dcostheta = np.abs(make_deltas(-cosd(thetagrid), **kwargs))
         dphi = make_deltas(np.radians(phigrid), **kwargs)
-        thetaI, phiI = broadcast_grids(thetagrid, phigrid)
-        dcosthetaI, dphiI = broadcast_grids(dcostheta, dphi)
-        # includes backward response if present
+
+        ## Old version - no mesh
+        #thetaI, phiI = broadcast_grids(thetagrid, phigrid)
+        #dcosthetaI, dphiI = broadcast_grids(dcostheta, dphi)
+
+        ## New version - mesh=True
+        thetaI, phiI = broadcast_grids(thetagrid, phigrid, mesh=True)
+        dcosthetaI, dphiI = broadcast_grids(dcostheta, dphi, mesh=True)
+        
+        # Includes backward response if present.
         return self.A(thetaI, phiI) * dcosthetaI * dphiI
 
     def hAtheta(self, thetagrid, phigrid=None, **kwargs):
@@ -1394,7 +1416,13 @@ class AngleResponse(FactoryConstructorMixin):
         dcosa = make_deltas(-cosd(alphagrid), **kwargs)  # (Na,)
         db = np.radians(make_deltas(betagrid, **kwargs))  # (Nb,)
         dt = make_deltas(tgrid, **kwargs)  # (Nt,) or scalar
-        dcosa, db = broadcast_grids(dcosa, db)  # (Na, Nb)
+
+        ## Old version - no mesh
+        #dcosa, db = broadcast_grids(dcosa, db)  # (Na, Nb)
+
+        ## New version - mesh=True
+        dcosa, db = broadcast_grids(dcosa, db, mesh=True)  # (Na, Nb)
+        
         theta, phi = alphabeta2thetaphi(alphagrid, betagrid, alpha0, beta0,
                                         phib)  # (Na, Nb, Nt) or (Na, Nb)
         A = self.A(E, theta, phi)  # (Na, Nb, *Nt)
@@ -2017,11 +2045,20 @@ class AR_Table_asym(AngleResponse):
     def A(self, theta, phi):
         """*INHERIT*"""
         if self._Ainterpolator is None:
+            ## New version - old version didn't set ph_grid.
+            # Set PH_GRID to [0, 360].
+            ph_grid = np.mod(self.PH_GRID, 180)
+
             # Extrapolate beyond grid at nearest edge with fill zero.
             self._Ainterpolator = \
-                RegularGridInterpolator((self.TH_GRID, self.PH_GRID),
+                RegularGridInterpolator((self.TH_GRID, ph_grid),
                                         self._A, 'linear', bounds_error=False,
                                         fill_value=0.0)
+            
+        ## New version - old version didn't set phi.
+        # Set phi to [0, 360].
+        phi = np.mod(phi, 360)
+
         return self._Ainterpolator((theta, phi))
 
 class ChannelResponse(FactoryConstructorMixin):
@@ -2131,8 +2168,13 @@ class ChannelResponse(FactoryConstructorMixin):
         dE = make_deltas(Egrid, **kwargs)
         dcostheta = np.abs(make_deltas(-cosd(thetagrid), **kwargs))
         dphi = make_deltas(np.radians(phigrid), **kwargs)
-        EI, thetaI, phiI = broadcast_grids(Egrid, thetagrid, phigrid)
-        dEI, dcosthetaI, dphiI = broadcast_grids(dE, dcostheta, dphi)
+
+        ## New version: added mesh=True in the next two lines.
+        EI, thetaI, phiI = broadcast_grids(Egrid, thetagrid, phigrid,
+                                           mesh=True)
+        dEI, dcosthetaI, dphiI = broadcast_grids(dE, dcostheta, dphi,
+                                                 mesh=True)
+        
         return self.R(EI, thetaI, phiI) * dEI * dcosthetaI * dphiI
     
     def hEtheta(self, Egrid, thetagrid, phigrid=None, **kwargs):
@@ -2155,7 +2197,9 @@ class ChannelResponse(FactoryConstructorMixin):
             else:
                 phigrid = default_phigrid(**kwargs)
         h = self.hEthetaphi(Egrid, thetagrid, phigrid, **kwargs)
-        return h.sum(axis=1)  # integrate over phi
+
+        ## New version: changed axis=1 to axis=2 (fixed bug)
+        return h.sum(axis=2)  # integrate over phi
     
     def hE(self, Egrid, thetagrid=None, phigrid=None, **kwargs):
         """
@@ -2202,31 +2246,43 @@ class ChannelResponse(FactoryConstructorMixin):
         dcosa = make_deltas(-cosd(alphagrid), **kwargs)  # (Na,)
         db = np.radians(make_deltas(betagrid, **kwargs))  # (Nb,)
         dt = make_deltas(tgrid, **kwargs)  # (Nt,) or scalar
-        dE, dcosa, db = broadcast_grids(dE, dcosa, db)  # shape (NE, Na, Nb)
-        theta, phi = alphabeta2thetaphi(alphagrid, betagrid, alpha0, beta0,
-                                        phib)  # (Na, Nb, Nt) or (Na, Nb)
+
+        ## Old version:
+        #dE, dcosa, db = broadcast_grids(dE, dcosa, db)  # shape (NE, Na, Nb)
+        #theta, phi = alphabeta2thetaphi(alphagrid, betagrid, alpha0, beta0,
+        #                                phib)  # (Na, Nb, Nt) or (Na, Nb)
+        #E = np.reshape(Egrid, (len(Egrid),
+        #                       *np.ones(theta.ndim)))  # (NE, 1, 1, *1)
+
+        ## New version:
+        dE, dcosa, db, dt = broadcast_grids(dE, dcosa, db, dt,
+                                            mesh=True) # (NE,Na,Nb, dt)
+        alphagrid, betagrid = broadcast_grids(alphagrid, betagrid, mesh=True)
+        theta, phi = alphabeta2thetaphi(alphagrid, betagrid, alpha0,
+                                        beta0, phib) # (Na,Nb,Nt) or (NA,Nb)
         E = np.reshape(Egrid, (len(Egrid),
-                               *np.ones(theta.ndim)))  # (NE, 1, 1, *1)
+                               *np.ones(theta.ndim, dtype=int))) # (NE,1,1,*1)
+        
         theta = np.expand_dims(theta, axis=0)  # (1, Na, Nb, *Nt)
         phi = np.expand_dims(phi, axis=0)  # (1, Na, Nb, *Nt)
 
         ## Old way (may contain bugs).
-        R_val = self.R(E, theta, phi)  # (NE, Na, Nb, *Nt)
-        if np.isscalar(dt):
-            h = R_val * dt
-        else:
-            # Take the dot product along Nt dimension.
-            # AI replaced h in the function call below with R_val, since h is
-            # not declared in this function previously. Is this a bug from the
-            # original versin of rfl.py?
-            h = np.tensordot(h, dt, axes=((3,), (0,)))
-        h = h * dE * dcosa * db / self.CROSSCALIB
+        #R_val = self.R(E, theta, phi)  # (NE, Na, Nb, *Nt)
+        #if np.isscalar(dt):
+        #    h = R_val * dt
+        #else:
+        #    # Take the dot product along Nt dimension.
+        #    # AI replaced h in the function call below with R_val, since h is
+        #    # not declared in this function previously. Is this a bug from the
+        #    # original versin of rfl.py?
+        #    h = np.tensordot(h, dt, axes=((3,), (0,)))
+        #h = h * dE * dcosa * db / self.CROSSCALIB
         # now h is (NE,Na,Nb)
         
         ## New way (untested).
-        #R = self.R(E, theta, phi) # (NE, Na, Nb, *Nt) 
-        #h = R*dt*dE*dcosa*db/self.CROSSCALIB
-        #h = h.sum(axis=3) # integrate over time
+        R_val = self.R(E, theta, phi) # (NE, Na, Nb, *Nt) 
+        h = R_val * dt * dE * dcosa * db / self.CROSSCALIB
+        h = h.sum(axis=3) # integrate over time
         
         return h
     
@@ -2250,6 +2306,8 @@ class ChannelResponse(FactoryConstructorMixin):
         """
         if betagrid is None:
             betagrid = default_betagrid(**kwargs)
+        #print(betagrid[0], betagrid[-1])
+        
         h = self.hEalphabeta(alpha0, beta0, phib,
                              Egrid, alphagrid, betagrid, tgrid, **kwargs)
         return h.sum(axis=2)  # integrate over beta
@@ -2274,6 +2332,8 @@ class ChannelResponse(FactoryConstructorMixin):
         """
         if alphagrid is None:
             alphagrid = default_alphagrid(**kwargs)
+        #print(alphagrid[0], alphagrid[-1])
+        
         h = self.hEalpha(alpha0, beta0, phib,
                          Egrid, alphagrid, betagrid, tgrid, **kwargs)
         return h.sum(axis=1)  # integrate over alpha
@@ -2619,6 +2679,7 @@ class CR_Table_asym(ChannelResponse):
                 raise ValueError('%s is not a valid grid: 1-d, unique' % arg)
         # TODO: convert E_GRID to MeV
         self._R = squeeze(kwargs['R'])  # TODO: convert to cm^2
+        self._R = np.transpose(self._R, (2, 1, 0))
         if self._R.shape != (self.E_GRID.size, self.TH_GRID.size,
                              self.PH_GRID.size):
             raise ArgSizeError('R is not shape (E_GRID x TH_GRID x PH_GRID)')
@@ -2629,10 +2690,15 @@ class CR_Table_asym(ChannelResponse):
     def R(self, E, theta, phi):
         """*INHERIT*"""
         if self._Rinterpolator is None:
+            ## New version:
+            # Set ph_grid to [0, 360].
+            ph_grid = self.PH_GRID
+            if self.PH_GRID[0] < 0:
+                ph_grid = self.PH_GRID + 180
+
             # Extrapolate beyond the grid with zero.
             self._Rinterpolator = \
-                RegularGridInterpolator((self.E_GRID, self.TH_GRID,
-                                         self.PH_GRID),
+                RegularGridInterpolator((self.E_GRID, self.TH_GRID, ph_grid),
                                         self._R, 'linear', bounds_error=False,
                                         fill_value=0.0)
         return self._Rinterpolator((E, theta, phi))
@@ -2691,7 +2757,8 @@ def load_inst_info(inst_info):
     if isinstance(inst_info, str):
         if inst_info.endswith('.json'):
             inst_info = read_JSON(inst_info)
-        elif inst_info.endswith('.h5') or inst_info.endswith('.hdf5'):
+        elif inst_info.endswith('.h5') or inst_info.endswith('.hdf5') \
+             or inst_info.endswith('.mat'):
             inst_info = read_h5(inst_info)
         else:
             raise RFLError('Unknown file type %s' % inst_info)
@@ -2907,21 +2974,39 @@ def read_h5(filename):
         @param prefix The current path in the HDF5 file.
         @return The reconstructed variable.
         """
-        if fp[prefix].attrs['isStruct']:
+        # Only checks if attribute exists, not the value.
+        if fp[prefix].attrs.get(['isStruct'], False):
             var = {}  # Create a dict result.
             for key in fp[prefix]:
                 var[key] = read_recursive(fp, prefix + '/' + key)
-        elif fp[prefix].attrs['isArray']:
+        elif fp[prefix].attrs.get(['isArray'], False):
             keys = [k for k in fp[prefix]]
             var = []
             for key in sorted(keys):
                 var.append(read_recursive(fp, prefix + '/' + key))
         else:
-            var = fp[prefix][()]
-            if fp[prefix].attrs['isBoolean']:
-                var = bool(var)
-            elif fp[prefix].attrs['isString']:
-                var = var.decode('utf-8')
+            ## Old version:
+            #var = fp[prefix][()]
+            #if fp[prefix].attrs['isBoolean']:
+            #    var = bool(var)
+            #elif fp[prefix].attrs['isString']:
+            #    var = var.decode('utf-8')
+
+            ## New version:
+            if type(fp[prefix]) == h5py._hl.group.Group:
+                var = {}
+                for key in fp[prefix]:
+                    var[key] = read_recursive(fp,prefix+'/'+key)
+            else:   
+                var = fp[prefix][()]
+                if fp[prefix].attrs.get('isBoolean', False):
+                    var = bool(var)
+                elif fp[prefix].attrs.get('isString', False):
+                    if not isinstance(var, np.ndarray):
+                        var = var.decode('utf-8')
+                    else:
+                        var = "".join([chr(i) for i in var[:,0]])
+
         return var
 
     with h5py.File(filename, 'r') as fp:
