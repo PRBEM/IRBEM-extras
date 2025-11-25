@@ -16,7 +16,7 @@ inst_info['L_UNIT'] = 'cm'
 inst_info['E_UNIT'] = 'MeV'
 inst_info['REFERENCES'] = ['Made-up sensors of all types',
     'Response file prepared by Paul O''Brien, paul.obrien@aero.org',
-    'Created %s' % dt.datetime.utcnow().isoformat()]
+    'Created %s' % dt.datetime.now(dt.UTC).isoformat()]
 inst_info['DEAD_TIME_PER_COUNT'] = 0 # unknown
 inst_info['DEAD_TYPE'] = 'BLOCKING' # unknown
 inst_info['COUNTS_MAX'] = np.inf # unknown
