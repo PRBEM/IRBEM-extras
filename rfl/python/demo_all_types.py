@@ -5,6 +5,10 @@ also demo loading/saving JSON and H5 files
 """
 
 import numpy as np
+try:
+    from numpy import trapz as trapezoid  # deprecated since numpy 2.0
+except ImportError:
+    from numpy import trapezoid as trapezoid
 import datetime as dt
 import rfl
 
@@ -188,13 +192,13 @@ for info in [inst_info,jsonname,jsonnamebig,h5name,h5namebig]:
             grids = rfl.broadcast_grids(resp.E_GRID,resp.TH_GRID,0)
             tmp = resp.R(*grids)
             tmp = tmp[:,:,0]*2*np.pi # implicit integral of phi
-            tmp = np.trapz(tmp,x=-rfl.cosd(resp.TH_GRID),axis=1)
+            tmp = trapezoid(tmp,x=-rfl.cosd(resp.TH_GRID),axis=1)
             G = max(tmp)
         elif resp.RESP_TYPE == '[E,TH,PH]':
             grids = rfl.broadcast_grids(resp.E_GRID,resp.TH_GRID,resp.PH_GRID)
             tmp = resp.R(*grids)
-            tmp = np.trapz(tmp,x=np.radians(resp.PH_GRID),axis=2)
-            tmp = np.trapz(tmp,x=-rfl.cosd(resp.TH_GRID),axis=1)
+            tmp = trapezoid(tmp,x=np.radians(resp.PH_GRID),axis=2)
+            tmp = trapezoid(tmp,x=-rfl.cosd(resp.TH_GRID),axis=1)
             G = max(tmp)
         else:
             raise Exception('Could not figure out how to compute G: %s,%s' % (v,resp.RESP_TYPE))
