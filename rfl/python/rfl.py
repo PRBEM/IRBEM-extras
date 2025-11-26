@@ -432,7 +432,15 @@ def alphabeta2thetaphi(alpha, beta, alpha0, beta0, phib):
     #phi[(theta == 0.0) | (theta == 180.0)] = 0
 
     ## New version:
-    theta = acosd(np.take(y, 2, xpad)) # third Cartesian coordinate (z)
+    z = np.take(y, 2, xpad)
+    if np.any(z < -1) or np.any(z > 1):
+        ## Correct for last-digit floating point errors creating
+        ## numbers out of bounds for acosd.
+        cond1 = z > 1
+        cond2 = z < -1
+        z[cond1] = np.round(z[cond1], decimals=8)
+        z[cond2] = np.round(z[cond2], decimals=8)
+    theta = acosd(z) # third Cartesian coordinate (z)
     phi = atan2d(np.take(y, 1, xpad), np.take(y, 0, xpad)) # y, x as above
     phi[(theta==0.0)|(theta==180.0)] = 0
     phi = np.mod(phi, 360)
@@ -2679,10 +2687,15 @@ class CR_Table_asym(ChannelResponse):
                 raise ValueError('%s is not a valid grid: 1-d, unique' % arg)
         # TODO: convert E_GRID to MeV
         self._R = squeeze(kwargs['R'])  # TODO: convert to cm^2
-        self._R = np.transpose(self._R, (2, 1, 0))
+        #self._R = np.transpose(self._R, (2, 1, 0))
         if self._R.shape != (self.E_GRID.size, self.TH_GRID.size,
                              self.PH_GRID.size):
-            raise ArgSizeError('R is not shape (E_GRID x TH_GRID x PH_GRID)')
+            raise ArgSizeError("R is not shape (E_GRID x TH_GRID x PH_GRID)" +
+                               "\nR.shape = {}".format(self._R.shape) +
+                               "\n(E, TH, PH) = " +
+                               "({}, {}, {})".format(self.E_GRID.size,
+                                                     self.TH_GRID.size,
+                                                     self.PH_GRID.size))
         self._Rinterpolator = None
         if (self.PH_GRID[0] != 0) or (self.PH_GRID[-1] != 360):
             raise ValueError('PH_GRID should span [0,360]')
