@@ -2988,11 +2988,11 @@ def read_h5(filename):
         @return The reconstructed variable.
         """
         # Only checks if attribute exists, not the value.
-        if fp[prefix].attrs.get(['isStruct'], False):
+        if fp[prefix].attrs.get('isStruct', False):
             var = {}  # Create a dict result.
             for key in fp[prefix]:
                 var[key] = read_recursive(fp, prefix + '/' + key)
-        elif fp[prefix].attrs.get(['isArray'], False):
+        elif fp[prefix].attrs.get('isArray', False):
             keys = [k for k in fp[prefix]]
             var = []
             for key in sorted(keys):
