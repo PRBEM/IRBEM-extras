@@ -410,9 +410,9 @@ def alphabeta2thetaphi(alpha, beta, alpha0, beta0, phib):
     # note: python inner lists are columns; in MATLAB a row of code is a row
     #       of the matrix, so this code is transposed compared to MATLAB.
     R = np.array([
-        [-sind(beta0)*sind(phib)-cosd(alpha0)*cosd(beta0)*cosd(phib), cosd(beta0)*sind(phib)- cosd(alpha0)*cosd(phib)*sind(beta0), cosd(phib)*sind(alpha0)],
-        [cosd(phib)*sind(beta0)-cosd(alpha0)*cosd(beta0)*sind(phib), -cosd(beta0)*cosd(phib)-cosd(alpha0)*sind(beta0)*sind(phib), sind(alpha0)*sind(phib)],
-        [cosd(beta0)*sind(alpha0), -cosd(beta0)*cosd(phib)-cosd(alpha0)*sind(beta0)*sind(phib), sind(alpha0)*sind(beta0), cosd(alpha0)]
+        [-sind(beta0)*sind(phib) -cosd(alpha0)*cosd(beta0)*cosd(phib),  cosd(beta0) *sind(phib)-cosd(alpha0)*cosd(phib) *sind(beta0), cosd(phib)  *sind(alpha0)],
+        [ cosd(phib) *sind(beta0)-cosd(alpha0)*cosd(beta0)*sind(phib), -cosd(beta0) *cosd(phib)-cosd(alpha0)*sind(beta0)*sind(phib),  sind(alpha0)*sind(phib)  ],
+        [ cosd(beta0)*sind(alpha0),                                     sind(alpha0)*sind(beta0),                                     cosd(alpha0)             ]
     ])
 
     x = np.array([sind(alpha)*cosd(beta), sind(alpha)*sind(beta), cosd(alpha)])
