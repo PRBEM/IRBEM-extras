@@ -2687,9 +2687,17 @@ class CR_Table_asym(ChannelResponse):
                 raise ValueError('%s is not a valid grid: 1-d, unique' % arg)
         # TODO: convert E_GRID to MeV
         self._R = squeeze(kwargs['R'])  # TODO: convert to cm^2
-        #self._R = np.transpose(self._R, (2, 1, 0))
+        
+        if self._R.shape == (self.PH_GRID.size, self.TH_GRID.size,
+                             self.E_GRID.size):
+            ## Transpose automatically if E and PH dimensions are switched.
+            print("Warning: R is shape (PH_GRID x TH_GRID x E_GRID), " + \
+                  "which is reversed from the expected " + \
+                  "(E_GRID x TH_GRID x PH_GRID). Automatically transposing.")
+            self._R = np.transpose(self._R, (2, 1, 0))
         if self._R.shape != (self.E_GRID.size, self.TH_GRID.size,
                              self.PH_GRID.size):
+            ## Raise exception for mismatched dimensions.
             raise ArgSizeError("R is not shape (E_GRID x TH_GRID x PH_GRID)" +
                                "\nR.shape = {}".format(self._R.shape) +
                                "\n(E, TH, PH) = " +
@@ -2925,14 +2933,14 @@ def write_h5(inst_info, filename):
             if hasattr(var, conv):
                 conv_func = getattr(var, conv)
                 var = conv_func()
-
+    
         # Write standard types
         if isinstance(var, dict):
             if prefix != '/':
                 fp.create_group(prefix)
             defaultAtts(fp[prefix])
             fp[prefix].attrs['isStruct'] = True
-
+    
             for key, val in var.items():
                 writeVar(fp, prefix + '/' + key, val)
         elif isinstance(var, list):
@@ -2960,7 +2968,6 @@ def write_h5(inst_info, filename):
                         '(required to write a new hdf5 file)')
     with h5py.File(filename, 'w') as fp:
         writeVar(fp, '/', inst_dict)
-
 
         
 def read_h5(filename):
