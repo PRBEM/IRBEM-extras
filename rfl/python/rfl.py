@@ -2688,8 +2688,9 @@ class CR_Table_asym(ChannelResponse):
         # TODO: convert E_GRID to MeV
         self._R = squeeze(kwargs['R'])  # TODO: convert to cm^2
         
-        if self._R.shape == (self.PH_GRID.size, self.TH_GRID.size,
-                             self.E_GRID.size):
+        if (self._R.shape == (self.PH_GRID.size, self.TH_GRID.size,
+                              self.E_GRID.size)) and \
+                              (self.PH_GRID.size != self.E_GRID.size):
             ## Transpose automatically if E and PH dimensions are switched.
             print("Warning: R is shape (PH_GRID x TH_GRID x E_GRID), " + \
                   "which is reversed from the expected " + \
