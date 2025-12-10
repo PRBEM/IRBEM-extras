@@ -4,7 +4,11 @@
 @details
 Primary Author: Paul O'Brien, The Aerospace Corporation (paul.obrien@aero.org)
 
-AI Disclosure Statement: This codebase was developed with the assistance of generative AI tools: Astro, Open AI - GPT-4o, Nov 2025, for the purpose of modifying documentation to fit the Doxygen automated documentation standard. All AI-assisted content has been reviewed, verified, and revised by developers to ensure accuracy, completeness, and functionality.
+AI Disclosure Statement: This codebase was developed with the assistance of 
+generative AI tools: Astro, Open AI - GPT-4o, Nov 2025, for the purpose of 
+modifying documentation to fit the Doxygen automated documentation standard. 
+All AI-assisted content has been reviewed, verified, and revised by developers
+to ensure accuracy, completeness, and functionality.
 
 A note on units:
     The standard allows for L_UNIT (length unit) and E_UNIT (energy unit),
@@ -27,8 +31,10 @@ A note on units:
     - phigrid   : phi grid, degrees, 1-d numpy array or scalar
     - tgrid     : time grid, seconds, 1-d numpy array or scalar
     - hE        : energy response, units of MeV (CROSSCALIB applied)
-    - hA*       : angular response, units of cm^2(-s) (CROSSCALIB *not* applied)
-    - h*        : energy-angle response, units of MeV-cm^2-sr(-s) (CROSSCALIB applied)
+    - hA*       : angular response, units of cm^2(-s) (CROSSCALIB *not* 
+                  applied)
+    - h*        : energy-angle response, units of MeV-cm^2-sr(-s) (CROSSCALIB 
+                  applied)
 
 The ChannelResponse and its internal classes, EnergyResponse and AngleResponse,
  have implicit factory constructors via the FactoryConstructorMixin. That means
@@ -39,9 +45,10 @@ ChannelResponse, EnergyResponse, and AngleResponse.
 
 @par Major Not-Yet-Implemented Issues:
     - Internal unit conversion - presently assumes cm and MeV.
-    - to_dict - ability to convert a channel response back to a dict (needed for writing).
-    - No ability to write response function nested dicts.
-    - No ability to read from files (load_inst_info only takes dicts).
+    - to_dict() - ability to convert a channel response back to a dict (needed
+                  for writing). Currently just returns the instantiation dict.
+    - Limited ability to write response function nested dicts.
+    - No ability to read .mat files.
 """
 
 # NOTE: In this code where the docstring is *INHERIT* that means
@@ -54,7 +61,8 @@ from scipy.interpolate import interp1d, RegularGridInterpolator
 # Utilities
 
 ## @brief Degree-based trigonometric functions.
-## These lambda functions compute common trigonometric operations where the input is in degrees.
+## These lambda functions compute common trigonometric operations where the
+## input is in degrees.
 sind    = lambda x: np.sin(np.radians(x))
 cosd    = lambda x: np.cos(np.radians(x))
 tand    = lambda x: np.tan(np.radians(x))
@@ -149,15 +157,20 @@ def get_list_neighbors(lst, q):
     values, it returns an array of shape (len(q), 2). An index value of -1 
     indicates that the corresponding query is out of bounds.
     
-    @param lst A list or array-like sequence of numeric values sorted in ascending order.
+    @param lst A list or array-like sequence of numeric values sorted in 
+               ascending order.
     @param q A numeric scalar or an array-like sequence of query values.
     
     @return 
-      - For a scalar q: a NumPy array of shape (2,), where the first element is the index such that lst[index0] <= q < lst[index1].
-      - For an array of query values: a NumPy array of shape (len(q), 2) with the same semantics.
-      - An index of -1 indicates that the query value q is not within the bounds of lst.
+      - For a scalar q: a NumPy array of shape (2,), where the first element is
+        the index such that lst[index0] <= q < lst[index1].
+      - For an array of query values: a NumPy array of shape (len(q), 2) with
+        the same semantics.
+      - An index of -1 indicates that the query value q is not within the 
+        bounds of lst.
     """
-    ## NOTE: should check if lst is sorted ##
+    if lst != sorted(lst):
+        raise ValueError("Input list is not sorted.")
     lst = np.array(lst).ravel()
     N = len(lst)
     is_scalar = np.isscalar(q)
@@ -173,6 +186,7 @@ def get_list_neighbors(lst, q):
 
         # next neighbor to right
         i[f, 1] = i[f, 0] + 1  
+
     # limit checks
     i[i >= N] = -1
     i[i < 0] = -1
@@ -200,9 +214,11 @@ def make_deltas(grid, int_method='trapz', **kwargs):
     Note that additional keyword arguments are ignored.
 
     @param grid
-        A 1D array-like object representing the grid. If None or empty, the function returns 1.
+        A 1D array-like object representing the grid. If None or empty, the 
+        function returns 1.
     @param int_method
-        Integration method to use. Currently, only 'trapz' (trapezoidal integration) is supported.
+        Integration method to use. Currently, only 'trapz' (trapezoidal 
+        integration) is supported.
     @param kwargs
         Additional keyword arguments (ignored).
 
@@ -223,7 +239,7 @@ def make_deltas(grid, int_method='trapz', **kwargs):
         return grid[0]  # grid is actually dt
 
     d = np.full(grid.shape, np.nan)
-    if int_method == 'trapz':
+    if int_method == 'trapz' or int_method == 'trapezoid':
         d[0] = (grid[1] - grid[0]) / 2
         d[1:-1] = (grid[2:] - grid[:-2]) / 2
         d[-1] = (grid[-1] - grid[-2]) / 2
@@ -514,10 +530,15 @@ def vectors_to_euler_angles(B, C, S0, S1):
     output angles will be scalars for (3,) inputs or 1-D arrays of shape (N,)
     for (N,3) inputs. All angles are returned in degrees.
 
-    @param B A 3-vector or an (N,3) array representing the magnetic field direction.
-    @param C A 3-vector or an (N,3) array that, together with B, defines the plane in which beta = 0.
-    @param S0 A 3-vector or an (N,3) array representing the instrument pointing direction parallel to incident particles and opposite the boresight direction.
-    @param S1 A 3-vector or an (N,3) array that defines the S0-S1 plane in which phi = 0.
+    @param B A 3-vector or an (N,3) array representing the magnetic field 
+             direction.
+    @param C A 3-vector or an (N,3) array that, together with B, defines the
+             plane in which beta = 0.
+    @param S0 A 3-vector or an (N,3) array representing the instrument pointing
+              direction parallel to incident particles and opposite the 
+              boresight direction.
+    @param S1 A 3-vector or an (N,3) array that defines the S0-S1 plane in 
+              which phi = 0.
 
     @return A tuple (alpha0, beta0, phib) where:
             - @b alpha0: Pitch angle of the boresight (in degrees).
@@ -780,22 +801,31 @@ def interp_weights_1d(xgrid, xhat, extrap_left=False, extrap_right=False,
     behavior for query points outside the grid range as well as periodic 
     boundary conditions.
 
-    @param xgrid A list or array of grid values with shape (Nx,). The grid values should be in ascending order.
-    @param xhat A scalar or list/array of query values where interpolation is desired.
+    @param xgrid A list or array of grid values with shape (Nx,). The grid 
+                 values should be in ascending order.
+    @param xhat A scalar or list/array of query values where interpolation is
+                desired.
     @param extrap_left Controls extrapolation for xhat values left of xgrid[0]:
            - False or 0: Assign a zero weight for xhat < xgrid[0].
            - True: Linearly extrapolate for xhat < xgrid[0].
-           - "fixed": For xhat < xgrid[0], use the value at xgrid[0] (i.e., assign full weight to xgrid[0]).
-    @param extrap_right Controls extrapolation for xhat values right of xgrid[-1]:
+           - "fixed": For xhat < xgrid[0], use the value at xgrid[0] (i.e., 
+                      assign full weight to xgrid[0]).
+    @param extrap_right Controls extrapolation for xhat values right 
+                        of xgrid[-1]:
            - False or 0: Assign a zero weight for xhat > xgrid[-1].
            - True: Linearly extrapolate for xhat > xgrid[-1].
-           - "fixed": For xhat > xgrid[-1], use the value at xgrid[-1] (i.e., assign full weight to xgrid[-1]).
-    @param period Optional scalar that specifies the period over which x values wrap around.
+           - "fixed": For xhat > xgrid[-1], use the value at xgrid[-1] (i.e.,
+                      assign full weight to xgrid[-1]).
+    @param period Optional scalar that specifies the period over which x values
+                  wrap around.
                   If provided, query points are reduced modulo period.
 
-    @return A NumPy array of interpolation weights from the grid to the query points.
-            - If xhat is an array with shape (N,), the output has shape (N, Nx).
-            - If xhat is a scalar, the output is a one-dimensional array with shape (Nx,).
+    @return A NumPy array of interpolation weights from the grid to the query 
+            points.
+            - If xhat is an array with shape (N,), the output has 
+              shape (N, Nx).
+            - If xhat is a scalar, the output is a one-dimensional array with
+              shape (Nx,).
     """
     xgrid = np.array(xgrid).ravel()
     isscalar = np.isscalar(xhat)
@@ -862,21 +892,30 @@ def interp_weights_3d(xgrid, xhat, ygrid, yhat, zgrid=None, zhat=None,
     and zhat are None), the function produces two-dimensional interpolation
     weights.
 
-    @param xgrid A list or array of grid values along the x-axis with shape (Nx,).
+    @param xgrid A list or array of grid values along the x-axis with 
+                 shape (Nx,).
     @param xhat A scalar or list/array of query values along the x-axis.
-    @param ygrid A list or array of grid values along the y-axis with shape (Ny,).
+    @param ygrid A list or array of grid values along the y-axis with shape 
+                 (Ny,).
     @param yhat A scalar or list/array of query values along the y-axis.
-    @param zgrid Optional. A list or array of grid values along the z-axis with shape (Nz,).
-    @param zhat Optional. A scalar or list/array of query values along the z-axis.
-    @param xopts Optional. A dictionary of options to be passed to interp_weights_1d for the x-axis.
-    @param yopts Optional. A dictionary of options to be passed to interp_weights_1d for the y-axis.
-    @param zopts Optional. A dictionary of options to be passed to interp_weights_1d for the z-axis.
+    @param zgrid Optional. A list or array of grid values along the z-axis with
+                           shape (Nz,).
+    @param zhat Optional. A scalar or list/array of query values along the 
+                          z-axis.
+    @param xopts Optional. A dictionary of options to be passed to 
+                           interp_weights_1d for the x-axis.
+    @param yopts Optional. A dictionary of options to be passed to 
+                           interp_weights_1d for the y-axis.
+    @param zopts Optional. A dictionary of options to be passed to
+                           interp_weights_1d for the z-axis.
 
     @return A NumPy array of interpolation weights:
-            - If zgrid and zhat are provided, the output shape is (N, Nx, Ny, Nz), where N is the
-              number of query points after broadcasting.
+            - If zgrid and zhat are provided, the output shape is 
+              (N, Nx, Ny, Nz), where N is the number of query points after 
+              broadcasting.
             - If zgrid and zhat are None, the output has shape (N, Nx, Ny).
-            - If the query points are given as scalars, appropriate dimensions are squeezed.
+            - If the query points are given as scalars, appropriate dimensions
+              are squeezed.
     
     @exception ValueError Raised if one of zgrid or zhat is provided without
     the other, or if the query points are not mutually broadcastable.
@@ -933,16 +972,23 @@ def interp_weights_2d(xgrid, xhat, ygrid, yhat, xopts={}, yopts={}):
     points. It leverages interp_weights_3d by setting the z-dimension inputs to
     None, thereby generating 2-D interpolation weights.
 
-    @param xgrid A list or array of grid values along the x-axis with shape (Nx,).
+    @param xgrid A list or array of grid values along the x-axis with shape
+                 (Nx,).
     @param xhat A scalar or list/array of query values along the x-axis.
-    @param ygrid A list or array of grid values along the y-axis with shape (Ny,).
+    @param ygrid A list or array of grid values along the y-axis with
+                 shape (Ny,).
     @param yhat A scalar or list/array of query values along the y-axis.
-    @param xopts Optional. A dictionary of options to be passed to interp_weights_1d for the x-axis.
-    @param yopts Optional. A dictionary of options to be passed to interp_weights_1d for the y-axis.
+    @param xopts Optional. A dictionary of options to be passed to 
+                           interp_weights_1d for the x-axis.
+    @param yopts Optional. A dictionary of options to be passed to 
+                           interp_weights_1d for the y-axis.
 
-    @return A NumPy array of interpolation weights from the grid to the query points.
-            - If xhat and yhat are arrays with shape (N,), the output has shape (N, Nx, Ny).
-            - If xhat and yhat are scalars, the output is a two-dimensional array with shape (Nx, Ny).
+    @return A NumPy array of interpolation weights from the grid to the query 
+            points.
+            - If xhat and yhat are arrays with shape (N,), the output has 
+              shape (N, Nx, Ny).
+            - If xhat and yhat are scalars, the output is a two-dimensional 
+              array with shape (Nx, Ny).
     """
     return interp_weights_3d(xgrid, xhat, ygrid, yhat, xopts, yopts)
 
@@ -978,7 +1024,8 @@ class FactoryConstructorMixin(object):
     def is_mine(cls, *args, **kwargs):
         """
         bool = is_mine(cls, *args, **kwargs)
-        @brief Return true if the provided arguments describe an object of this class.
+        @brief Return true if the provided arguments describe an object of 
+               this class.
         """
         raise Exception("Class '%s' failed to" % cls.__name__ + \
                         " implement is_mine classmethod or didn't claim case")
@@ -1063,7 +1110,8 @@ class EnergyResponse(FactoryConstructorMixin):
 
         @param Egrid A 1-D numpy array representing energies.
         @param kwargs Optional additional parameters.
-        @return A 1-D numpy array of energy response weights with CROSSCALIB applied.
+        @return A 1-D numpy array of energy response weights with CROSSCALIB 
+                applied.
         @exception NotImplementedError if not overloaded by a subclass.
         """
         raise NotImplementedError('Class %s '  % self.__class__.__name__ + \
@@ -1073,8 +1121,8 @@ class EnergyResponse(FactoryConstructorMixin):
         """
         @brief Return the integrated energy response.
 
-        @param Egrid Optional 1-D numpy array over which to integrate. If not supplied,
-                     the stored _E0 value is returned.
+        @param Egrid Optional 1-D numpy array over which to integrate. If not
+                     supplied, the stored _E0 value is returned.
         @return A scalar energy response (in MeV) after integration.
         @exception ValueError if Egrid is None and _E0 is not defined.
         """
@@ -1248,9 +1296,11 @@ class ER_Table(EnergyResponse):
 
         @param kwargs Keyword arguments including:
                - E_GRID: A 1-D numeric grid of energy values.
-               - EPS: A numeric value or array representing the response (optional, defaults to 1).
+               - EPS: A numeric value or array representing the response 
+                      (optional, defaults to 1).
         @return None
-        @exception ValueError If E_GRID is not a valid grid (must be 1-D and contain unique values).
+        @exception ValueError If E_GRID is not a valid grid (must be 1-D and
+                              contain unique values).
         @exception ArgSizeError If the shapes of E_GRID and EPS do not match.
         """
         super().__init__(**kwargs)  # handles CROSSCALIB and EPS
@@ -1320,8 +1370,10 @@ class AngleResponse(FactoryConstructorMixin):
         the length unit (L_UNIT).
 
         @param kwargs Keyword arguments that may include:
-               - BIDIRECTIONAL: A boolean or string ('TRUE') indicating bidirectionality.
-               - L_UNIT: A string representing the length unit (defaults to 'cm').
+               - BIDIRECTIONAL: A boolean or string ('TRUE') indicating 
+                                bidirectionality.
+               - L_UNIT: A string representing the length unit (defaults 
+                         to 'cm').
         @return None
         """
         super().__init__(**kwargs)
@@ -1337,17 +1389,21 @@ class AngleResponse(FactoryConstructorMixin):
 
     def A(self, theta, phi):
         """
-        @brief Evaluate the angular response (effective area) at specified theta and phi.
+        @brief Evaluate the angular response (effective area) at specified 
+               theta and phi.
 
         Computes the effective area in cm^2 given polar (theta) and azimuthal 
         (phi) angles. The input angles must be broadcast-compatible, and the 
         returned value or array will have the same broadcast shape as theta and
         phi.
 
-        @param theta A numeric value or array representing the polar angle in degrees.
-        @param phi A numeric value or array representing the azimuthal angle in degrees.
+        @param theta A numeric value or array representing the polar angle in
+                     degrees.
+        @param phi A numeric value or array representing the azimuthal angle
+                   in degrees.
         @return The effective area (in cm^2) as a scalar or numpy array.
-        @exception NotImplementedError If the method is not overridden in a subclass.
+        @exception NotImplementedError If the method is not overridden in a 
+                                       subclass.
         """
         raise NotImplementedError('Class %s ' % self.__class__.__name__ + \
                                   'did not overload of A method, as required')
@@ -1364,7 +1420,8 @@ class AngleResponse(FactoryConstructorMixin):
         @param thetagrid A 1-D numpy array of theta values in degrees.
         @param phigrid A 1-D numpy array of phi values in degrees.
         @param kwargs Additional keyword arguments to be passed to make_deltas.
-        @return A scalar or a 2-D numpy array with shape (len(thetagrid), len(phigrid)) representing the response weights.
+        @return A scalar or a 2-D numpy array with shape (len(thetagrid), 
+                len(phigrid)) representing the response weights.
         """
         dcostheta = np.abs(make_deltas(-cosd(thetagrid), **kwargs))
         dphi = make_deltas(np.radians(phigrid), **kwargs)
@@ -1382,16 +1439,19 @@ class AngleResponse(FactoryConstructorMixin):
 
     def hAtheta(self, thetagrid, phigrid=None, **kwargs):
         """
-        @brief Compute angular response weights on a theta grid integrated over phi.
+        @brief Compute angular response weights on a theta grid integrated 
+               over phi.
 
         If phigrid is not provided, it defaults to a full 0–360 degree range.
         The response weights (in cm^2 sr) are integrated over the phi 
         dimension.
 
         @param thetagrid A 1-D numpy array of theta values in degrees.
-        @param phigrid Optional 1-D numpy array of phi values in degrees; defaults to full range if omitted.
+        @param phigrid Optional 1-D numpy array of phi values in degrees; 
+                       defaults to full range if omitted.
         @param kwargs Additional keyword arguments.
-        @return A scalar or a 1-D numpy array with length equal to len(thetagrid) representing the integrated response weights.
+        @return A scalar or a 1-D numpy array with length equal to 
+                len(thetagrid) representing the integrated response weights.
         """
         if phigrid is None:
             phigrid = default_phigrid(**kwargs)
@@ -1419,7 +1479,8 @@ class AngleResponse(FactoryConstructorMixin):
         @param betagrid A 1-D numpy array of beta values in degrees.
         @param tgrid Optional time grid; can be a scalar or 1-D numpy array.
         @param kwargs Additional keyword arguments to be passed to make_deltas.
-        @return A scalar or a 2-D numpy array with shape (len(alphagrid), len(betagrid)) representing response weights.
+        @return A scalar or a 2-D numpy array with shape (len(alphagrid), 
+                len(betagrid)) representing response weights.
         """
         dcosa = make_deltas(-cosd(alphagrid), **kwargs)  # (Na,)
         db = np.radians(make_deltas(betagrid, **kwargs))  # (Nb,)
@@ -1448,7 +1509,8 @@ class AngleResponse(FactoryConstructorMixin):
     def hAalpha(self, alpha0, beta0, phib, alphagrid, betagrid=None,
                 tgrid=None, **kwargs):
         """
-        @brief Compute angular response weights on an alpha grid after integrating over beta.
+        @brief Compute angular response weights on an alpha grid after 
+               integrating over beta.
 
         This function computes the angular response weights based on an alpha
         grid by first adjoining a beta grid. If betagrid is not provided, it is
@@ -1460,10 +1522,12 @@ class AngleResponse(FactoryConstructorMixin):
         @param beta0 Numeric value representing the parameter beta0.
         @param phib Numeric value representing the parameter phib.
         @param alphagrid A 1-D numpy array of alpha values in degrees.
-        @param betagrid Optional 1-D numpy array of beta values in degrees; defaults to full range if omitted.
+        @param betagrid Optional 1-D numpy array of beta values in degrees; 
+                        defaults to full range if omitted.
         @param tgrid Optional time grid for integration.
         @param kwargs Additional keyword arguments.
-        @return A scalar or a 1-D numpy array of response weights with length equal to len(alphagrid).
+        @return A scalar or a 1-D numpy array of response weights with length
+                equal to len(alphagrid).
         """
         if betagrid is None:
             betagrid = default_betagrid(**kwargs)
@@ -1522,7 +1586,8 @@ class AR_Omni(AR_csym):
 
     Properties:
       - area: Detector area in cm^2.
-      - G: Geometric factor for forward hemisphere particles (theta <= 90) in cm^2 sr.
+      - G: Geometric factor for forward hemisphere particles (theta <= 90) 
+           in cm^2 sr.
     """
     @classmethod
     def is_mine(cls, *args, **kwargs):
@@ -1667,7 +1732,8 @@ class AR_Slab(AR_SingleElement):
 
 class AR_Tele_Cyl(AR_csym):
     """
-    @brief Class representing cylindrically-symmetric telescope angular responses.
+    @brief Class representing cylindrically-symmetric telescope angular 
+           responses.
 
     Using Sullivan's 1971 paper (updated ~2010), this class models the angular
     response of a cylindrical telescope. Initialization requires:
@@ -1761,8 +1827,10 @@ class AR_Table_sym(AngleResponse):
         @param kwargs Keyword arguments including:
                - TH_GRID: 1-D numeric grid for theta (must start at 0).
                - A: Numeric response values corresponding to TH_GRID.
-        @exception ValueError Raised if TH_GRID is not a valid grid or does not start at 0.
-        @exception ArgSizeError Raised if TH_GRID and A do not have the same shape.
+        @exception ValueError Raised if TH_GRID is not a valid grid or does not
+                              start at 0.
+        @exception ArgSizeError Raised if TH_GRID and A do not have the same 
+                                shape.
         """
         super().__init__(**kwargs)
         keyword_check_numeric('TH_GRID', 'A', **kwargs)
@@ -1790,7 +1858,8 @@ class AR_Table_sym(AngleResponse):
 
 class AR_Pinhole(AngleResponse):
     """
-    @brief Class representing pinhole angular responses (delta function at THETA=0).
+    @brief Class representing pinhole angular responses (delta function at 
+           THETA = 0).
 
     Initialization requires the geometric factor G.
     """
@@ -2029,9 +2098,12 @@ class AR_Table_asym(AngleResponse):
         @param kwargs Keyword arguments including:
                - TH_GRID: 1-D numeric grid for theta.
                - PH_GRID: 1-D numeric grid for phi.
-               - A: 2-D numeric response array corresponding to (TH_GRID, PH_GRID).
-        @exception ValueError Raised if TH_GRID or PH_GRID is invalid or not spanning required ranges.
-        @exception ArgSizeError Raised if the shape of A does not match (len(TH_GRID), len(PH_GRID)).
+               - A: 2-D numeric response array corresponding to (TH_GRID, 
+                    PH_GRID).
+        @exception ValueError Raised if TH_GRID or PH_GRID is invalid or not 
+                              spanning required ranges.
+        @exception ArgSizeError Raised if the shape of A does not match 
+                                (len(TH_GRID), len(PH_GRID)).
         """
         super().__init__(**kwargs)
         keyword_check_numeric('TH_GRID', 'PH_GRID', 'A', **kwargs)
@@ -2078,20 +2150,29 @@ class ChannelResponse(FactoryConstructorMixin):
     the supplied response dictionary.
     
     The following methods are defined:
-      - Working in (E, alpha, beta, time) coordinates (results integrated over time):
+      - Working in (E, alpha, beta, time) coordinates (results integrated over
+        time):
         * hEiso      - Weights for numerical integration over E (isotropic).
-        * hEalpha    - Weights for double numerical integration over E and alpha (gyrotropic).
-        * hEalphabeta- Weights for triple numerical integration over E, alpha, and beta.
-        * halpha     - Weights for numerical integration over alpha (flat spectrum, gyrotropic).
-        * halphabeta - Weights for double numerical integration over alpha and beta (flat spectrum).
+        * hEalpha    - Weights for double numerical integration over E and 
+                       alpha (gyrotropic).
+        * hEalphabeta- Weights for triple numerical integration over E, alpha, 
+                       and beta.
+        * halpha     - Weights for numerical integration over alpha (flat 
+                       spectrum, gyrotropic).
+        * halphabeta - Weights for double numerical integration over alpha and
+                       beta (flat spectrum).
       
       - Working in (E, theta, phi) coordinates:
         * R          - Response function (effective area, cm^2).
         * hE         - Weights for numerical integration over E (isotropic).
-        * hEtheta    - Weights for double numerical integration over E and theta (ignoring phi dependence).
-        * hEthetaphi - Weights for triple numerical integration over E, theta, and phi.
-        * htheta     - Weights for numerical integration over theta (flat spectrum, ignoring phi dependence).
-        * hthetaphi  - Weights for double numerical integration over theta and phi (flat spectrum).
+        * hEtheta    - Weights for double numerical integration over E and 
+                       theta (ignoring phi dependence).
+        * hEthetaphi - Weights for triple numerical integration over E, theta,
+                       and phi.
+        * htheta     - Weights for numerical integration over theta (flat 
+                       spectrum, ignoring phi dependence).
+        * hthetaphi  - Weights for double numerical integration over theta and 
+                       phi (flat spectrum).
     """
     
     @classmethod
@@ -2124,7 +2205,8 @@ class ChannelResponse(FactoryConstructorMixin):
         """
         @brief Return a copy of this ChannelResponse.
         
-        @return A new ChannelResponse object constructed from the original keyword dictionary.
+        @return A new ChannelResponse object constructed from the original
+                keyword dictionary.
         """
         return ChannelResponse(**self.to_dict())
     
@@ -2147,8 +2229,10 @@ class ChannelResponse(FactoryConstructorMixin):
         @param E Energy value(s) (MeV).
         @param theta Polar angle(s) in degrees.
         @param phi Azimuthal angle(s) in degrees.
-        @return The response function with shape matching the broadcast of E, theta, and phi.
-        @exception NotImplementedError If this method is not implemented in a subclass.
+        @return The response function with shape matching the broadcast of E,
+                theta, and phi.
+        @exception NotImplementedError If this method is not implemented in 
+                                       a subclass.
         """
         raise NotImplementedError('Class %s ' % self.__class__.__name__ + \
                                   'did not overload of R method, as required')
@@ -2164,8 +2248,10 @@ class ChannelResponse(FactoryConstructorMixin):
         @param Egrid 1-D numpy array of energy grid values (MeV).
         @param thetagrid 1-D numpy array of theta values (degrees).
         @param phigrid 1-D numpy array of phi values (degrees).
-        @param kwargs Additional keyword arguments for integration (e.g., delta options).
-        @return A scalar or a numpy array with shape (len(Egrid), len(thetagrid), len(phigrid)).
+        @param kwargs Additional keyword arguments for integration (e.g., 
+                      delta options).
+        @return A scalar or a numpy array with shape (len(Egrid), 
+                len(thetagrid), len(phigrid)).
         """
         if Egrid is None:
             if hasattr(self, 'E_GRID'):
@@ -2195,9 +2281,11 @@ class ChannelResponse(FactoryConstructorMixin):
         
         @param Egrid 1-D numpy array of energy values (MeV).
         @param thetagrid 1-D numpy array of theta values (degrees).
-        @param phigrid Optional 1-D numpy array of phi values (degrees). Defaults to 0–360.
+        @param phigrid Optional 1-D numpy array of phi values (degrees). 
+                       Defaults to 0–360.
         @param kwargs Additional integration options.
-        @return A scalar or numpy array with shape (len(Egrid), len(thetagrid)).
+        @return A scalar or numpy array with shape (len(Egrid),
+                len(thetagrid)).
         """
         if phigrid is None:
             if hasattr(self, 'PH_GRID'):
@@ -2246,9 +2334,11 @@ class ChannelResponse(FactoryConstructorMixin):
         @param Egrid 1-D numpy array of energy values (MeV).
         @param alphagrid 1-D numpy array of alpha values (degrees).
         @param betagrid 1-D numpy array of beta values (degrees).
-        @param tgrid Optional time grid; if provided, integration over time is performed.
+        @param tgrid Optional time grid; if provided, integration over time is
+                     performed.
         @param kwargs Additional integration options.
-        @return A scalar or numpy array with shape (len(Egrid), len(alphagrid), len(betagrid)).
+        @return A scalar or numpy array with shape (len(Egrid), len(alphagrid),
+                len(betagrid)).
         """
         dE = make_deltas(Egrid, **kwargs)  # (NE,)
         dcosa = make_deltas(-cosd(alphagrid), **kwargs)  # (Na,)
@@ -2297,7 +2387,8 @@ class ChannelResponse(FactoryConstructorMixin):
     def hEalpha(self, alpha0, beta0, phib,
                 Egrid, alphagrid, betagrid=None, tgrid=None, **kwargs):
         """
-        @brief Compute response weights on an E x alpha grid (integrated over beta).
+        @brief Compute response weights on an E x alpha grid (integrated over 
+               beta).
         
         This integrates the triple integral of hEalphabeta over beta.
         If betagrid is None, a default numeric beta grid is provided.
@@ -2310,7 +2401,8 @@ class ChannelResponse(FactoryConstructorMixin):
         @param betagrid Optional 1-D numpy array of beta values (degrees).
         @param tgrid Optional time grid.
         @param kwargs Additional integration options.
-        @return A scalar or 1-D numpy array with length equal to len(alphagrid).
+        @return A scalar or 1-D numpy array with length equal to 
+                len(alphagrid).
         """
         if betagrid is None:
             betagrid = default_betagrid(**kwargs)
@@ -2323,7 +2415,8 @@ class ChannelResponse(FactoryConstructorMixin):
     def hEiso(self, alpha0, beta0, phib,
               Egrid, alphagrid, betagrid=None, tgrid=None, **kwargs):
         """
-        @brief Compute isotropic response weights on an alpha grid (integrated over beta).
+        @brief Compute isotropic response weights on an alpha grid (integrated
+               over beta).
         
         This is designed to yield isotropic weights, integrating hEalpha over 
         alpha. If alphagrid is None, a default alpha grid is used.
@@ -2332,11 +2425,13 @@ class ChannelResponse(FactoryConstructorMixin):
         @param beta0 The beta0 parameter.
         @param phib The phib parameter.
         @param Egrid 1-D numpy array of energy values (MeV).
-        @param alphagrid 1-D numpy array of alpha values (degrees). Defaults to a default if None.
+        @param alphagrid 1-D numpy array of alpha values (degrees). Defaults 
+                         to a default if None.
         @param betagrid Optional 1-D numpy array of beta values (degrees).
         @param tgrid Optional time grid.
         @param kwargs Additional options.
-        @return A scalar or 1-D numpy array (function of alphagrid) representing the weights.
+        @return A scalar or 1-D numpy array (function of alphagrid) 
+                representing the weights.
         """
         if alphagrid is None:
             alphagrid = default_alphagrid(**kwargs)
@@ -2348,7 +2443,8 @@ class ChannelResponse(FactoryConstructorMixin):
     
     def hthetaphi(self, Egrid, thetagrid, phigrid, **kwargs):
         """
-        @brief Compute angular response weights on a theta x phi grid for a flat spectrum.
+        @brief Compute angular response weights on a theta x phi grid for a 
+               flat spectrum.
         
         This method returns weights (cm^2 sr MeV) by integrating over energy 
         (for a flat spectrum). If Egrid is None, the object will supply its 
@@ -2358,7 +2454,8 @@ class ChannelResponse(FactoryConstructorMixin):
         @param thetagrid 1-D numpy array of theta values (degrees).
         @param phigrid 1-D numpy array of phi values (degrees).
         @param kwargs Additional integration options.
-        @return A scalar or 2-D numpy array with shape (len(thetagrid), len(phigrid)).
+        @return A scalar or 2-D numpy array with shape (len(thetagrid), 
+                len(phigrid)).
         """
         h = self.hEthetaphi(Egrid, thetagrid, phigrid, **kwargs)
         return h.sum(axis=0)  # integrate over E
@@ -2374,7 +2471,8 @@ class ChannelResponse(FactoryConstructorMixin):
         @param thetagrid 1-D numpy array of theta values (degrees).
         @param phigrid Optional 1-D numpy array of phi values (degrees).
         @param kwargs Additional options.
-        @return A scalar or 1-D numpy array with length equal to len(thetagrid).
+        @return A scalar or 1-D numpy array with length equal to 
+                len(thetagrid).
         """
         h = self.hEtheta(Egrid, thetagrid, phigrid, **kwargs)
         return h.sum(axis=0)  # integrate over E
@@ -2382,7 +2480,8 @@ class ChannelResponse(FactoryConstructorMixin):
     def halphabeta(self, alpha0, beta0, phib,
                    Egrid, alphagrid, betagrid, tgrid=None, **kwargs):
         """
-        @brief Compute response weights on an alpha x beta grid for a flat spectrum.
+        @brief Compute response weights on an alpha x beta grid for a flat 
+               spectrum.
         
         The integration is performed over energy to yield weights with units 
         cm^2·sr·MeV (or cm^2·sr·MeV·s if tgrid is provided).
@@ -2395,7 +2494,8 @@ class ChannelResponse(FactoryConstructorMixin):
         @param betagrid 1-D numpy array of beta values (degrees).
         @param tgrid Optional time grid.
         @param kwargs Additional options.
-        @return A scalar or numpy array with shape (len(alphagrid), len(betagrid)).
+        @return A scalar or numpy array with shape (len(alphagrid), 
+                len(betagrid)).
         """
         h = self.hEalphabeta(alpha0, beta0, phib,
                              Egrid, alphagrid, betagrid, tgrid, **kwargs)
@@ -2417,7 +2517,8 @@ class ChannelResponse(FactoryConstructorMixin):
         @param betagrid Optional 1-D numpy array of beta values (degrees).
         @param tgrid Optional time grid.
         @param kwargs Additional options.
-        @return A scalar or 1-D numpy array with length equal to len(alphagrid).
+        @return A scalar or 1-D numpy array with length equal to
+                len(alphagrid).
         """
         h = self.halphabeta(alpha0, beta0, phib,
                             Egrid, alphagrid, betagrid, tgrid, **kwargs)
@@ -2431,7 +2532,8 @@ class CR_Esep(ChannelResponse):
     @classmethod
     def is_mine(cls, *args, **kwargs):
         """
-        @brief Return True if the provided initialization data claims this subclass.
+        @brief Return True if the provided initialization data claims this 
+               subclass.
         
         For CR_Esep the abstract base class returns False because it is never
         the correct answer.
@@ -2446,7 +2548,8 @@ class CR_Esep(ChannelResponse):
         (ar). Copies any properties from the constituents to this object if not
         already defined.
         
-        @param kwargs Keyword arguments used by the EnergyResponse and AngleResponse constructors.
+        @param kwargs Keyword arguments used by the EnergyResponse and 
+                      AngleResponse constructors.
         """
         super().__init__(**kwargs)
         self.er = EnergyResponse(**kwargs)
@@ -2463,7 +2566,8 @@ class CR_Esep(ChannelResponse):
 
     def _merge_hEhA(hE, hA):
         """
-        @brief Merge hE (size NE,) and hA (size N1, or (N1,N2)) into a combined array.
+        @brief Merge hE (size NE,) and hA (size N1, or (N1,N2)) into a 
+               combined array.
         
         The resulting array hEA is of size (NE, N1) or (NE, N1, N2) and is 
         computed as the product hE*hA.
@@ -2644,7 +2748,8 @@ class CR_Table_sym(ChannelResponse):
 
 class CR_Table_asym(ChannelResponse):
     """
-    @brief Energy-inseparable, phi-asymmetric channel response defined by a 3-D table.
+    @brief Energy-inseparable, phi-asymmetric channel response defined by a
+           3-D table.
 
     This class represents an energy-inseparable, phi-asymmetric channel
     response where the response is defined by a three-dimensional table. The
@@ -2653,7 +2758,8 @@ class CR_Table_asym(ChannelResponse):
       - E_GRID: a 1-D numeric energy grid
       - TH_GRID: a 1-D numeric theta grid
       - PH_GRID: a 1-D numeric phi grid (must span [0,360])
-      - R: a 3-D response table with shape (len(E_GRID), len(TH_GRID), len(PH_GRID))
+      - R: a 3-D response table with shape (len(E_GRID), len(TH_GRID), 
+           len(PH_GRID))
     """
     @classmethod
     def is_mine(cls, *args, **kwargs):
@@ -2676,8 +2782,10 @@ class CR_Table_asym(ChannelResponse):
           - TH_GRID: a 1-D numeric grid for theta.
           - PH_GRID: a 1-D numeric grid for phi.
           - R: a 3-D response table.
-        @exception ValueError If any grid is not valid (i.e. not 1-D, unique) or if PH_GRID does not span [0,360].
-        @exception ArgSizeError If R does not have the shape (E_GRID.size, TH_GRID.size, PH_GRID.size).
+        @exception ValueError If any grid is not valid (i.e. not 1-D, unique)
+                              or if PH_GRID does not span [0, 360].
+        @exception ArgSizeError If R does not have the shape (E_GRID.size, 
+                                TH_GRID.size, PH_GRID.size).
         """
         super().__init__(**kwargs)
         keyword_check_numeric('E_GRID', 'TH_GRID', 'PH_GRID', 'R', **kwargs)
@@ -2772,9 +2880,12 @@ def load_inst_info(inst_info):
     individual channel data into corresponding ChannelResponse objects, 
     propagates higher-level data downward, and supports input as a filename.
     
-    @param inst_info A dictionary or a filename (assumed to be .json or .h5/.hdf5; HDF5 not implemented yet).
-    @return The instrument info with individual channels replaced by ChannelResponse objects.
-    @exception RFLError If the file type is unknown or the input is not a dictionary.
+    @param inst_info A dictionary or a filename (assumed to be .json or 
+                     .h5/.hdf5; HDF5 not implemented yet).
+    @return The instrument info with individual channels replaced by 
+            ChannelResponse objects.
+    @exception RFLError If the file type is unknown or the input is not a 
+                        dictionary.
     """
     if isinstance(inst_info, str):
         if inst_info.endswith('.json'):
@@ -2840,8 +2951,10 @@ def CRs_to_dicts(inst_info):
     ChannelResponse objects are converted to dictionaries using their to_dict()
     method. This facilitates writing the data to files.
     
-    @param inst_info The instrument info dictionary potentially containing ChannelResponse objects.
-    @return A shallow copy of inst_info with ChannelResponse objects replaced by their dict representations.
+    @param inst_info The instrument info dictionary potentially containing 
+                     ChannelResponse objects.
+    @return A shallow copy of inst_info with ChannelResponse objects replaced
+            by their dict representations.
     """
     inst_dict = {**inst_info}
     sp0 = None
