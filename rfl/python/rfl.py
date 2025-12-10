@@ -2912,6 +2912,7 @@ def write_h5(inst_info, filename):
     """
     import os
     import h5py
+    import numpy as np
 
     def defaultAtts(var):
         for key in ['isBoolean', 'isStruct', 'isArray', 'isString']:
@@ -2928,23 +2929,50 @@ def write_h5(inst_info, filename):
         @param fp The HDF5 file object.
         @param prefix Current file path (group) in the HDF5 file.
         @param var The variable to write.
+    
         """
-        # Call built in converters tolist, todict, etc., if present.
+        ## Call built-in converters on var if present.
         for conv in ['tolist', 'to_list', 'todict', 'as_dict']:
             if hasattr(var, conv):
                 conv_func = getattr(var, conv)
-                var = conv_func()
-    
-        # Write standard types
+                var_converted = conv_func()
+                if isinstance(var, np.ndarray):
+                    ## Don't convert numpy arrays - should be saved as singular
+                    ## object instead of recursively broken down.
+                    break
+                else:
+                    ## Convert to list or dict.
+                    var = var_converted
+                    break
+                
         if isinstance(var, dict):
             if prefix != '/':
                 fp.create_group(prefix)
             defaultAtts(fp[prefix])
             fp[prefix].attrs['isStruct'] = True
-    
             for key, val in var.items():
                 writeVar(fp, prefix + '/' + key, val)
         elif isinstance(var, list):
+            ## If var is homogeneous list representing an array,
+            ## convert to np.array.
+            try: 
+                arr = np.array(var)
+                if arr.dtype != np.object:
+                    ## homogeneous numeric or string array
+                    ## Emulate file structure by creating a group and a
+                    ## dataset inside it.
+                    fp.create_group(prefix)
+                    defaultAtts(fp[prefix])
+                    fp[prefix].attrs['isArray'] = True
+                    ds_name = prefix + '/data'
+                    fp.create_dataset(ds_name, data=arr)
+                    ## Set similar attributes on inner dataset if required.
+                    defaultAtts(fp[ds_name])
+                    return
+            except Exception:
+                ## Fallback to recursive treatment if conversion fails.
+                ## Most common option.
+                pass
             if prefix != '/':
                 fp.create_group(prefix)
             defaultAtts(fp[prefix])
