@@ -459,7 +459,8 @@ def alphabeta2thetaphi(alpha, beta, alpha0, beta0, phib):
     theta = acosd(z) # third Cartesian coordinate (z)
     phi = atan2d(np.take(y, 1, xpad), np.take(y, 0, xpad)) # y, x as above
     phi[(theta==0.0)|(theta==180.0)] = 0
-    phi = np.mod(phi, 360)
+    if phi < 0:
+        phi = np.mod(phi, 360)
 
     return theta, phi
 
@@ -1567,7 +1568,7 @@ class AR_csym(AngleResponse):
         """*INHERIT*"""
         dcostheta = np.abs(make_deltas(-cosd(thetagrid), **kwargs))
         if phigrid is None:
-            dphi = 2*np.phi
+            dphi = 2*np.pi
         else:
             dphi = make_deltas(np.radians(phigrid), **kwargs).sum()
         phigrid = 0.0  # dummy value to save calculation
@@ -1621,7 +1622,7 @@ class AR_Omni(AR_csym):
                 
     def A(self, theta, phi):
         """*INHERIT*"""
-        if self.bidirectiona:
+        if self.bidirectional:
             return self.area
         else:
             return self.area * (theta <= 90)
@@ -2125,19 +2126,16 @@ class AR_Table_asym(AngleResponse):
     def A(self, theta, phi):
         """*INHERIT*"""
         if self._Ainterpolator is None:
-            ## New version - old version didn't set ph_grid.
-            # Set PH_GRID to [0, 360].
-            ph_grid = np.mod(self.PH_GRID, 180)
-
-            # Extrapolate beyond grid at nearest edge with fill zero.
+            ## PH_GRID over [0, 360] restricted at init.
+            ## Extrapolate beyond grid at nearest edge with fill zero.
             self._Ainterpolator = \
-                RegularGridInterpolator((self.TH_GRID, ph_grid),
+                RegularGridInterpolator((self.TH_GRID, self.PH_GRID),
                                         self._A, 'linear', bounds_error=False,
                                         fill_value=0.0)
             
-        ## New version - old version didn't set phi.
-        # Set phi to [0, 360].
-        phi = np.mod(phi, 360)
+        ## Restrict phi to [0, 360].
+        if phi < 0 or phi > 360:
+            phi = np.mod(phi, 360)
 
         return self._Ainterpolator((theta, phi))
 
@@ -2820,23 +2818,24 @@ class CR_Table_asym(ChannelResponse):
     def R(self, E, theta, phi):
         """*INHERIT*"""
         if self._Rinterpolator is None:
-            ## New version:
-            # Set ph_grid to [0, 360].
-            ph_grid = self.PH_GRID
-            if self.PH_GRID[0] < 0:
-                ph_grid = self.PH_GRID + 180
-
-            # Extrapolate beyond the grid with zero.
+            ## Extrapolate beyond the grid with zero.
             self._Rinterpolator = \
-                RegularGridInterpolator((self.E_GRID, self.TH_GRID, ph_grid),
-                                        self._R, 'linear', bounds_error=False,
-                                        fill_value=0.0)
+                RegularGridInterpolator((self.E_GRID, self.TH_GRID,
+                                         self.PH_GRID), self._R, 'linear',
+                                        bounds_error=False, fill_value=0.0)
+            
+        ## Restrict theta to [0, 180] and phi to [0, 360].
+        if theta < 0 or theta > 180:
+            theta = np.mod(theta, 180)
+        if phi < 0 or phi > 360:
+            phi = np.mod(phi, 360)
+
         return self._Rinterpolator((E, theta, phi))
 
 
-# Inherit docstrings for everything descended from FactoryConstructorMixin,
-# including ChannelResponse and its internal classes EnergyResponse and
-# AngleResponse.
+## Inherit docstrings for everything descended from FactoryConstructorMixin,
+## including ChannelResponse and its internal classes EnergyResponse and
+## AngleResponse.
 inherit_docstrings(FactoryConstructorMixin)
 
 
@@ -2987,6 +2986,11 @@ def write_JSON(inst_info, jsonfile):
     def encoder(o):
         if isinstance(o, np.ndarray):
             return o.tolist()
+        elif isinstance(o, (np.integer,)):  # catches numpy.int64, np.int32...
+            return int(o)
+        elif isinstance(o, (np.floating,)):  # catches numpy.float64, etc.
+            return float(o)
+        print("Unhandled type:", type(o), "value:", o)
         # Let the base class default method raise the TypeError
         return json.JSONEncoder.default(o)
     inst_dict = CRs_to_dicts(inst_info)
@@ -3059,6 +3063,7 @@ def write_h5(inst_info, filename):
                     break
                 
         if isinstance(var, dict):
+            ## If var is a dictionary, recursively call the writing function.
             if prefix != '/':
                 fp.create_group(prefix)
             defaultAtts(fp[prefix])
@@ -3068,7 +3073,7 @@ def write_h5(inst_info, filename):
         elif isinstance(var, list):
             ## If var is homogeneous list representing an array,
             ## convert to np.array.
-            try: 
+            try:
                 arr = np.array(var)
                 if arr.dtype != np.object:
                     ## homogeneous numeric or string array
