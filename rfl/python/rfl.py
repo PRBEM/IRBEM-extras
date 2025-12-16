@@ -459,8 +459,8 @@ def alphabeta2thetaphi(alpha, beta, alpha0, beta0, phib):
     theta = acosd(z) # third Cartesian coordinate (z)
     phi = atan2d(np.take(y, 1, xpad), np.take(y, 0, xpad)) # y, x as above
     phi[(theta==0.0)|(theta==180.0)] = 0
-    if phi < 0:
-        phi = np.mod(phi, 360)
+    phi[phi < 0] = np.mod(phi[phi < 0], 360)
+    phi[phi > 360] = np.mod(phi[phi > 360], 360)
 
     return theta, phi
 
@@ -2134,8 +2134,8 @@ class AR_Table_asym(AngleResponse):
                                         fill_value=0.0)
             
         ## Restrict phi to [0, 360].
-        if phi < 0 or phi > 360:
-            phi = np.mod(phi, 360)
+        phi[phi < 0] = np.mod(phi[phi < 0], 360)
+        phi[phi > 360] = np.mod(phi[phi > 360], 360)
 
         return self._Ainterpolator((theta, phi))
 
@@ -2825,10 +2825,10 @@ class CR_Table_asym(ChannelResponse):
                                         bounds_error=False, fill_value=0.0)
             
         ## Restrict theta to [0, 180] and phi to [0, 360].
-        if theta < 0 or theta > 180:
-            theta = np.mod(theta, 180)
-        if phi < 0 or phi > 360:
-            phi = np.mod(phi, 360)
+        theta[theta < 0] = np.mod(theta[theta < 0], 180)
+        theta[theta > 180] = np.mod(theta[theta > 180], 180)
+        phi[phi < 0] = np.mod(phi[phi < 0], 360)
+        phi[phi > 360] = np.mod(phi[phi > 360], 360)
 
         return self._Rinterpolator((E, theta, phi))
 
