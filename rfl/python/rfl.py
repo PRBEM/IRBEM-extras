@@ -2970,6 +2970,44 @@ def CRs_to_dicts(inst_info):
                     inst_dict[chan][s] = inst_info[chan][s].to_dict()
     return inst_dict
 
+def add_canary(inst_dict):
+    """
+    @brief Add canaries to dictionary to verify read/write operations.
+
+    Two arrays with known shape and contents will be added to the response
+    function dictionary, if not already existing. CANARY_FLOAT is a 2x3x4 numpy
+    array with floats from 0 to 23. CANARY_STR contains capital letters from 
+    A to X. These will be converted to byte type "S1" when written to HDF5.
+
+    @param inst_info The instrument info dictionary.
+    @return A shallow copy of inst_dict with canaries added, if necessary.
+    """
+    ## Check if canaries already in dictionary.
+    ## If not, create and add.
+    ## Verify value.
+    if "CANARY_FLOAT" not in inst_dict.keys():
+        print("Warning: Float-type canary missing from response function.")
+        print("         Adding canary to object.")
+        inst_dict["CANARY_FLOAT"] = \
+            np.arange(24, dtype=float).reshape(2, 3, 4)
+    np.testing.assert_array_equal(inst_dict["CANARY_FLOAT"],
+                                  np.arange(24, dtype=float).reshape(2, 3, 4))
+    
+    if "CANARY_STR" not in inst_dict.keys():
+        print("Warning: String-type canary missing from response function.")
+        print("         Adding canary to object.")
+        inst_dict["CANARY_STR"] = \
+            np.asarray([chr(int(a)+65) for a in \
+                        np.arange(24, dtype=float)]).reshape(2,3,4)
+    if np.asarray(inst_dict["CANARY_STR"]).dtype == np.dtype("S1"):
+        inst_dict["CANARY_STR"] = \
+            np.asarray(inst_dict["CANARY_STR"]).astype("<U1")
+    np.testing.assert_array_equal(inst_dict["CANARY_STR"],
+                        np.asarray([chr(int(a)+65) for a in \
+                        np.arange(24, dtype=float)]).reshape(2,3,4))
+    
+    return inst_dict
+
 
 def write_JSON(inst_info, jsonfile):
     """
@@ -2991,9 +3029,16 @@ def write_JSON(inst_info, jsonfile):
         elif isinstance(o, (np.floating,)):  # catches numpy.float64, etc.
             return float(o)
         print("Unhandled type:", type(o), "value:", o)
-        # Let the base class default method raise the TypeError
+        ## Let the base class default method raise the TypeError.
         return json.JSONEncoder.default(o)
+
+    ## Convert to dictionary.
     inst_dict = CRs_to_dicts(inst_info)
+
+    ## Add/check canaries.
+    inst_dict = add_canary(inst_dict)
+    
+    ## Write to JSON file.
     with open(jsonfile, 'wt') as f:
         json.dump(inst_dict, f, default=encoder, indent=1)
 
@@ -3012,6 +3057,10 @@ def read_JSON(jsonfile):
     import json
     with open(jsonfile, 'r') as f:
         inst_dict = json.load(f)
+
+    ## Add/check canaries.
+    inst_dict = add_canary(inst_dict)
+    
     return inst_dict
 
 def write_h5(inst_info, filename):
@@ -3108,6 +3157,11 @@ def write_h5(inst_info, filename):
 
     inst_dict = CRs_to_dicts(inst_info)
 
+    ## Add/check canaries.
+    ## Convert string to bytes type "S1".
+    inst_dict = add_canary(inst_dict)
+    inst_dict["CANARY_STR"] = np.asarray(inst_dict["CANARY_STR"]).astype("S1")
+    
     if os.path.exists(filename):
         os.remove(filename)
     if os.path.exists(filename):
@@ -3115,7 +3169,7 @@ def write_h5(inst_info, filename):
                         '(required to write a new hdf5 file)')
     with h5py.File(filename, 'w') as fp:
         writeVar(fp, '/', inst_dict)
-
+        
         
 def read_h5(filename):
     """
@@ -3178,6 +3232,9 @@ def read_h5(filename):
 
     with h5py.File(filename, 'r') as fp:
         inst_dict = read_recursive(fp, '/')
+    ## Add/check canaries.
+    inst_dict = add_canary(inst_dict)
+    
     return inst_dict
 
 
