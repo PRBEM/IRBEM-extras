@@ -145,8 +145,7 @@ tmp_chans['OMNI']['EPS'] = np.array([0, 0.5, 1, 1, 1])
 tmp_chans['OMNI']['G'] = 3
 tmp_chans['OMNI']['BIDIRECTIONAL'] = 'FALSE'
 
-## make bidirectional versions of all where appropriate
-
+## Make bidirectional versions of all where appropriate
 new_chans = {}
 for key, val in tmp_chans.items():
     if 'BIDIRECTIONAL' in val:
@@ -155,25 +154,29 @@ for key, val in tmp_chans.items():
         new_chans[key2] = val2
 tmp_chans = {**tmp_chans, **new_chans} # mege
 
-## set channel names
+## Set channel names.
 inst_info['CHANNEL_NAMES'] = sorted(tmp_chans.keys())
 for key in inst_info['CHANNEL_NAMES']:
     inst_info[key] = {'PROT':tmp_chans[key]}
 
+## Write to json and hdf5 files.
 jsonname = 'all_types.json'
 h5name = 'all_types.h5'
-
 rfl.write_JSON(inst_info, jsonname)
 rfl.write_h5(inst_info, h5name)
 
+## Load from object and from file, in case properties propagate downward.
 inst_info = rfl.load_inst_info(inst_info)
 
-# write them again, in case load_inst_info propagated some stuff downward
+## Write files again, with propagated information included.
 jsonnamebig = 'all_types_big.json'
 h5namebig = 'all_types_big.h5'
-
 rfl.write_JSON(inst_info, jsonnamebig)
 rfl.write_h5(inst_info, h5namebig)
+
+## Verify loading one more time.
+inst_info = rfl.load_inst_info(jsonname)
+inst_info = rfl.load_inst_info(h5name)
 
 sp = 'PROT'
 
