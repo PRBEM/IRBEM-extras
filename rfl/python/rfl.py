@@ -69,7 +69,7 @@ tand    = lambda x: np.tan(np.radians(x))
 asind   = lambda x: np.degrees(np.arcsin(x))
 acosd   = lambda x: np.degrees(np.arccos(x))
 atand   = lambda x: np.degrees(np.arctan(x))
-atan2d  = lambda x, y: np.degrees(np.arctan2(y, x))
+atan2d  = lambda y, x: np.degrees(np.arctan2(y, x))
 
 
 def inherit_docstrings(cls=None, *, parent=None, do_specials=False):
