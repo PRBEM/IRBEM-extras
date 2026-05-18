@@ -552,28 +552,10 @@ def vectors_to_euler_angles(B, C, S0, S1):
     (3,) or (N,3) with a consistent N.
     """
     # Verify shape of input vectors.
-    N = None
-    isscalar = True
-    for x in [B, C, S0, S1]:
-        s = np.shape(x)
-        if s == (3,): # fixed bug - old version had != instead of ==
-            # Single vector with shape (3,).
-            isscalar = False
-            N = 1
-        if len(s) == 2:
-            # Series of vectors with shape (N, 3).
-            N = s[0]
-    if N is None:
-        raise ValueError('B, C, S0, S1 inputs must be (3,), or (N, 3)' + \
-                         'with common N')
-    B = np.atleast_2d(B)
-    C = np.atleast_2d(C)
-    S0 = np.atleast_2d(S0)
-    S1 = np.atleast_2d(S1)
-    for x in [B, C, S0, S1]:
-        if x.shape[0] not in (1, N):
-            raise ValueError('B,C,S0,S1 inputs must be (3,), or (N,3)' + \
-                             'with common N')
+    isscalar = np.any([np.size(x)==3 for x in (B,C,S0,S1)])
+    (B,C,S0,S1) = [np.atleast_2d(x) for x in (B,C,S0,S1)]
+    B,C,S0,S1 = np.broadcast_arrays(B,C,S0,S1)
+    N = B.shape[0]
             
     hat = lambda x: x / np.sqrt((x**2).sum(axis=1, keepdims=True))
     dot = lambda x, y: (x * y).sum(axis=1)
@@ -583,7 +565,7 @@ def vectors_to_euler_angles(B, C, S0, S1):
     S0hat = hat(S0)
     S2hat = hat(np.cross(S0, S1))
     S1hat = np.cross(S2hat, S0hat)
-    cosa0 = max(-1.0, min(1.0, dot(bhat, S0hat)))  # bound to -1,1
+    cosa0 = np.maximum(-1.0, np.minimum(1.0, dot(bhat, S0hat)))  # bound to -1,1
     alpha0 = acosd(cosa0)
     
     phib = np.full((N,), np.nan)  # default phib is NaN
@@ -599,10 +581,10 @@ def vectors_to_euler_angles(B, C, S0, S1):
         beta0[i0] = atan2d(dot(S0hat[i0], dhat[i0]), -dot(S0hat[i0], chat[i0]))
         phib[i0] = atan2d(dot(S2hat[i0], bhat[i0]), -dot(S1hat[i0], bhat[i0]))
 
-    if isscalar:
-        alpha0 = np.squeeze(alpha0, axis=0)
-        beta0 = np.squeeze(beta0, axis=0)
-        phib = np.squeeze(phib, axis=0)
+    if isscalar: # remove first dim    
+        alpha0 = alpha0[0]
+        beta0 = beta0[0]
+        phib = phib[0]
     
     return alpha0, beta0, phib
        
@@ -1767,7 +1749,7 @@ class AR_Tele_Cyl(AR_csym):
         self.R1 = squeeze(kwargs['R1'])  # TODO: convert to cm
         self.R2 = squeeze(kwargs['R2'])  # TODO: convert to cm
         self.D = squeeze(kwargs['D'])    # TODO: convert to cm
-        self.Rs = min(self.R1, self.R2)
+        self.Rs = np.minimum(self.R1, self.R2)
         self.thetac = atand(np.abs(self.R1 - self.R2) / self.D)
         self.thetam = atand((self.R1 + self.R2) / self.D)
         self.area = np.pi * self.Rs**2  # area at normal incidence
@@ -2033,7 +2015,7 @@ class AR_Tele_Rect(AngleResponse):
         @param a2 Numeric parameter.
         @return The computed X value.
         """
-        return min(zeta + a1 / a2, a2 / 2) - max(zeta - a1 / a2, -a2 / 2)
+        return np.minimum(zeta + a1 / a2, a2 / 2) - np.maximum(zeta - a1 / a2, -a2 / 2)
 
     def _A(self, theta, phi):
         """
@@ -2343,14 +2325,6 @@ class ChannelResponse(FactoryConstructorMixin):
         db = np.radians(make_deltas(betagrid, **kwargs))  # (Nb,)
         dt = make_deltas(tgrid, **kwargs)  # (Nt,) or scalar
 
-        ## Old version:
-        #dE, dcosa, db = broadcast_grids(dE, dcosa, db)  # shape (NE, Na, Nb)
-        #theta, phi = alphabeta2thetaphi(alphagrid, betagrid, alpha0, beta0,
-        #                                phib)  # (Na, Nb, Nt) or (Na, Nb)
-        #E = np.reshape(Egrid, (len(Egrid),
-        #                       *np.ones(theta.ndim)))  # (NE, 1, 1, *1)
-
-        ## New version:
         dE, dcosa, db, dt = broadcast_grids(dE, dcosa, db, dt,
                                             mesh=True) # (NE,Na,Nb, dt)
         alphagrid, betagrid = broadcast_grids(alphagrid, betagrid, mesh=True)
@@ -2358,25 +2332,13 @@ class ChannelResponse(FactoryConstructorMixin):
                                         beta0, phib) # (Na,Nb,Nt) or (NA,Nb)
         E = np.reshape(Egrid, (len(Egrid),
                                *np.ones(theta.ndim, dtype=int))) # (NE,1,1,*1)
-        
-        theta = np.expand_dims(theta, axis=0)  # (1, Na, Nb, *Nt)
-        phi = np.expand_dims(phi, axis=0)  # (1, Na, Nb, *Nt)
 
-        ## Old way (may contain bugs).
-        #R_val = self.R(E, theta, phi)  # (NE, Na, Nb, *Nt)
-        #if np.isscalar(dt):
-        #    h = R_val * dt
-        #else:
-        #    # Take the dot product along Nt dimension.
-        #    # AI replaced h in the function call below with R_val, since h is
-        #    # not declared in this function previously. Is this a bug from the
-        #    # original versin of rfl.py?
-        #    h = np.tensordot(h, dt, axes=((3,), (0,)))
-        #h = h * dE * dcosa * db / self.CROSSCALIB
-        # now h is (NE,Na,Nb)
-        
-        ## New way (untested).
+        theta = theta[None] # insert singleton energy dimension (NE,Na,Nb,*Nt)
+        phi = phi[None]  # insert singleton energy dimension (NE,Na,Nb,*Nt)
+
         R_val = self.R(E, theta, phi) # (NE, Na, Nb, *Nt) 
+        if R_val.ndim == 3: # (NE, Na, Nb, *Nt)
+            R_val = R_val[:,:,:,None] # add t dimension
         h = R_val * dt * dE * dcosa * db / self.CROSSCALIB
         h = h.sum(axis=3) # integrate over time
         
